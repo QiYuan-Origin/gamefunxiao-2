@@ -144,6 +144,7 @@ permissions:
       gamefunxiao.admin.minigamemap.enable: true
       gamefunxiao.admin.minigamemap.delete: true
       gamefunxiao.admin.minigamemap.settings: true
+      gamefunxiao.admin.brickguardmap: true
       gamefunxiao.admin.currency: true
       gamefunxiao.admin.currency.get: true
       gamefunxiao.admin.currency.set: true
@@ -211,6 +212,9 @@ permissions:
     default: op
   gamefunxiao.admin.minigamemap.settings:
     description: 修改小游戏地图名称、人数、时间、主题和边界
+    default: op
+  gamefunxiao.admin.brickguardmap:
+    description: 管理板砖守卫战地图配置
     default: op
   gamefunxiao.admin.currency:
     description: 管理小游戏币

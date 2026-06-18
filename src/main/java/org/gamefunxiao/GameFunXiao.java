@@ -23,6 +23,7 @@ import org.gamefunxiao.placeholder.GameFunPlaceholderExpansion;
 import org.gamefunxiao.scoreboard.ScoreboardManager;
 import org.gamefunxiao.server.ChildServerManager;
 import org.gamefunxiao.tab.TabHeaderFooterManager;
+import org.gamefunxiao.world.BrickGuardMapManager;
 import org.gamefunxiao.world.MiniGameMapManager;
 import org.gamefunxiao.world.WorldManager;
 
@@ -51,6 +52,7 @@ public final class GameFunXiao extends JavaPlugin {
     private EndFlashKitManager endFlashKitManager;
     private MiniGameMapManager miniGameMapManager;
     private BrickGuardManager brickGuardManager;
+    private BrickGuardMapManager brickGuardMapManager;
 
     @Override
     public void onEnable() {
@@ -65,6 +67,7 @@ public final class GameFunXiao extends JavaPlugin {
 
         // 初始化管理器
         miniGameMapManager = new MiniGameMapManager(this);
+        brickGuardMapManager = new BrickGuardMapManager(this);
         worldManager = new WorldManager(this);
         playerDataManager = new PlayerDataManager(this);
         leaderboardManager = new LeaderboardManager(this);
@@ -353,5 +356,9 @@ public final class GameFunXiao extends JavaPlugin {
 
     public BrickGuardManager getBrickGuardManager() {
         return brickGuardManager;
+    }
+
+    public BrickGuardMapManager getBrickGuardMapManager() {
+        return brickGuardMapManager;
     }
 }

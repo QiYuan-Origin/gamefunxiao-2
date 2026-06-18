@@ -113,6 +113,14 @@ room:
   rejoined: "§x§5§5§F§F§A§A✔ §a成功重新加入游戏！"
   rejoin_failed: "§x§F§F§5§5§5§5✘ §c重新加入失败！游戏可能已经结束。"
   no_hunters_left: "§x§F§F§8§8§8§8⚠ §c游戏中已经没有其他猎人了，无法重新加入！"
+  brick_guard_map_not_found: "§x§F§F§8§8§5§5⚠ §c找不到板砖守卫战地图 §e{map}§c，请检查地图配置。"
+
+brick_guard:
+  guide_header: "§x§F§F§7§C§0§0▣ §x§F§F§9§0§2§0雨云 §x§D§D§5§5§1§1· §x§9§9§3§3§0§0板砖守卫战 §7玩法要点"
+  menu_opened: "§x§F§F§9§0§2§0已打开板砖守卫战导航菜单。"
+  quick_matching: "§x§F§F§A§4§4§0正在为你匹配板砖守卫战房间。"
+  room_created: "§x§5§5§F§F§A§A已创建板砖守卫战房间 §e{room_id}§a。"
+  use_dedicated_branch: "§x§F§F§9§0§2§0这是独立玩法，请使用 §e/gamefunxiao bg create §6或 §e/gamefunxiao command create brick_guard §6创建。"
 
 brick_guard:
   guide_header: "§x§F§F§7§C§0§0▣ §x§F§F§9§0§2§0雨云 §x§D§D§5§5§1§1· §x§9§9§3§3§0§0板砖守卫战 §7玩法要点"
@@ -228,6 +236,10 @@ game:
   countdown_flash_direct: "§x§F§F§D§7§0§0⚡ §e闪光模式将在 §c{time} §e后直接开局！"
   countdown_end_flash_direct: "§x§B§B§8§8§F§F✦ §d终章 · 闪光将在 §c{time} §d后直接开局！"
   independent_mode_started: "§x§8§8§D§D§F§F✦ §b该房间已按 §e独立模式 §b开局，不会再走猎物 / 猎人流程。"
+  brick_guard_map_selected: "§x§F§F§7§C§0§0▣ §e本局地图：§f{map} §7| §e伪边界半径：§f{radius}"
+  brick_guard_start: "§x§F§F§7§C§0§0▣ §e板砖守卫战开始！§f破坏对面的核心即可获胜。"
+  brick_guard_world_failed: "§x§F§F§5§5§5§5✘ §c板砖守卫战世界创建失败，已取消本局。"
+  brick_guard_fake_border_warning: "§x§F§F§8§8§5§5⚠ §c已到达本局伪边界，半径 §e{radius} §c格。"
   started: "§x§8§8§D§D§F§F⏳ §b猎物已传送至游戏世界，§f等待猎物按下开始按钮..."
   started_auto: "§x§8§8§D§D§F§F⏳ §b玩家已传送至游戏世界，§f即将自动正式开始..."
   started_auto_end_flash: "§x§B§B§8§8§F§F✦ §d终章 · 闪光已传送至末地，§f即将自动正式开始..."

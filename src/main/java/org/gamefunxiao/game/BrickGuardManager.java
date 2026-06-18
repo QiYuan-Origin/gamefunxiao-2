@@ -44,6 +44,7 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.gamefunxiao.GameFunXiao;
+import org.gamefunxiao.world.BrickGuardMapManager;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -252,12 +253,24 @@ public class BrickGuardManager {
             return;
         }
 
-        World brickWorld = room.getGameWorld();
+        BrickGuardMapManager.MapDefinition definition = plugin.getBrickGuardMapManager() == null
+                ? null
+                : plugin.getBrickGuardMapManager().findUsableMap(Math.max(2, room.getPlayerCount()));
+        BrickGuardMapManager.RuntimeWorlds runtimeWorlds = null;
+        if (plugin.getWorldManager() != null && definition != null) {
+            runtimeWorlds = plugin.getWorldManager().createBrickGuardWorlds(room.getRoomId(), definition);
+        }
+
+        World brickWorld = runtimeWorlds != null && runtimeWorlds.brickWorld() != null ? runtimeWorlds.brickWorld() : room.getGameWorld();
         if (brickWorld == null) {
             brickWorld = plugin.getWorldManager().createGameWorld(room.getRoomId());
+        }
+        if (brickWorld != null) {
             room.setGameWorld(brickWorld);
         }
-        World netherWorld = plugin.getWorldManager().getNetherWorld(room.getRoomId());
+        World netherWorld = runtimeWorlds != null && runtimeWorlds.netherBrickWorld() != null
+                ? runtimeWorlds.netherBrickWorld()
+                : plugin.getWorldManager().getNetherWorld(room.getRoomId());
         if (netherWorld == null) {
             netherWorld = plugin.getWorldManager().ensureNetherWorld(room.getRoomId());
         }
@@ -267,13 +280,14 @@ public class BrickGuardManager {
             return;
         }
 
-        MapConfig mapConfig = loadActiveMap();
+        MapConfig mapConfig = loadActiveMap(definition);
         session.coreHealth = mapConfig.coreHealth();
         session.maxCoreHealth = mapConfig.coreHealth();
         session.boundaryRadius = mapConfig.boundaryRadius();
         session.timeLimitSeconds = mapConfig.timeLimitSeconds();
         session.mapId = mapConfig.id();
         session.mapName = mapConfig.displayName();
+        applyRuntimeLocations(room, session, definition, brickWorld, netherWorld, mapConfig);
 
         room.setState(RoomState.PLAYING);
         room.setGameActuallyStarted(true);
@@ -281,8 +295,17 @@ public class BrickGuardManager {
         room.setGameStartTime(System.currentTimeMillis());
         session.startTimeMillis = room.getGameStartTime();
 
-        prepareBrickWorld(brickWorld, session);
-        prepareNetherWorld(netherWorld, session);
+        if (session.brickSpawn == null || session.brickCoreLocation == null) {
+            prepareBrickWorld(brickWorld, session);
+        } else {
+            buildCorePad(brickWorld, session.brickCoreLocation, Material.RED_GLAZED_TERRACOTTA, Material.GRAY_CONCRETE);
+            placeBrickResources(brickWorld, session);
+        }
+        if (session.netherSpawn == null) {
+            prepareNetherWorld(netherWorld, session);
+        } else {
+            placeNetherResources(netherWorld, session);
+        }
         spawnBrickVillagers(brickWorld, session);
         spawnNetherPiglins(netherWorld, session);
         chooseCorePlayer(room, session);
@@ -2058,23 +2081,54 @@ public class BrickGuardManager {
         player.getInventory().setContents(contents);
     }
 
-    private MapConfig loadActiveMap() {
+    private MapConfig loadActiveMap(BrickGuardMapManager.MapDefinition definition) {
         FileConfiguration config = plugin.getConfigManager().getConfig(CONFIG_NAME);
+        String active = definition == null ? DEFAULT_MAP_ID : definition.mapId();
+        String displayName = definition == null ? "默认板砖战场" : definition.displayName();
+        int boundary = definition == null ? DEFAULT_BOUNDARY_RADIUS : (int) Math.round(definition.fakeBorderRadius());
         if (config == null) {
-            return new MapConfig(DEFAULT_MAP_ID, "默认板砖战场", DEFAULT_CORE_HEALTH, DEFAULT_BOUNDARY_RADIUS, DEFAULT_TIME_LIMIT_SECONDS);
+            return new MapConfig(active, displayName, DEFAULT_CORE_HEALTH, boundary, DEFAULT_TIME_LIMIT_SECONDS);
         }
-        String active = config.getString("active_map", DEFAULT_MAP_ID);
         String path = "maps." + active;
         if (!config.isConfigurationSection(path)) {
-            return new MapConfig(DEFAULT_MAP_ID, "默认板砖战场", DEFAULT_CORE_HEALTH, DEFAULT_BOUNDARY_RADIUS, DEFAULT_TIME_LIMIT_SECONDS);
+            path = "maps." + config.getString("active_map", DEFAULT_MAP_ID);
         }
         return new MapConfig(
                 active,
-                config.getString(path + ".display_name", "默认板砖战场"),
+                config.getString(path + ".display_name", displayName),
                 Math.max(100, config.getInt(path + ".core_health", DEFAULT_CORE_HEALTH)),
-                Math.max(200, config.getInt(path + ".pseudo_boundary_radius", DEFAULT_BOUNDARY_RADIUS)),
+                Math.max(200, config.getInt(path + ".pseudo_boundary_radius", boundary)),
                 Math.max(300, config.getInt(path + ".game_time_limit_seconds", DEFAULT_TIME_LIMIT_SECONDS))
         );
+    }
+
+    private void applyRuntimeLocations(GameRoom room, Session session, BrickGuardMapManager.MapDefinition definition,
+                                       World brickWorld, World netherWorld, MapConfig mapConfig) {
+        Location brickSpawn = room.getBrickGuardBrickSpawn();
+        Location netherSpawn = room.getBrickGuardNetherBrickSpawn();
+        Location core = room.getBrickGuardCoreLocation();
+        Location borderCenter = room.getBrickGuardFakeBorderCenter();
+        if (definition != null && plugin.getBrickGuardMapManager() != null) {
+            if (brickSpawn == null) {
+                brickSpawn = plugin.getBrickGuardMapManager().getBrickSpawn(definition, brickWorld);
+            }
+            if (netherSpawn == null) {
+                netherSpawn = plugin.getBrickGuardMapManager().getNetherBrickSpawn(definition, netherWorld);
+            }
+            if (core == null) {
+                core = plugin.getBrickGuardMapManager().getBrickCore(definition, brickWorld);
+            }
+            if (borderCenter == null) {
+                borderCenter = plugin.getBrickGuardMapManager().getFakeBorderCenter(definition, brickWorld);
+            }
+        }
+        session.brickSpawn = brickSpawn == null ? null : centered(brickSpawn.clone());
+        session.netherSpawn = netherSpawn == null ? null : centered(netherSpawn.clone());
+        session.brickCoreLocation = core == null ? null : centered(core.clone());
+        if (definition != null) {
+            room.setBrickGuardRuntimeSettings(mapConfig.id(), mapConfig.displayName(), session.brickSpawn,
+                    session.netherSpawn, session.brickCoreLocation, borderCenter, mapConfig.boundaryRadius());
+        }
     }
 
     private void cancelBlockPlaceAndResync(BlockPlaceEvent event, Player player) {
