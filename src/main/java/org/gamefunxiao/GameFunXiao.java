@@ -17,11 +17,13 @@ import org.gamefunxiao.listeners.FlashModeListener;
 import org.gamefunxiao.listeners.MenuListener;
 import org.gamefunxiao.listeners.MiniGameMapEditListener;
 import org.gamefunxiao.listeners.PlayerListener;
+import org.gamefunxiao.listeners.BrickGuardListener;
 import org.gamefunxiao.menu.MenuManager;
 import org.gamefunxiao.placeholder.GameFunPlaceholderExpansion;
 import org.gamefunxiao.scoreboard.ScoreboardManager;
 import org.gamefunxiao.server.ChildServerManager;
 import org.gamefunxiao.tab.TabHeaderFooterManager;
+import org.gamefunxiao.world.BrickGuardMapManager;
 import org.gamefunxiao.world.MiniGameMapManager;
 import org.gamefunxiao.world.WorldManager;
 
@@ -49,6 +51,7 @@ public final class GameFunXiao extends JavaPlugin {
     private FlashModeManager flashModeManager;
     private EndFlashKitManager endFlashKitManager;
     private MiniGameMapManager miniGameMapManager;
+    private BrickGuardMapManager brickGuardMapManager;
 
     @Override
     public void onEnable() {
@@ -63,6 +66,7 @@ public final class GameFunXiao extends JavaPlugin {
 
         // 初始化管理器
         miniGameMapManager = new MiniGameMapManager(this);
+        brickGuardMapManager = new BrickGuardMapManager(this);
         worldManager = new WorldManager(this);
         playerDataManager = new PlayerDataManager(this);
         leaderboardManager = new LeaderboardManager(this);
@@ -273,6 +277,7 @@ public final class GameFunXiao extends JavaPlugin {
         getServer().getPluginManager().registerEvents(playerListener, this);
         getServer().getPluginManager().registerEvents(new MiniGameMapEditListener(this), this);
         getServer().getPluginManager().registerEvents(new FlashModeListener(this), this);
+        getServer().getPluginManager().registerEvents(new BrickGuardListener(this), this);
     }
 
     private void registerPlaceholderExpansion() {
@@ -346,5 +351,9 @@ public final class GameFunXiao extends JavaPlugin {
 
     public MiniGameMapManager getMiniGameMapManager() {
         return miniGameMapManager;
+    }
+
+    public BrickGuardMapManager getBrickGuardMapManager() {
+        return brickGuardMapManager;
     }
 }

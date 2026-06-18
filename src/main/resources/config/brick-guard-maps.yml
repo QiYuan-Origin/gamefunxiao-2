@@ -1,0 +1,90 @@
+# 雨云 · 板砖守卫战地图配置
+config_version: 1
+
+# active_map 可填写地图 ID，或填写 random / all / * 随机选择可用地图。
+active_map: default
+
+maps:
+  default:
+    display_name: "默认板砖守卫战"
+    enabled: true
+    min_players: 2
+    max_players: 16
+    lobby_template_world: "gamefun_template_brick_guard_default_lobby"
+    brick_template_world: "gamefun_template_brick_guard_default_brick"
+    nether_brick_template_world: "gamefun_template_brick_guard_default_nether_brick"
+    auto_create_template: true
+
+    lobby_spawn:
+      world: ""
+      x: 0.5
+      y: 65.0
+      z: 0.5
+      yaw: 0.0
+      pitch: 0.0
+
+    brick_spawn:
+      world: ""
+      x: -8.5
+      y: 80.0
+      z: 0.5
+      yaw: -90.0
+      pitch: 0.0
+
+    nether_brick_spawn:
+      world: ""
+      x: 8.5
+      y: 80.0
+      z: 0.5
+      yaw: 90.0
+      pitch: 0.0
+
+    brick_core:
+      world: ""
+      x: -18.0
+      y: 79.0
+      z: 0.0
+      yaw: 0.0
+      pitch: 0.0
+
+    villager_area:
+      min:
+        world: ""
+        x: -10.0
+        y: 79.0
+        z: -6.0
+        yaw: 0.0
+        pitch: 0.0
+      max:
+        world: ""
+        x: -4.0
+        y: 84.0
+        z: 6.0
+        yaw: 0.0
+        pitch: 0.0
+
+    mine_area:
+      min:
+        world: ""
+        x: 4.0
+        y: 70.0
+        z: -10.0
+        yaw: 0.0
+        pitch: 0.0
+      max:
+        world: ""
+        x: 18.0
+        y: 85.0
+        z: 10.0
+        yaw: 0.0
+        pitch: 0.0
+
+    fake_border:
+      center:
+        world: ""
+        x: 0.0
+        y: 80.0
+        z: 0.0
+        yaw: 0.0
+        pitch: 0.0
+      radius: 1500.0

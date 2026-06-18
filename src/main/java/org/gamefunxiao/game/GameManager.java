@@ -42,6 +42,7 @@ import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.cosmetics.HunterKillEffect;
 import org.gamefunxiao.cosmetics.HunterVictoryEffect;
 import org.gamefunxiao.cosmetics.LuckyPillarsVictoryEffect;
+import org.gamefunxiao.world.BrickGuardMapManager;
 import org.gamefunxiao.world.MiniGameMapManager;
 
 import java.util.*;
@@ -758,6 +759,8 @@ public class GameManager {
 
                     if (room.getGameMode().isLuckyPillars()) {
                         startLuckyPillars(room);
+                    } else if (room.getGameMode().isBrickGuard()) {
+                        startBrickGuard(room);
                     } else if (room.getGameMode() == GameMode.TNT_RUN) {
                         startTntRun(room);
                     } else if (room.getGameMode() == GameMode.BLOCK_PARTY) {
@@ -778,17 +781,21 @@ public class GameManager {
 
                 // 剩下3秒时给猎物显示标题并创建世界
                 if (countdown == 3) {
-                    if (room.getGameMode().isAutoArenaMiniGame()) {
+                    if (room.getGameMode().isAutoArenaMiniGame() || room.getGameMode().isBrickGuard()) {
                         for (UUID uuid : room.getAllPlayerUUIDs()) {
                             Player p = Bukkit.getPlayer(uuid);
                             if (p != null) {
                                 String titleText = room.getGameMode().isLuckyPillars()
                                         ? "§x§F§F§D§D§5§5⏳ §e幸运之柱地图准备中"
+                                        : room.getGameMode().isBrickGuard()
+                                        ? "§x§F§F§7§C§0§0⏳ §e板砖守卫战地图准备中"
                                         : room.getGameMode() == GameMode.TNT_RUN
                                         ? "§x§F§F§8§8§5§5⏳ §eTNT跑酷地图准备中"
                                         : "§x§D§D§8§8§F§F⏳ §d方块派对舞台准备中";
                                 String subText = room.getGameMode().isLuckyPillars()
                                         ? "§7正在选择主题地图并预加载出生点..."
+                                        : room.getGameMode().isBrickGuard()
+                                        ? "§7正在创建板砖世界与下界砖世界..."
                                         : "§7正在按配置自动生成本局独立地图...";
                                 Component titleComp3 = LegacyComponentSerializer.legacySection().deserialize(titleText);
                                 Component subComp3 = LegacyComponentSerializer.legacySection().deserialize(subText);
@@ -802,6 +809,8 @@ public class GameManager {
                         Bukkit.getScheduler().runTaskLater(plugin, () -> {
                             if (room.getGameMode().isLuckyPillars()) {
                                 prepareLuckyPillarsWorldBeforeStart(room);
+                            } else if (room.getGameMode().isBrickGuard()) {
+                                prepareBrickGuardWorldsBeforeStart(room);
                             } else {
                                 prepareStandaloneMiniGameWorldBeforeStart(room);
                             }
@@ -831,7 +840,7 @@ public class GameManager {
                     }
                     // 下一tick创建世界，让当前tick先完成渲染，减少卡顿感知
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                        if (room.getGameMode().isAutoArenaMiniGame()) {
+                        if (room.getGameMode().isAutoArenaMiniGame() || room.getGameMode().isBrickGuard()) {
                             return;
                         }
                         if (room.getGameWorld() == null) {
@@ -1851,6 +1860,159 @@ public class GameManager {
         room.setGameWorld(world);
         plugin.getWorldManager().preloadChunks(world, 0, 0,
                 Math.max(3, plugin.getConfigManager().getHunterGamePreloadRadius()), null);
+    }
+
+    private void prepareBrickGuardWorldsBeforeStart(GameRoom room) {
+        if (room == null || !room.getGameMode().isBrickGuard()) {
+            return;
+        }
+        World brickWorld = room.getGameWorld();
+        World netherBrickWorld = plugin.getWorldManager().getNetherWorld(room.getRoomId());
+        if (brickWorld != null && netherBrickWorld != null) {
+            return;
+        }
+
+        BrickGuardMapManager.MapDefinition definition = resolveBrickGuardMap(room, Math.max(2, room.getPlayerCount()));
+        BrickGuardMapManager.RuntimeWorlds worlds = plugin.getWorldManager().createBrickGuardWorlds(room.getRoomId(), definition);
+        if (worlds.brickWorld() != null) {
+            room.setGameWorld(worlds.brickWorld());
+        }
+        applyBrickGuardRuntimeSettings(room, definition, worlds);
+    }
+
+    public void startBrickGuard(GameRoom room) {
+        if (room == null || !room.getGameMode().isBrickGuard()) {
+            return;
+        }
+
+        cancelCountdown(room);
+        cancelDivisionTask(room);
+        room.setEndChapterDivisionActive(false);
+        room.clearDualPreyProposal();
+        room.clearDualPreyStack();
+
+        List<UUID> participants = onlineRoomParticipants(room);
+        if (participants.size() < plugin.getRoomManager().getMinimumPlayersForMode(GameMode.BRICK_GUARD)) {
+            room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.countdown_cancelled"));
+            endGameWithoutReward(room);
+            return;
+        }
+
+        BrickGuardMapManager.MapDefinition definition = resolveBrickGuardMap(room, participants.size());
+        if (definition == null) {
+            room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix(
+                    "room.brick_guard_map_not_found",
+                    Map.of("map", room.getBrickGuardMapId())));
+            endGameWithoutReward(room);
+            return;
+        }
+
+        BrickGuardMapManager.RuntimeWorlds worlds = new BrickGuardMapManager.RuntimeWorlds(
+                room.getGameWorld(),
+                plugin.getWorldManager().getNetherWorld(room.getRoomId()));
+        if (!worlds.complete()) {
+            worlds = plugin.getWorldManager().createBrickGuardWorlds(room.getRoomId(), definition);
+        }
+        if (!worlds.complete()) {
+            room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.brick_guard_world_failed"));
+            endGameWithoutReward(room);
+            return;
+        }
+
+        room.setGameWorld(worlds.brickWorld());
+        applyBrickGuardRuntimeSettings(room, definition, worlds);
+        room.setState(RoomState.PLAYING);
+        room.setGameActuallyStarted(true);
+        room.setPreyStarted(true);
+        room.setGameStartTime(System.currentTimeMillis());
+        plugin.getRoomManager().clearAllRoleNameTags(room);
+
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("map", definition.displayName());
+        placeholders.put("radius", String.valueOf((int) Math.round(definition.fakeBorderRadius())));
+        room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.brick_guard_map_selected", placeholders));
+
+        teleportBrickGuardParticipants(room, participants, worlds);
+        room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.brick_guard_start"));
+        startIndependentModeGuardTask(room);
+        plugin.getChildServerManager().syncRoom(room);
+    }
+
+    private BrickGuardMapManager.MapDefinition resolveBrickGuardMap(GameRoom room, int playerCount) {
+        if (room == null || plugin.getBrickGuardMapManager() == null) {
+            return null;
+        }
+        BrickGuardMapManager.MapDefinition current = plugin.getBrickGuardMapManager().getMapDefinition(room.getBrickGuardMapId());
+        if (current != null && current.enabled()
+                && current.minPlayers() <= playerCount
+                && current.maxPlayers() >= playerCount) {
+            return current;
+        }
+        BrickGuardMapManager.MapDefinition usable = plugin.getBrickGuardMapManager().findUsableMap(playerCount);
+        return usable == null ? current : usable;
+    }
+
+    private void applyBrickGuardRuntimeSettings(GameRoom room, BrickGuardMapManager.MapDefinition definition,
+                                                BrickGuardMapManager.RuntimeWorlds worlds) {
+        if (room == null || definition == null || worlds == null || worlds.brickWorld() == null) {
+            return;
+        }
+        room.setBrickGuardRuntimeSettings(
+                definition.mapId(),
+                definition.displayName(),
+                plugin.getBrickGuardMapManager().getBrickSpawn(definition, worlds.brickWorld()),
+                plugin.getBrickGuardMapManager().getNetherBrickSpawn(definition, worlds.netherBrickWorld()),
+                plugin.getBrickGuardMapManager().getBrickCore(definition, worlds.brickWorld()),
+                plugin.getBrickGuardMapManager().getFakeBorderCenter(definition, worlds.brickWorld()),
+                definition.fakeBorderRadius()
+        );
+    }
+
+    private void teleportBrickGuardParticipants(GameRoom room, List<UUID> participants,
+                                                BrickGuardMapManager.RuntimeWorlds worlds) {
+        Location brickSpawn = room.getBrickGuardBrickSpawn();
+        Location netherSpawn = room.getBrickGuardNetherBrickSpawn();
+        if (brickSpawn == null && worlds.brickWorld() != null) {
+            brickSpawn = worlds.brickWorld().getSpawnLocation();
+        }
+        if (netherSpawn == null && worlds.netherBrickWorld() != null) {
+            netherSpawn = worlds.netherBrickWorld().getSpawnLocation();
+        }
+
+        int index = 0;
+        for (UUID uuid : participants) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) {
+                continue;
+            }
+            boolean brickTeam = index % 2 == 0;
+            Location target = (brickTeam ? brickSpawn : netherSpawn);
+            plugin.getRoomManager().resetPlayerForGameStart(room, player);
+            player.getInventory().clear();
+            player.setGameMode(org.bukkit.GameMode.SURVIVAL);
+            player.setAllowFlight(false);
+            player.setFlying(false);
+            player.setLevel(0);
+            player.setExp(0.0F);
+            player.setFireTicks(0);
+            player.setFallDistance(0.0F);
+            player.setHealth(player.getMaxHealth());
+            player.setFoodLevel(20);
+            player.setSaturation(20.0F);
+            if (target != null) {
+                player.teleport(target);
+            }
+
+            String roleName = brickTeam ? "板砖" : "下界砖";
+            plugin.getRoomManager().setRoleNameTag(player, room.getRoomId(), false, roleName);
+            plugin.getRoomManager().updatePlayerTabNameWithRole(player, room.getRoomId(), false, roleName);
+            player.playSound(player.getLocation(), brickTeam ? Sound.BLOCK_STONE_PLACE : Sound.BLOCK_NETHER_BRICKS_PLACE, 0.75f, 1.15f);
+            player.showTitle(Title.title(
+                    LegacyComponentSerializer.legacySection().deserialize(brickTeam ? "§x§F§F§7§C§0§0板砖队" : "§x§6§6§1§9§0§0下界砖队"),
+                    LegacyComponentSerializer.legacySection().deserialize("§f破坏对面的核心即可获胜"),
+                    Title.Times.times(Duration.ZERO, Duration.ofMillis(1800), Duration.ofMillis(300))));
+            index++;
+        }
     }
 
     public void startTntRun(GameRoom room) {
@@ -4327,6 +4489,10 @@ public class GameManager {
 
         if (room.getGameMode().isLuckyPillars()) {
             startLuckyPillars(room);
+            return;
+        }
+        if (room.getGameMode().isBrickGuard()) {
+            startBrickGuard(room);
             return;
         }
         if (room.getGameMode().isStandaloneMiniGame()) {

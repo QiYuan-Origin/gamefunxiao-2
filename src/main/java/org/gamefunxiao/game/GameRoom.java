@@ -64,6 +64,13 @@ public class GameRoom {
     private double miniGameBoundaryRadius = 0.0D; // 自动竞技场边界
     private int miniGameMaxGameTimeSeconds = 480; // 自动竞技场最大时间
     private int miniGameRound = 0; // 方块派对等回合数
+    private String brickGuardMapId = "default"; // 板砖守卫战地图ID
+    private String brickGuardMapName = "默认地图"; // 板砖守卫战地图名称
+    private Location brickGuardBrickSpawn; // 板砖队出生点
+    private Location brickGuardNetherBrickSpawn; // 下界砖队出生点
+    private Location brickGuardCoreLocation; // 板砖核心位置
+    private Location brickGuardFakeBorderCenter; // 伪边界中心
+    private double brickGuardFakeBorderRadius = 1500.0D; // 伪边界半径
 
     private World gameWorld;
     private Location rewardChestLocation;
@@ -1410,6 +1417,56 @@ public class GameRoom {
         miniGameBoundaryRadius = 0.0D;
         miniGameMaxGameTimeSeconds = 480;
         miniGameRound = 0;
+    }
+
+    public void setBrickGuardRuntimeSettings(String mapId, String mapName, Location brickSpawn,
+                                             Location netherBrickSpawn, Location coreLocation,
+                                             Location fakeBorderCenter, double fakeBorderRadius) {
+        this.brickGuardMapId = mapId == null || mapId.isBlank() ? "default" : mapId;
+        this.brickGuardMapName = mapName == null || mapName.isBlank() ? "默认地图" : mapName;
+        this.brickGuardBrickSpawn = brickSpawn == null ? null : brickSpawn.clone();
+        this.brickGuardNetherBrickSpawn = netherBrickSpawn == null ? null : netherBrickSpawn.clone();
+        this.brickGuardCoreLocation = coreLocation == null ? null : coreLocation.clone();
+        this.brickGuardFakeBorderCenter = fakeBorderCenter == null ? null : fakeBorderCenter.clone();
+        this.brickGuardFakeBorderRadius = Math.max(8.0D, fakeBorderRadius);
+    }
+
+    public String getBrickGuardMapId() {
+        return brickGuardMapId;
+    }
+
+    public String getBrickGuardMapName() {
+        return brickGuardMapName;
+    }
+
+    public Location getBrickGuardBrickSpawn() {
+        return brickGuardBrickSpawn == null ? null : brickGuardBrickSpawn.clone();
+    }
+
+    public Location getBrickGuardNetherBrickSpawn() {
+        return brickGuardNetherBrickSpawn == null ? null : brickGuardNetherBrickSpawn.clone();
+    }
+
+    public Location getBrickGuardCoreLocation() {
+        return brickGuardCoreLocation == null ? null : brickGuardCoreLocation.clone();
+    }
+
+    public Location getBrickGuardFakeBorderCenter() {
+        return brickGuardFakeBorderCenter == null ? null : brickGuardFakeBorderCenter.clone();
+    }
+
+    public double getBrickGuardFakeBorderRadius() {
+        return brickGuardFakeBorderRadius;
+    }
+
+    public void clearBrickGuardState() {
+        brickGuardMapId = "default";
+        brickGuardMapName = "默认地图";
+        brickGuardBrickSpawn = null;
+        brickGuardNetherBrickSpawn = null;
+        brickGuardCoreLocation = null;
+        brickGuardFakeBorderCenter = null;
+        brickGuardFakeBorderRadius = 1500.0D;
     }
 
     public void clearLuckyPillarsState() {

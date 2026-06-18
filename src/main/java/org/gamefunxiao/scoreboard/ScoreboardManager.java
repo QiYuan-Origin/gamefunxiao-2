@@ -806,6 +806,7 @@ public class ScoreboardManager {
             case END_FLASH -> "§x§B§B§8§8§F§F终§x§D§D§A§A§F§F章§x§F§F§D§D§8§8·§x§F§F§F§F§A§A闪§x§D§D§F§F§C§C光"; // 终章渐变
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5幸§x§F§F§C§C§6§6运§x§F§F§B§B§7§7之§x§F§F§A§A§8§8柱";
             case LUCKY_PILLARS_PVP -> "§x§F§F§8§8§5§5幸§x§F§F§A§A§6§6运§x§F§F§C§C§7§7之§x§F§F§E§E§8§8柱§x§F§F§6§6§6§6PVP";
+            case BRICK_GUARD -> "§x§F§F§7§C§0§0板§x§F§F§9§0§2§2砖§x§F§F§A§4§4§4守§x§F§F§B§8§6§6卫§x§F§F§C§C§8§8战";
             case TNT_RUN -> "§x§F§F§8§8§5§5T§x§F§F§9§9§6§6N§x§F§F§A§A§7§7T§x§F§F§B§B§8§8跑§x§F§F§C§C§9§9酷";
             case BLOCK_PARTY -> "§x§D§D§8§8§F§F方§x§C§C§9§9§F§F块§x§B§B§A§A§F§F派§x§A§A§B§B§F§F对";
             case CUSTOM -> "§x§F§F§F§F§5§5自§x§F§F§F§F§7§7定§x§F§F§F§F§9§9义§x§F§F§F§F§B§B模§x§F§F§F§F§D§D式"; // 黄色渐变

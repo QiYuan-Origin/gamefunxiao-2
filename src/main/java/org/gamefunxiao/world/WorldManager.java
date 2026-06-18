@@ -13,6 +13,7 @@ import org.mvplugins.multiverse.core.MultiverseCoreApi;
 import org.mvplugins.multiverse.core.world.options.UnloadWorldOptions;
 import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.game.GameMode;
+import org.gamefunxiao.game.GameRoom;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -149,11 +150,18 @@ public class WorldManager {
         }
 
         MiniGameMapManager.MapDefinition miniGameMap = null;
+        BrickGuardMapManager.MapDefinition brickGuardMap = null;
         World sourceTemplateWorld = null;
         if (mode != null && plugin.getMiniGameMapManager() != null && mode.isMiniGameMapEditableMode()) {
             miniGameMap = plugin.getMiniGameMapManager().findUsableMap(mode, 1);
             if (miniGameMap != null) {
                 sourceTemplateWorld = getOrCreateMiniGameTemplateWorld(miniGameMap, MiniGameMapManager.EditWorldKind.LOBBY);
+            }
+        }
+        if (sourceTemplateWorld == null && mode != null && mode.isBrickGuard() && plugin.getBrickGuardMapManager() != null) {
+            brickGuardMap = findBrickGuardMapForRoom(roomId);
+            if (brickGuardMap != null) {
+                sourceTemplateWorld = getOrCreateBrickGuardTemplateWorld(brickGuardMap, BrickGuardMapManager.EditWorldKind.LOBBY);
             }
         }
 
@@ -207,6 +215,12 @@ public class WorldManager {
         applyLobbyWorldRules(lobbyWorld);
         if (miniGameMap != null && sourceTemplateWorld.getName().equalsIgnoreCase(miniGameMap.lobbyTemplateWorld())) {
             Location lobbySpawn = plugin.getMiniGameMapManager().getLobbySpawn(miniGameMap, lobbyWorld);
+            if (lobbySpawn != null) {
+                lobbyWorld.setSpawnLocation(lobbySpawn);
+            }
+        }
+        if (brickGuardMap != null && sourceTemplateWorld.getName().equalsIgnoreCase(brickGuardMap.lobbyTemplateWorld())) {
+            Location lobbySpawn = plugin.getBrickGuardMapManager().getLobbySpawn(brickGuardMap, lobbyWorld);
             if (lobbySpawn != null) {
                 lobbyWorld.setSpawnLocation(lobbySpawn);
             }
@@ -328,6 +342,121 @@ public class WorldManager {
             plugin.getLogger().info("小游戏模板世界已从已有文件加载: " + worldName);
         }
         return world;
+    }
+
+    public World getOrCreateBrickGuardTemplateWorld(BrickGuardMapManager.MapDefinition definition,
+                                                    BrickGuardMapManager.EditWorldKind kind) {
+        if (definition == null || kind == null) {
+            return null;
+        }
+        String worldName = plugin.getBrickGuardMapManager().templateWorldName(definition, kind);
+        if (worldName == null || worldName.isBlank()) {
+            return null;
+        }
+
+        World loaded = Bukkit.getWorld(worldName);
+        if (loaded != null) {
+            if (kind == BrickGuardMapManager.EditWorldKind.LOBBY) {
+                applyTemplateLobbyRules(loaded);
+            } else {
+                setupGameWorld(loaded);
+            }
+            return loaded;
+        }
+
+        File templateFolder = new File(Bukkit.getWorldContainer(), worldName);
+        boolean existingWorld = templateFolder.exists();
+        if (!existingWorld && !plugin.getBrickGuardMapManager().shouldAutoCreateTemplate(definition)) {
+            return null;
+        }
+
+        WorldCreator creator = new WorldCreator(worldName);
+        creator.environment(kind == BrickGuardMapManager.EditWorldKind.NETHER_BRICK
+                ? World.Environment.NETHER : World.Environment.NORMAL);
+        creator.type(WorldType.FLAT);
+        creator.generateStructures(false);
+        creator.generator(new VoidWorldGenerator());
+        creator.keepSpawnLoaded(net.kyori.adventure.util.TriState.FALSE);
+
+        World world = creator.createWorld();
+        if (world == null) {
+            plugin.getLogger().severe("板砖守卫战模板世界加载失败: " + worldName);
+            return null;
+        }
+
+        world.setKeepSpawnInMemory(false);
+        if (kind == BrickGuardMapManager.EditWorldKind.LOBBY) {
+            applyTemplateLobbyRules(world);
+            world.setSpawnLocation(plugin.getBrickGuardMapManager().getLobbySpawn(definition, world));
+        } else {
+            setupGameWorld(world);
+            if (kind == BrickGuardMapManager.EditWorldKind.BRICK) {
+                world.setSpawnLocation(plugin.getBrickGuardMapManager().getBrickSpawn(definition, world));
+            } else {
+                world.setSpawnLocation(plugin.getBrickGuardMapManager().getNetherBrickSpawn(definition, world));
+            }
+        }
+        if (!existingWorld) {
+            setupBrickGuardTemplateWorld(world, definition, kind);
+            plugin.getLogger().info("板砖守卫战模板世界已创建: " + worldName + " (" + kind.displayName() + ")");
+        } else {
+            plugin.getLogger().info("板砖守卫战模板世界已从已有文件加载: " + worldName);
+        }
+        return world;
+    }
+
+    private void setupBrickGuardTemplateWorld(World world, BrickGuardMapManager.MapDefinition definition,
+                                              BrickGuardMapManager.EditWorldKind kind) {
+        if (world == null || definition == null || kind == null) {
+            return;
+        }
+        switch (kind) {
+            case LOBBY -> {
+                createMiniGameLobbyTemplate(world, null);
+                Location spawn = plugin.getBrickGuardMapManager().getLobbySpawn(definition, world);
+                if (spawn != null) {
+                    world.setSpawnLocation(spawn);
+                }
+            }
+            case BRICK -> {
+                Location spawn = plugin.getBrickGuardMapManager().getBrickSpawn(definition, world);
+                if (spawn != null) {
+                    world.setSpawnLocation(spawn);
+                }
+                createBrickGuardPlatform(world, Material.BRICKS, Material.ORANGE_STAINED_GLASS, 0);
+                Location core = plugin.getBrickGuardMapManager().getBrickCore(definition, world);
+                if (core != null) {
+                    core.getBlock().setType(Material.RED_GLAZED_TERRACOTTA, false);
+                }
+            }
+            case NETHER_BRICK -> {
+                Location spawn = plugin.getBrickGuardMapManager().getNetherBrickSpawn(definition, world);
+                if (spawn != null) {
+                    world.setSpawnLocation(spawn);
+                }
+                createBrickGuardPlatform(world, Material.NETHER_BRICKS, Material.RED_STAINED_GLASS, 0);
+            }
+        }
+    }
+
+    private void createBrickGuardPlatform(World world, Material floor, Material marker, int centerZ) {
+        int baseY = 78;
+        for (int x = -24; x <= 24; x++) {
+            for (int z = centerZ - 24; z <= centerZ + 24; z++) {
+                boolean edge = Math.abs(x) == 24 || Math.abs(z - centerZ) == 24;
+                world.getBlockAt(x, baseY, z).setType(edge ? marker : floor, false);
+            }
+        }
+        for (int y = baseY + 1; y <= baseY + 3; y++) {
+            for (int x = -24; x <= 24; x++) {
+                world.getBlockAt(x, y, centerZ - 24).setType(Material.BARRIER, false);
+                world.getBlockAt(x, y, centerZ + 24).setType(Material.BARRIER, false);
+            }
+            for (int z = centerZ - 24; z <= centerZ + 24; z++) {
+                world.getBlockAt(-24, y, z).setType(Material.BARRIER, false);
+                world.getBlockAt(24, y, z).setType(Material.BARRIER, false);
+            }
+        }
     }
 
     private void setupNewMiniGameTemplateWorld(World world, MiniGameMapManager.MapDefinition definition,
@@ -473,6 +602,7 @@ public class WorldManager {
         return TEMPLATE_LOBBY_NAME.equalsIgnoreCase(name)
                 || END_FLASH_TUNING_WORLD_NAME.equalsIgnoreCase(name)
                 || (plugin.getMiniGameMapManager() != null && plugin.getMiniGameMapManager().isTemplateWorldName(name))
+                || (plugin.getBrickGuardMapManager() != null && plugin.getBrickGuardMapManager().isTemplateWorldName(name))
                 || name.toLowerCase().startsWith(LOBBY_PREFIX)
                 || lobbyWorlds.containsValue(world);
     }
@@ -570,6 +700,108 @@ public class WorldManager {
             world.setKeepSpawnInMemory(false);
             setupGameWorld(world);
             gameWorlds.put(roomId, world);
+        }
+        return world;
+    }
+
+    public BrickGuardMapManager.RuntimeWorlds createBrickGuardWorlds(String roomId,
+                                                                     BrickGuardMapManager.MapDefinition definition) {
+        if (roomId == null || roomId.isBlank()) {
+            return new BrickGuardMapManager.RuntimeWorlds(null, null);
+        }
+        BrickGuardMapManager.MapDefinition selected = definition == null ? findBrickGuardMapForRoom(roomId) : definition;
+        if (selected == null && plugin.getBrickGuardMapManager() != null) {
+            selected = plugin.getBrickGuardMapManager().findUsableMap(2);
+        }
+        if (selected == null) {
+            plugin.getLogger().warning("无法为房间 " + roomId + " 创建板砖守卫战世界：没有可用地图配置");
+            return new BrickGuardMapManager.RuntimeWorlds(null, null);
+        }
+
+        World brickWorld = createBrickGuardWorld(roomId, selected, BrickGuardMapManager.EditWorldKind.BRICK);
+        World netherBrickWorld = createBrickGuardWorld(roomId, selected, BrickGuardMapManager.EditWorldKind.NETHER_BRICK);
+        return new BrickGuardMapManager.RuntimeWorlds(brickWorld, netherBrickWorld);
+    }
+
+    private BrickGuardMapManager.MapDefinition findBrickGuardMapForRoom(String roomId) {
+        if (plugin.getBrickGuardMapManager() == null) {
+            return null;
+        }
+        GameRoom room = plugin.getRoomManager() == null ? null : plugin.getRoomManager().getRoom(roomId);
+        if (room != null && room.getGameMode().isBrickGuard()) {
+            BrickGuardMapManager.MapDefinition roomMap = plugin.getBrickGuardMapManager().getMapDefinition(room.getBrickGuardMapId());
+            if (roomMap != null) {
+                return roomMap;
+            }
+            return plugin.getBrickGuardMapManager().findUsableMap(room.getPlayerCount());
+        }
+        return plugin.getBrickGuardMapManager().findUsableMap(2);
+    }
+
+    private World createBrickGuardWorld(String roomId, BrickGuardMapManager.MapDefinition definition,
+                                        BrickGuardMapManager.EditWorldKind kind) {
+        String suffix = kind == BrickGuardMapManager.EditWorldKind.NETHER_BRICK ? "_nether_brick" : "_brick";
+        String worldName = GAME_PREFIX + roomId.toLowerCase() + suffix;
+
+        prepareFreshWorldFolder(worldName);
+        World sourceTemplateWorld = getOrCreateBrickGuardTemplateWorld(definition, kind);
+        File targetFolder = new File(Bukkit.getWorldContainer(), worldName);
+        if (sourceTemplateWorld != null) {
+            sourceTemplateWorld.save();
+            try {
+                copyWorldFolder(sourceTemplateWorld.getWorldFolder(), targetFolder);
+                File uidFile = new File(targetFolder, "uid.dat");
+                if (uidFile.exists() && !uidFile.delete()) {
+                    plugin.getLogger().warning("无法删除板砖守卫战运行世界 uid.dat: " + uidFile.getAbsolutePath());
+                }
+                File sessionFile = new File(targetFolder, "session.lock");
+                if (sessionFile.exists() && !sessionFile.delete()) {
+                    plugin.getLogger().warning("无法删除板砖守卫战运行世界 session.lock: " + sessionFile.getAbsolutePath());
+                }
+                plugin.getLogger().info("板砖守卫战运行世界已从模板复制: " + sourceTemplateWorld.getName() + " -> " + worldName);
+            } catch (IOException exception) {
+                plugin.getLogger().warning("复制板砖守卫战模板世界失败，改用临时虚空世界生成: " + exception.getMessage());
+                deleteFolder(targetFolder);
+            }
+        }
+
+        World.Environment environment = kind == BrickGuardMapManager.EditWorldKind.NETHER_BRICK
+                ? World.Environment.NETHER : World.Environment.NORMAL;
+        WorldCreator creator = new WorldCreator(worldName);
+        creator.environment(environment);
+        creator.type(WorldType.FLAT);
+        creator.generateStructures(false);
+        creator.generator(new VoidWorldGenerator());
+        creator.keepSpawnLoaded(net.kyori.adventure.util.TriState.FALSE);
+
+        World world = creator.createWorld();
+        if (world == null) {
+            plugin.getLogger().severe("板砖守卫战运行世界加载失败: " + worldName);
+            return null;
+        }
+
+        world.setKeepSpawnInMemory(false);
+        setupGameWorld(world);
+        world.setStorm(false);
+        world.setThundering(false);
+        if (kind == BrickGuardMapManager.EditWorldKind.BRICK) {
+            Location spawn = plugin.getBrickGuardMapManager().getBrickSpawn(definition, world);
+            if (spawn != null) {
+                world.setSpawnLocation(spawn);
+            }
+            Location core = plugin.getBrickGuardMapManager().getBrickCore(definition, world);
+            if (core != null) {
+                core.getBlock().setType(Material.RED_GLAZED_TERRACOTTA, false);
+            }
+            gameWorlds.put(roomId, world);
+            plugin.getLogger().info("板砖世界已创建: " + worldName);
+        } else {
+            Location spawn = plugin.getBrickGuardMapManager().getNetherBrickSpawn(definition, world);
+            if (spawn != null) {
+                world.setSpawnLocation(spawn);
+            }
+            netherWorlds.put(roomId, world);
+            plugin.getLogger().info("下界砖世界已创建: " + worldName);
         }
         return world;
     }
@@ -1041,6 +1273,10 @@ public class WorldManager {
         }
         if (plugin.getMiniGameMapManager() != null && plugin.getMiniGameMapManager().isTemplateWorldName(world.getName())) {
             plugin.getLogger().warning("不能删除小游戏模板世界: " + world.getName());
+            return;
+        }
+        if (plugin.getBrickGuardMapManager() != null && plugin.getBrickGuardMapManager().isTemplateWorldName(world.getName())) {
+            plugin.getLogger().warning("不能删除板砖守卫战模板世界: " + world.getName());
             return;
         }
 

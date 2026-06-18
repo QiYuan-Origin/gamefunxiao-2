@@ -58,6 +58,9 @@ public class ConfigManager {
         // 加载小游戏独立地图配置
         loadConfig("minigame-maps");
 
+        // 加载板砖守卫战地图配置
+        loadConfig("brick-guard-maps");
+
         // 加载自动生成竞技场小游戏配置
         loadConfig("minigames");
 
