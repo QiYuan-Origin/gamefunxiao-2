@@ -121,13 +121,6 @@ brick_guard:
   quick_matching: "§x§F§F§A§4§4§0正在为你匹配板砖守卫战房间。"
   room_created: "§x§5§5§F§F§A§A已创建板砖守卫战房间 §e{room_id}§a。"
   use_dedicated_branch: "§x§F§F§9§0§2§0这是独立玩法，请使用 §e/gamefunxiao bg create §6或 §e/gamefunxiao command create brick_guard §6创建。"
-
-brick_guard:
-  guide_header: "§x§F§F§7§C§0§0▣ §x§F§F§9§0§2§0雨云 §x§D§D§5§5§1§1· §x§9§9§3§3§0§0板砖守卫战 §7玩法要点"
-  menu_opened: "§x§F§F§9§0§2§0已打开板砖守卫战导航菜单。"
-  quick_matching: "§x§F§F§A§4§4§0正在为你匹配板砖守卫战房间。"
-  room_created: "§x§5§5§F§F§A§A已创建板砖守卫战房间 §e{room_id}§a。"
-  use_dedicated_branch: "§x§F§F§9§0§2§0这是独立玩法，请使用 §e/gamefunxiao bg create §6或 §e/gamefunxiao command create brick_guard §6创建。"
   join_brick_team: "§x§F§F§7§C§0§0你已加入板砖队。"
   join_nether_team: "§x§6§6§1§9§0§0你已加入下界砖队。"
   team_balance_blocked: "§x§F§F§8§8§5§5队伍人数将失衡，当前不能这样选。"
@@ -147,6 +140,39 @@ brick_guard:
   brick_win: "§x§F§F§7§C§0§0板砖队胜利！§f下界核心与队伍全部倒下。"
   nether_win: "§x§6§6§1§9§0§0下界砖队胜利！§f板砖核心已被完全摧毁。"
   draw: "§x§D§D§8§8§F§F板砖守卫战超时，双方平局。"
+  core_forced: "§x§6§6§1§9§0§0管理员已把 §e{player} §x§6§6§1§9§0§0设为下界核心。"
+  achievement_unlocked: "§x§F§F§D§7§0§0成就达成：§e{name} §8- §f{description}"
+  command_map_alias_usage: "§x§F§F§B§B§6§6用法：§e/gamefunxiao bg <setcore|setbrickspawn|setnetherbrickspawn|setvillagerarea|setminearea> <地图ID> [pos1|pos2]"
+  command_setspawn_usage: "§x§F§F§B§B§6§6用法：§e/gamefunxiao bg setspawn <地图ID> <lobby|brick|nether>"
+  command_forcecore_usage: "§x§F§F§B§B§6§6用法：§e/gamefunxiao bg forcecore <玩家> [房间ID]"
+  command_forcecore_done: "§x§5§5§F§F§A§A已把 §e{player} §a设置为房间 §b{room_id} §a的下界核心。"
+  command_forcecore_failed: "§x§F§F§8§8§5§5设置核心失败：目标必须在线、在本局下界砖队中。"
+  command_end_usage: "§x§F§F§B§B§6§6用法：§e/gamefunxiao bg end [房间ID] <brick|nether|draw> [原因]"
+  command_end_done: "§x§5§5§F§F§A§A已强制结算板砖守卫战房间 §e{room_id}§a。"
+  command_room_not_found: "§x§F§F§8§8§5§5找不到房间 §e{room_id}§c。"
+  command_not_in_room: "§x§F§F§8§8§5§5你不在板砖守卫战房间内，请指定房间ID。"
+  command_room_not_brick_guard: "§x§F§F§8§8§5§5房间 §e{room_id} §c不是板砖守卫战房间。"
+  command_achievements_header: "§x§F§F§7§C§0§0▣ §e{player} §f的板砖守卫战成就"
+
+brick_guard_achievements:
+  first_win:
+    name: "§x§F§F§D§7§0§0初胜板砖"
+    description: "赢下一局雨云 · 板砖守卫战"
+  core_destroyer:
+    name: "§x§F§F§7§C§0§0碎芯重击"
+    description: "亲手把板砖核心打到 0 血"
+  core_killer:
+    name: "§x§6§6§1§9§0§0猎芯者"
+    description: "击杀下界砖队核心玩家"
+  dying_survivor:
+    name: "§x§D§D§8§8§F§F濒死续命"
+    description: "在濒死状态中成功续命或触发图腾回归"
+  fox_pick_master:
+    name: "§x§E§F§4§D§0§0狐稿满级"
+    description: "把狐稿升级到 5 级"
+  villager_trade_master:
+    name: "§x§5§5§F§F§A§A商路熟客"
+    description: "在一局内完成 3 次板砖商人交易"
 
 # 游戏消息
 game:

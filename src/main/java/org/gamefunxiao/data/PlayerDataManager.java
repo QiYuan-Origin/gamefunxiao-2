@@ -110,6 +110,7 @@ public class PlayerDataManager {
         data.setOwnedKillEffects(new HashSet<>(config.getStringList("cosmetics.kill_effects.owned")));
         data.setSelectedHunterKillEffect(config.getString("cosmetics.kill_effects.selected.hunter_game", "none"));
         data.setMessageFrequency(config.getString("settings.message_frequency", "chatty"));
+        data.setBrickGuardAchievements(new HashSet<>(config.getStringList("achievements.brick_guard")));
 
         // 加载统计数据
         data.setPreyWinsTotal(config.getInt("stats.prey_wins.total", 0));
@@ -209,6 +210,7 @@ public class PlayerDataManager {
         config.set("cosmetics.kill_effects.owned", new ArrayList<>(data.getOwnedKillEffects()));
         config.set("cosmetics.kill_effects.selected.hunter_game", data.getSelectedHunterKillEffect());
         config.set("settings.message_frequency", data.getMessageFrequency());
+        config.set("achievements.brick_guard", new ArrayList<>(data.getBrickGuardAchievements()));
 
         config.set("stats.prey_wins.total", data.getPreyWinsTotal());
         config.set("stats.prey_wins.day", data.getPreyWinsDay());
@@ -703,6 +705,25 @@ public class PlayerDataManager {
         PlayerData data = reloadPlayerData(uuid);
         data.setMessageFrequency(frequency);
         savePlayerData(uuid);
+    }
+
+    public Set<String> getBrickGuardAchievements(UUID uuid) {
+        if (uuid == null) {
+            return Collections.emptySet();
+        }
+        return reloadPlayerData(uuid).getBrickGuardAchievements();
+    }
+
+    public boolean unlockBrickGuardAchievement(UUID uuid, String achievementId) {
+        if (uuid == null || achievementId == null || achievementId.isBlank()) {
+            return false;
+        }
+        PlayerData data = reloadPlayerData(uuid);
+        boolean unlocked = data.unlockBrickGuardAchievement(achievementId);
+        if (unlocked) {
+            savePlayerData(uuid);
+        }
+        return unlocked;
     }
 
     public void incrementPlayCount(UUID uuid) {

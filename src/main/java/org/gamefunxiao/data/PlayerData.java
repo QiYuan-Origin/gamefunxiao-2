@@ -21,6 +21,7 @@ public class PlayerData {
     private final Set<String> ownedKillEffects = new HashSet<>();
     private String selectedHunterKillEffect = "none";
     private String messageFrequency = "chatty";
+    private final Set<String> brickGuardAchievements = new HashSet<>();
 
     // 猎物通关次数
     private int preyWinsTotal;
@@ -267,6 +268,35 @@ public class PlayerData {
         this.messageFrequency = messageFrequency == null || messageFrequency.isBlank()
                 ? "chatty"
                 : messageFrequency.toLowerCase();
+    }
+
+    public Set<String> getBrickGuardAchievements() {
+        return new HashSet<>(brickGuardAchievements);
+    }
+
+    public void setBrickGuardAchievements(Set<String> achievements) {
+        brickGuardAchievements.clear();
+        if (achievements == null) {
+            return;
+        }
+        for (String achievement : achievements) {
+            if (achievement != null && !achievement.isBlank()) {
+                brickGuardAchievements.add(achievement.toLowerCase(java.util.Locale.ROOT).trim());
+            }
+        }
+    }
+
+    public boolean hasBrickGuardAchievement(String achievementId) {
+        return achievementId != null
+                && !achievementId.isBlank()
+                && brickGuardAchievements.contains(achievementId.toLowerCase(java.util.Locale.ROOT).trim());
+    }
+
+    public boolean unlockBrickGuardAchievement(String achievementId) {
+        if (achievementId == null || achievementId.isBlank()) {
+            return false;
+        }
+        return brickGuardAchievements.add(achievementId.toLowerCase(java.util.Locale.ROOT).trim());
     }
 
     // 猎物通关次数

@@ -29,6 +29,8 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -90,6 +92,21 @@ public class BrickGuardManager {
     private static final int WIN_POINTS = 20;
     private static final int PARTICIPATE_POINTS = 2;
     private static final int KILL_POINTS = 3;
+
+    private static final String ACH_FIRST_WIN = "first_win";
+    private static final String ACH_CORE_DESTROYER = "core_destroyer";
+    private static final String ACH_CORE_KILLER = "core_killer";
+    private static final String ACH_DYING_SURVIVOR = "dying_survivor";
+    private static final String ACH_FOX_PICK_MASTER = "fox_pick_master";
+    private static final String ACH_TRADE_MASTER = "villager_trade_master";
+    private static final List<String> ACHIEVEMENT_ORDER = List.of(
+            ACH_FIRST_WIN,
+            ACH_CORE_DESTROYER,
+            ACH_CORE_KILLER,
+            ACH_DYING_SURVIVOR,
+            ACH_FOX_PICK_MASTER,
+            ACH_TRADE_MASTER
+    );
 
     private static final String BRICK_TEAM_NAME = "板砖队";
     private static final String NETHER_TEAM_NAME = "下界砖队";
@@ -366,6 +383,7 @@ public class BrickGuardManager {
             event.getBlock().getWorld().playSound(event.getBlock().getLocation(), Sound.BLOCK_NETHER_BRICKS_BREAK, 0.85f, 0.92f);
             broadcastBrickCoreUnderAttack(room);
             if (session.coreHealth <= 0) {
+                unlockAchievement(player, ACH_CORE_DESTROYER);
                 endBrickGuardGame(room, false, "板砖核心被摧毁");
             }
             return true;
@@ -496,6 +514,9 @@ public class BrickGuardManager {
         }
 
         if (uuid.equals(session.corePlayer)) {
+            if (killer != null && isBrickTeam(room, killer.getUniqueId())) {
+                unlockAchievement(killer, ACH_CORE_KILLER);
+            }
             session.eliminatedNetherPlayers.add(uuid);
             room.setPendingRespawnLocation(uuid, spectatorWait(session.netherSpawn));
             scheduleImmediateRespawn(player);
@@ -654,6 +675,7 @@ public class BrickGuardManager {
             return true;
         }
         session.dyingPlayers.put(player.getUniqueId(), new DyingState(System.currentTimeMillis() + DYING_DURATION_MS, state.totemUsed()));
+        unlockAchievement(player, ACH_DYING_SURVIVOR);
         player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.dying_reset"));
         player.playSound(player.getLocation(), Sound.ENTITY_GENERIC_EAT, 0.9f, 1.0f);
         return true;
@@ -920,6 +942,77 @@ public class BrickGuardManager {
         return true;
     }
 
+    public boolean forceCore(GameRoom room, UUID newCore) {
+        if (!isBrickGuardRoom(room) || newCore == null) {
+            return false;
+        }
+        Session session = getOrCreateSession(room);
+        if (!session.netherTeam.contains(newCore)) {
+            return false;
+        }
+        Player target = Bukkit.getPlayer(newCore);
+        if (target == null || !target.isOnline()) {
+            return false;
+        }
+        Player oldCore = session.corePlayer == null ? null : Bukkit.getPlayer(session.corePlayer);
+        clearCorePlayerState(oldCore);
+        removeCoreTransferItem(oldCore);
+        session.corePlayer = newCore;
+        session.coreOrigin = target.getLocation().clone();
+        session.coreTransferUsed = true;
+        applyCorePlayerState(target);
+        giveCoreTransferItem(target, false);
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("player", target.getName());
+        room.broadcast(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.core_forced", placeholders));
+        refreshRoleDisplays(room);
+        return true;
+    }
+
+    public void forceEnd(GameRoom room, Boolean brickWin, String summary) {
+        if (!isBrickGuardRoom(room)) {
+            return;
+        }
+        endBrickGuardGame(room, brickWin, summary == null || summary.isBlank() ? "管理员强制结束" : summary);
+    }
+
+    public List<String> getAchievementLines(UUID uuid) {
+        Set<String> unlocked = plugin.getPlayerDataManager().getBrickGuardAchievements(uuid);
+        List<String> lines = new ArrayList<>();
+        for (String id : ACHIEVEMENT_ORDER) {
+            boolean has = unlocked.contains(id);
+            lines.add((has ? "§a✔ " : "§7✘ ") + achievementName(id) + " §8- " + achievementDescription(id));
+        }
+        return lines;
+    }
+
+    public void handleInventoryClick(InventoryClickEvent event, Player player, GameRoom room) {
+        if (!isBrickGuardRoom(room) || room.getState() != RoomState.PLAYING || player == null || event == null) {
+            return;
+        }
+        if (event.getView().getTopInventory().getType() != InventoryType.MERCHANT || event.getRawSlot() != 2) {
+            return;
+        }
+        ItemStack current = event.getCurrentItem();
+        if (current == null || current.getType() == Material.AIR) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            GameRoom activeRoom = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+            if (activeRoom == null || !activeRoom.getRoomId().equals(room.getRoomId()) || activeRoom.getState() != RoomState.PLAYING) {
+                return;
+            }
+            Session session = getOrCreateSession(room);
+            int trades = session.tradeCounts.merge(player.getUniqueId(), 1, Integer::sum);
+            if (trades >= 3) {
+                unlockAchievement(player, ACH_TRADE_MASTER);
+            }
+        });
+    }
+
     public ItemStack createFoxPick(int level) {
         Material material = switch (level) {
             case 1, 2 -> Material.IRON_PICKAXE;
@@ -971,6 +1064,33 @@ public class BrickGuardManager {
                 .sound(Key.key("minecraft:entity.generic.eat"))
                 .hasConsumeParticles(true));
         return item;
+    }
+
+    private void unlockAchievement(Player player, String achievementId) {
+        if (player == null || achievementId == null || achievementId.isBlank()) {
+            return;
+        }
+        if (!plugin.getPlayerDataManager().unlockBrickGuardAchievement(player.getUniqueId(), achievementId)) {
+            return;
+        }
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("name", achievementName(achievementId));
+        placeholders.put("description", achievementDescription(achievementId));
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.achievement_unlocked", placeholders));
+        player.showTitle(Title.title(
+                legacy.deserialize("§x§F§F§D§7§0§0成就达成"),
+                legacy.deserialize(achievementName(achievementId)),
+                Title.Times.times(Duration.ZERO, Duration.ofMillis(1800), Duration.ofMillis(350))
+        ));
+        player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.82f, 1.08f);
+    }
+
+    private String achievementName(String achievementId) {
+        return plugin.getMessageManager().getMessage("brick_guard_achievements." + achievementId + ".name");
+    }
+
+    private String achievementDescription(String achievementId) {
+        return plugin.getMessageManager().getMessage("brick_guard_achievements." + achievementId + ".description");
     }
 
     private Session sessionOf(GameRoom room) {
@@ -1224,6 +1344,9 @@ public class BrickGuardManager {
             player.setInvulnerable(true);
             clearBrickGuardPlayerState(player);
             if (brickWin != null) {
+                if (winner) {
+                    unlockAchievement(player, ACH_FIRST_WIN);
+                }
                 plugin.getPlayerDataManager().addMiniGamePoints(uuid, winner ? WIN_POINTS : PARTICIPATE_POINTS, room.getGameMode());
                 Map<String, String> placeholders = new HashMap<>();
                 placeholders.put("points", String.valueOf(winner ? WIN_POINTS : PARTICIPATE_POINTS));
@@ -1321,6 +1444,7 @@ public class BrickGuardManager {
         setPlayerMaxHealth(player, TOTEM_MAX_HEALTH);
         player.setHealth(Math.min(TOTEM_MAX_HEALTH, player.getAttribute(Attribute.MAX_HEALTH) == null ? TOTEM_MAX_HEALTH : player.getAttribute(Attribute.MAX_HEALTH).getValue()));
         player.getWorld().spawnParticle(Particle.TOTEM_OF_UNDYING, player.getLocation().add(0.0D, 1.0D, 0.0D), 28, 0.35D, 0.45D, 0.35D, 0.08D);
+        unlockAchievement(player, ACH_DYING_SURVIVOR);
         player.playSound(player.getLocation(), Sound.ITEM_TOTEM_USE, 0.8f, 1.0f);
         player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.totem_used"));
         refreshRoleDisplays(room);
@@ -1377,6 +1501,9 @@ public class BrickGuardManager {
         ItemStack upgraded = createFoxPick(level + 1);
         setFoxPickCurrentDurability(upgraded, Math.max(1, (int) Math.round(getFoxPickMaxDurability(upgraded) * ratio)));
         player.getInventory().setItemInMainHand(upgraded);
+        if (level + 1 >= 5) {
+            unlockAchievement(player, ACH_FOX_PICK_MASTER);
+        }
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.9f, 1.2f);
         player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.fox_pick_upgraded"));
     }
@@ -2155,6 +2282,7 @@ public class BrickGuardManager {
         private final Map<UUID, DyingState> dyingPlayers = new HashMap<>();
         private final Map<UUID, RespawnState> pendingRespawns = new HashMap<>();
         private final Map<UUID, Integer> kills = new HashMap<>();
+        private final Map<UUID, Integer> tradeCounts = new HashMap<>();
         private final Map<String, Material> managedResources = new HashMap<>();
         private UUID corePlayer;
         private Location coreOrigin;

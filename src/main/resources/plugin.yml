@@ -48,6 +48,7 @@ permissions:
       gamefunxiao.use.brickguard.rooms: true
       gamefunxiao.use.brickguard.join: true
       gamefunxiao.use.brickguard.leaderboard: true
+      gamefunxiao.use.brickguard.achievements: true
       gamefunxiao.use.leave: true
       gamefunxiao.use.rejoin: true
       gamefunxiao.use.wiki: true
@@ -97,6 +98,9 @@ permissions:
     default: true
   gamefunxiao.use.brickguard.leaderboard:
     description: 查看板砖守卫战排行榜
+    default: true
+  gamefunxiao.use.brickguard.achievements:
+    description: 查看板砖守卫战成就
     default: true
   gamefunxiao.use.leave:
     description: 离开当前房间
@@ -174,6 +178,8 @@ permissions:
       gamefunxiao.admin.brickguard.map: true
       gamefunxiao.admin.brickguard.debug: true
       gamefunxiao.admin.brickguard.end: true
+      gamefunxiao.admin.brickguard.forcecore: true
+      gamefunxiao.admin.brickguard.achievements: true
       gamefunxiao.admin.hg.create: true
       gamefunxiao.admin.hg.setlobbyspawn: true
       gamefunxiao.admin.endflashtune: true
@@ -302,6 +308,12 @@ permissions:
     default: op
   gamefunxiao.admin.brickguard.end:
     description: 强制结束板砖守卫战房间
+    default: op
+  gamefunxiao.admin.brickguard.forcecore:
+    description: 强制指定板砖守卫战下界核心玩家
+    default: op
+  gamefunxiao.admin.brickguard.achievements:
+    description: 查看其他玩家板砖守卫战成就
     default: op
   gamefunxiao.admin.hg.create:
     description: 使用 hg create 创建房间

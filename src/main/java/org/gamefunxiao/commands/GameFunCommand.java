@@ -16,6 +16,7 @@ import org.bukkit.OfflinePlayer;
 import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.game.EndFlashKitManager;
 import org.gamefunxiao.game.GameMode;
+import org.gamefunxiao.game.GameRoom;
 import org.gamefunxiao.game.RoomManager;
 import org.gamefunxiao.world.BrickGuardMapManager;
 import org.gamefunxiao.world.MiniGameMapManager;
@@ -2001,7 +2002,16 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "leaderboard", "lb", "排行", "排行榜" -> plugin.getMenuManager().openBrickGuardLeaderboardMenu(player);
             case "join", "加入" -> handleCommandJoinRoom(player, args);
             case "create", "createroom", "创建", "创建房间" -> handleBrickGuardCreate(player, args);
-            case "map", "地图", "地图编辑" -> handleMiniGameMap(player, new String[]{"map", "help"});
+            case "map", "地图", "地图编辑" -> handleBrickGuardMapShortcut(player, args);
+            case "setcore", "core", "核心" -> handleBrickGuardMapAlias(player, args, "setcore");
+            case "setbrickspawn", "brickspawn", "板砖出生点" -> handleBrickGuardMapAlias(player, args, "setbrickspawn");
+            case "setnetherbrickspawn", "netherbrickspawn", "下界砖出生点" -> handleBrickGuardMapAlias(player, args, "setnetherbrickspawn");
+            case "setspawn", "spawn", "出生点" -> handleBrickGuardSetSpawnAlias(player, args);
+            case "setvillagerarea", "villagerarea", "村民区域" -> handleBrickGuardMapAlias(player, args, "setvillagerarea");
+            case "setminearea", "minearea", "矿区" -> handleBrickGuardMapAlias(player, args, "setminearea");
+            case "forcecore", "强制核心" -> handleBrickGuardForceCore(player, args);
+            case "end", "forceend", "结束", "强制结束" -> handleBrickGuardEnd(player, args);
+            case "achievements", "achievement", "成就" -> handleBrickGuardAchievements(player, args);
             case "debug", "调试" -> {
                 if (!player.hasPermission("gamefunxiao.admin.brickguard.debug") && !player.hasPermission("gamefunxiao.admin")) {
                     player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
@@ -2035,6 +2045,196 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         createCommandRoom(player, GameMode.BRICK_GUARD, maxPlayers, isPublic, new HashSet<>());
     }
 
+    private void handleBrickGuardMapShortcut(Player player, String[] args) {
+        String[] transformed;
+        if (args.length <= 2) {
+            transformed = new String[]{"map", "brickguard", "help"};
+        } else {
+            transformed = new String[args.length];
+            transformed[0] = "map";
+            transformed[1] = "brickguard";
+            System.arraycopy(args, 2, transformed, 2, args.length - 2);
+        }
+        handleMiniGameMap(player, transformed);
+    }
+
+    private void handleBrickGuardMapAlias(Player player, String[] args, String mapAction) {
+        if (args.length < 3) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_map_alias_usage"));
+            return;
+        }
+        String[] transformed = new String[args.length + 1];
+        transformed[0] = "map";
+        transformed[1] = "brickguard";
+        transformed[2] = mapAction;
+        System.arraycopy(args, 2, transformed, 3, args.length - 2);
+        handleMiniGameMap(player, transformed);
+    }
+
+    private void handleBrickGuardSetSpawnAlias(Player player, String[] args) {
+        if (args.length < 4) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_setspawn_usage"));
+            return;
+        }
+        String first = args[2];
+        String second = args[3];
+        String action = normalizeBrickGuardSpawnAlias(second);
+        String mapId = first;
+        if (action == null) {
+            action = normalizeBrickGuardSpawnAlias(first);
+            mapId = second;
+        }
+        if (action == null) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_setspawn_usage"));
+            return;
+        }
+        handleMiniGameMap(player, new String[]{"map", "brickguard", action, mapId});
+    }
+
+    private String normalizeBrickGuardSpawnAlias(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        return switch (raw.toLowerCase(Locale.ROOT).replace("-", "_")) {
+            case "lobby", "大厅", "等待大厅", "wait", "waiting" -> "setlobbyspawn";
+            case "brick", "brick_team", "板砖", "板砖队" -> "setbrickspawn";
+            case "nether", "nether_brick", "netherbrick", "下界", "下界砖", "下界砖队" -> "setnetherbrickspawn";
+            default -> null;
+        };
+    }
+
+    private void handleBrickGuardForceCore(Player player, String[] args) {
+        if (!player.hasPermission("gamefunxiao.admin.brickguard.forcecore") && !player.hasPermission("gamefunxiao.admin")) {
+            player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
+            return;
+        }
+        if (args.length < 3) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_forcecore_usage"));
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(args[2]);
+        if (target == null) {
+            target = Bukkit.getPlayer(args[2]);
+        }
+        if (target == null) {
+            player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_not_found", Map.of("player", args[2])));
+            return;
+        }
+        GameRoom room = resolveBrickGuardCommandRoom(player, args.length >= 4 ? args[3] : null, target);
+        if (room == null) {
+            return;
+        }
+        if (plugin.getBrickGuardManager().forceCore(room, target.getUniqueId())) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_forcecore_done",
+                    Map.of("player", target.getName(), "room_id", room.getRoomId())));
+            player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.65f, 1.18f);
+        } else {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_forcecore_failed"));
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.85f, 0.82f);
+        }
+    }
+
+    private void handleBrickGuardEnd(Player player, String[] args) {
+        if (!player.hasPermission("gamefunxiao.admin.brickguard.end") && !player.hasPermission("gamefunxiao.admin")) {
+            player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
+            return;
+        }
+        String roomId = null;
+        String resultRaw = null;
+        int summaryStart = 2;
+        if (args.length >= 3) {
+            GameRoom explicitRoom = plugin.getRoomManager().getRoom(args[2]);
+            if (explicitRoom != null) {
+                roomId = args[2];
+                resultRaw = args.length >= 4 ? args[3] : "draw";
+                summaryStart = 4;
+            } else {
+                resultRaw = args[2];
+                summaryStart = 3;
+            }
+        }
+        GameRoom room = resolveBrickGuardCommandRoom(player, roomId, null);
+        if (room == null) {
+            return;
+        }
+        Boolean brickWin = parseBrickGuardEndResult(resultRaw == null ? "draw" : resultRaw);
+        if (brickWin == null && resultRaw != null && !isBrickGuardDrawResult(resultRaw)) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_end_usage"));
+            return;
+        }
+        String summary = args.length > summaryStart
+                ? String.join(" ", Arrays.copyOfRange(args, summaryStart, args.length)).replace('&', '§')
+                : "管理员强制结束";
+        plugin.getBrickGuardManager().forceEnd(room, brickWin, summary);
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_end_done",
+                Map.of("room_id", room.getRoomId())));
+        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_DEACTIVATE, 0.58f, 0.9f);
+    }
+
+    private Boolean parseBrickGuardEndResult(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        return switch (raw.toLowerCase(Locale.ROOT).replace("-", "_")) {
+            case "brick", "brick_win", "bricks", "板砖", "板砖队" -> Boolean.TRUE;
+            case "nether", "nether_win", "nether_brick", "下界", "下界砖", "下界砖队" -> Boolean.FALSE;
+            case "draw", "tie", "none", "平局" -> null;
+            default -> null;
+        };
+    }
+
+    private boolean isBrickGuardDrawResult(String raw) {
+        if (raw == null) {
+            return true;
+        }
+        String normalized = raw.toLowerCase(Locale.ROOT).replace("-", "_");
+        return normalized.equals("draw") || normalized.equals("tie") || normalized.equals("none") || normalized.equals("平局");
+    }
+
+    private void handleBrickGuardAchievements(Player player, String[] args) {
+        OfflinePlayer target = player;
+        if (args.length >= 3) {
+            if (!player.hasPermission("gamefunxiao.admin.brickguard.achievements") && !player.hasPermission("gamefunxiao.admin")) {
+                player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
+                return;
+            }
+            target = Bukkit.getOfflinePlayer(args[2]);
+        }
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_achievements_header",
+                Map.of("player", Optional.ofNullable(target.getName()).orElse("未知"))));
+        for (String line : plugin.getBrickGuardManager().getAchievementLines(target.getUniqueId())) {
+            player.sendMessage("§8· " + line);
+        }
+        player.playSound(player.getLocation(), org.bukkit.Sound.UI_TOAST_IN, 0.48f, 1.32f);
+    }
+
+    private GameRoom resolveBrickGuardCommandRoom(Player player, String roomId, Player fallbackTarget) {
+        GameRoom room = null;
+        if (roomId != null && !roomId.isBlank()) {
+            room = plugin.getRoomManager().getRoom(roomId);
+            if (room == null) {
+                player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_room_not_found",
+                        Map.of("room_id", roomId)));
+                return null;
+            }
+        } else if (fallbackTarget != null) {
+            room = plugin.getRoomManager().getPlayerRoom(fallbackTarget.getUniqueId());
+        }
+        if (room == null) {
+            room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        }
+        if (room == null) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_not_in_room"));
+            return null;
+        }
+        if (!room.getGameMode().isBrickGuard()) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.command_room_not_brick_guard",
+                    Map.of("room_id", room.getRoomId())));
+            return null;
+        }
+        return room;
+    }
+
     private void sendBrickGuardHelp(Player player, int page) {
         List<String> entries = new ArrayList<>();
         entries.add("§e/gamefunxiao brickguard §7- §f打开雨云 · 板砖守卫战菜单");
@@ -2043,12 +2243,18 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         entries.add("§e/gamefunxiao bg rooms §7- §f查看板砖守卫战房间列表");
         entries.add("§e/gamefunxiao bg leaderboard §7- §f查看板砖守卫战排行榜");
         entries.add("§e/gamefunxiao bg join <房间ID> §7- §f加入指定房间");
+        entries.add("§e/gamefunxiao bg achievements §7- §f查看板砖守卫战成就");
         entries.add("§e/gamefunxiao command menu brickguard §7- §f从命令入口打开玩法菜单");
         entries.add("§e/gamefunxiao command quick brick_guard §7- §f模拟按钮快速匹配");
 
         if (player.hasPermission("gamefunxiao.admin")) {
             entries.add("§c管理员命令：");
             entries.add("§e/gamefunxiao bg create [人数] [public|private] §7- §f创建板砖守卫战房间");
+            entries.add("§e/gamefunxiao bg map <动作...> §7- §f管理板砖守卫战地图");
+            entries.add("§e/gamefunxiao bg setspawn <地图ID> <lobby|brick|nether> §7- §f设置三类出生点");
+            entries.add("§e/gamefunxiao bg setcore <地图ID> §7- §f设置板砖核心方块");
+            entries.add("§e/gamefunxiao bg forcecore <玩家> [房间ID] §7- §f强制指定下界核心玩家");
+            entries.add("§e/gamefunxiao bg end [房间ID] <brick|nether|draw> [原因] §7- §f强制结算");
             entries.add("§e/gamefunxiao command create brick_guard 16 §7- §f通过 command 分支创建房间");
         }
 
@@ -2529,6 +2735,18 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 .forEach(completions::add);
     }
 
+    private boolean isBrickGuardMapAliasAction(String value) {
+        if (value == null) {
+            return false;
+        }
+        String action = value.toLowerCase(Locale.ROOT).replace("-", "_");
+        return action.equals("setcore")
+                || action.equals("setbrickspawn")
+                || action.equals("setnetherbrickspawn")
+                || action.equals("setvillagerarea")
+                || action.equals("setminearea");
+    }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         return tabCompleteRegisteredCommand(sender, command.getName(), args);
@@ -2613,7 +2831,12 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if (args[0].equalsIgnoreCase("help")) {
                 completions.addAll(Arrays.asList("1", "2", "3", "4", "5"));
             } else if (isBrickGuardCommand(args[0])) {
-                completions.addAll(Arrays.asList("help", "menu", "quick", "match", "create", "join", "rooms", "list", "leaderboard", "lb"));
+                completions.addAll(Arrays.asList("help", "menu", "quick", "match", "create", "join", "rooms", "list",
+                        "leaderboard", "lb", "achievements", "成就"));
+                if (sender.hasPermission("gamefunxiao.admin")) {
+                    completions.addAll(Arrays.asList("map", "setspawn", "setcore", "setbrickspawn", "setnetherbrickspawn",
+                            "setvillagerarea", "setminearea", "forcecore", "end", "debug"));
+                }
             } else if (args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg")) {
                 completions.addAll(Arrays.asList("help", "create", "join", "invite", "list", "leaderboard"));
             } else if ((args[0].equalsIgnoreCase("coins") || args[0].equalsIgnoreCase("coin") || args[0].equalsIgnoreCase("money"))
@@ -2671,6 +2894,25 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                     completions.addAll(Arrays.asList("2", "4", "8", "16", "24", "32"));
                 } else if (args[1].equalsIgnoreCase("join")) {
                     addBrickGuardRoomIds(completions);
+                } else if (args[1].equalsIgnoreCase("map") && sender.hasPermission("gamefunxiao.admin")) {
+                    completions.addAll(getBrickGuardMapActions());
+                } else if (isBrickGuardMapAliasAction(args[1]) && sender.hasPermission("gamefunxiao.admin")) {
+                    addBrickGuardMapIdCompletions(completions);
+                } else if (args[1].equalsIgnoreCase("setspawn") && sender.hasPermission("gamefunxiao.admin")) {
+                    addBrickGuardMapIdCompletions(completions);
+                    completions.addAll(Arrays.asList("lobby", "brick", "nether"));
+                } else if (args[1].equalsIgnoreCase("forcecore") && sender.hasPermission("gamefunxiao.admin")) {
+                    Bukkit.getOnlinePlayers().stream()
+                            .map(Player::getName)
+                            .sorted(String.CASE_INSENSITIVE_ORDER)
+                            .forEach(completions::add);
+                } else if (args[1].equalsIgnoreCase("end") && sender.hasPermission("gamefunxiao.admin")) {
+                    addBrickGuardRoomIds(completions);
+                    completions.addAll(Arrays.asList("brick", "nether", "draw"));
+                } else if (args[1].equalsIgnoreCase("achievements")) {
+                    if (sender.hasPermission("gamefunxiao.admin")) {
+                        Bukkit.getOnlinePlayers().stream().map(Player::getName).sorted(String.CASE_INSENSITIVE_ORDER).forEach(completions::add);
+                    }
                 }
             } else if (args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg")) {
                 if (args[1].equalsIgnoreCase("create")) {
@@ -2742,6 +2984,26 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 if (action.equals("create")) {
                     completions.addAll(Arrays.asList("2", "4", "8", "16", "32", "64", "all", "small", "middle", "large"));
                 }
+            } else if (isBrickGuardCommand(args[0]) && args[1].equalsIgnoreCase("map") && sender.hasPermission("gamefunxiao.admin")) {
+                String action = normalizeBrickGuardMapAction(args[2]);
+                if (action.equals("create")) {
+                    completions.addAll(Arrays.asList("default", "small", "middle", "large", "nether", "mine"));
+                } else if (action.equals("active")) {
+                    completions.addAll(Arrays.asList("random", "all"));
+                    addBrickGuardMapIdCompletions(completions);
+                } else if (needsBrickGuardMapIdCompletion(action)) {
+                    addBrickGuardMapIdCompletions(completions);
+                }
+            } else if (isBrickGuardCommand(args[0]) && args[1].equalsIgnoreCase("setspawn") && sender.hasPermission("gamefunxiao.admin")) {
+                completions.addAll(Arrays.asList("lobby", "brick", "nether"));
+                addBrickGuardMapIdCompletions(completions);
+            } else if (isBrickGuardCommand(args[0]) && (args[1].equalsIgnoreCase("setvillagerarea") || args[1].equalsIgnoreCase("setminearea"))
+                    && sender.hasPermission("gamefunxiao.admin")) {
+                completions.addAll(Arrays.asList("pos1", "pos2", "min", "max"));
+            } else if (isBrickGuardCommand(args[0]) && args[1].equalsIgnoreCase("forcecore") && sender.hasPermission("gamefunxiao.admin")) {
+                addBrickGuardRoomIds(completions);
+            } else if (isBrickGuardCommand(args[0]) && args[1].equalsIgnoreCase("end") && sender.hasPermission("gamefunxiao.admin")) {
+                completions.addAll(Arrays.asList("brick", "nether", "draw"));
             } else if (isBrickGuardCommand(args[0]) && args[1].equalsIgnoreCase("create")) {
                 completions.addAll(Arrays.asList("public", "private", "公开", "仅邀请"));
             } else if ((args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg"))
@@ -2766,6 +3028,13 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 } else {
                     addMiniGameMapArgumentCompletions(completions, args);
                 }
+            } else if (isBrickGuardCommand(args[0]) && args[1].equalsIgnoreCase("map") && sender.hasPermission("gamefunxiao.admin")) {
+                String[] mapArgs = new String[args.length - 1];
+                mapArgs[0] = "map";
+                if (mapArgs.length > 1) {
+                    System.arraycopy(args, 2, mapArgs, 1, args.length - 2);
+                }
+                addBrickGuardMapShortcutArgumentCompletions(completions, mapArgs);
             } else if (isCommandBranch(args[0])) {
                 String action = args[1].toLowerCase(Locale.ROOT);
                 if (action.equals("create")) {
@@ -2850,6 +3119,32 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
     private void addBrickGuardMapArgumentCompletions(List<String> completions, String[] args) {
         String action = normalizeBrickGuardMapAction(args[2]);
         if (args.length == 5) {
+            switch (action) {
+                case "create" -> completions.addAll(Arrays.asList("2", "4", "8", "12", "16", "24", "32"));
+                case "setvillagerarea", "setminearea" -> completions.addAll(Arrays.asList("pos1", "pos2", "min", "max"));
+                case "setborder" -> completions.addAll(Arrays.asList("500", "1000", "1500", "2000"));
+                case "worlds" -> completions.addAll(Arrays.asList("preview", "test", "default"));
+            }
+        } else if (args.length == 6 && action.equals("worlds")) {
+            completions.addAll(Arrays.asList("brick", "nether", "nether_brick", "板砖", "下界砖"));
+        }
+    }
+
+    private void addBrickGuardMapShortcutArgumentCompletions(List<String> completions, String[] args) {
+        if (args.length < 3) {
+            return;
+        }
+        String action = normalizeBrickGuardMapAction(args[2]);
+        if (args.length == 4) {
+            if (action.equals("create")) {
+                completions.addAll(Arrays.asList("default", "small", "middle", "large", "nether", "mine"));
+            } else if (action.equals("active")) {
+                completions.addAll(Arrays.asList("random", "all"));
+                addBrickGuardMapIdCompletions(completions);
+            } else if (needsBrickGuardMapIdCompletion(action)) {
+                addBrickGuardMapIdCompletions(completions);
+            }
+        } else if (args.length == 5) {
             switch (action) {
                 case "create" -> completions.addAll(Arrays.asList("2", "4", "8", "12", "16", "24", "32"));
                 case "setvillagerarea", "setminearea" -> completions.addAll(Arrays.asList("pos1", "pos2", "min", "max"));
