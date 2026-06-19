@@ -103,20 +103,9 @@ public class MessageManager {
         return withPrefixIfPresent(plugin.getConfigManager().getLuckyPillarsPrefix(), path, placeholders);
     }
 
-    public String getBrickGuardMessageWithPrefix(String path) {
-        return withPrefixIfPresent(plugin.getConfigManager().getBrickGuardPrefix(), path, null);
-    }
-
-    public String getBrickGuardMessageWithPrefix(String path, Map<String, String> placeholders) {
-        return withPrefixIfPresent(plugin.getConfigManager().getBrickGuardPrefix(), path, placeholders);
-    }
-
     public String getModeMessageWithPrefix(GameMode mode, String path) {
         if (mode != null && mode.isLuckyPillars()) {
             return getLuckyPillarsMessageWithPrefix(path);
-        }
-        if (mode != null && mode.isBrickGuard()) {
-            return getBrickGuardMessageWithPrefix(path);
         }
         if (mode != null && (mode.isStandaloneMiniGame() || mode.isIndependentMode())) {
             return getMiniGameMessageWithPrefix(path);
@@ -127,9 +116,6 @@ public class MessageManager {
     public String getModeMessageWithPrefix(GameMode mode, String path, Map<String, String> placeholders) {
         if (mode != null && mode.isLuckyPillars()) {
             return getLuckyPillarsMessageWithPrefix(path, placeholders);
-        }
-        if (mode != null && mode.isBrickGuard()) {
-            return getBrickGuardMessageWithPrefix(path, placeholders);
         }
         if (mode != null && (mode.isStandaloneMiniGame() || mode.isIndependentMode())) {
             return getMiniGameMessageWithPrefix(path, placeholders);

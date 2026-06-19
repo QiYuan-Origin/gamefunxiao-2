@@ -45,12 +45,6 @@ public class SettingsCategoryMenu extends BaseMenu {
                 "§f- §b这里是幸运之柱自己的特效分类",
                 "§f- §a点击进入分类",
                 "§8· · · · · · · · · · · · · ·"));
-        inventory.setItem(25, createItem(Material.BRICK,
-                "   §8[§x§F§F§7§C§0§0▣ §x§F§F§9§0§2§0板§x§F§F§A§4§4§0砖§x§C§C§5§0§2§0设§x§6§6§1§9§0§0置§8]",
-                "§8· · · · · · · · · · · · · ·",
-                "§f- §6进入板砖守卫战独立导航",
-                "§f- §a房间、队伍与玩法入口在这里统一处理",
-                "§8· · · · · · · · · · · · · ·"));
 
         inventory.setItem(36, createBackButton());
     }
@@ -79,11 +73,6 @@ public class SettingsCategoryMenu extends BaseMenu {
                 player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.8f, 1.78f);
                 player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.55f, 1.3f);
                 plugin.getMenuManager().openLuckyPillarsEffectCategoryMenu(player);
-            }
-            case 25 -> {
-                player.playSound(player.getLocation(), Sound.BLOCK_COPPER_BULB_TURN_ON, 0.68f, 0.9f);
-                player.playSound(player.getLocation(), Sound.BLOCK_GRINDSTONE_USE, 0.42f, 1.35f);
-                plugin.getMenuManager().openBrickGuardMenu(player);
             }
             case 36 -> {
                 playClickSound();

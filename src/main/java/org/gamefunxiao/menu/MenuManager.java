@@ -30,13 +30,9 @@ public class MenuManager {
     private static final List<String> COMMAND_MENU_IDS = List.of(
             "main", "home", "hunter", "huntergame", "hg",
             "lucky", "luckypillars", "lp",
-            "brickguard", "brick_guard", "bg", "板砖守卫战", "板砖",
             "rooms", "roomlist", "luckyrooms", "lprooms",
-            "brickrooms", "bgrooms", "brickguardrooms",
             "create", "createroom", "luckycreate", "lpcreate",
-            "brickcreate", "bgcreate", "brickguardcreate",
             "leaderboard", "lb", "luckyleaderboard", "lplb",
-            "brickleaderboard", "bgleaderboard", "brickguardleaderboard", "bricklb", "bglb",
             "shop", "settings", "victoryshop", "victorysettings",
             "endflashkit", "endflashkitadmin", "personalkit", "endflashpersonalkit",
             "pass_count", "fastest_time", "play_count", "hunter_points", "prey_points", "minigame_points"
@@ -97,16 +93,12 @@ public class MenuManager {
             case "main", "home", "menu", "主菜单", "主页" -> new MainNavigationMenu(plugin, player);
             case "hunter", "huntergame", "hg", "猎人", "猎人游戏" -> new HunterGameNavigationMenu(plugin, player);
             case "lucky", "luckypillars", "lp", "幸运之柱" -> new LuckyPillarsNavigationMenu(plugin, player);
-            case "brickguard", "brick", "bg", "brick守卫战", "板砖", "板砖守卫战" -> new BrickGuardNavigationMenu(plugin, player);
             case "rooms", "roomlist", "房间", "查看房间" -> new RoomListMenu(plugin, player);
             case "luckyrooms", "lprooms", "幸运房间" -> RoomListMenu.luckyPillarsOnly(plugin, player);
-            case "brickrooms", "bgrooms", "brickguardrooms", "板砖房间" -> RoomListMenu.brickGuardOnly(plugin, player);
             case "create", "createroom", "创建", "创建房间" -> new CreateRoomMenu(plugin, player);
             case "luckycreate", "lpcreate", "幸运创建" -> new CreateRoomMenu(plugin, player, MenuSection.LUCKY_PILLARS);
-            case "brickcreate", "bgcreate", "brickguardcreate", "板砖创建" -> new CreateRoomMenu(plugin, player, MenuSection.BRICK_GUARD);
             case "leaderboard", "lb", "排行", "排行榜" -> new LeaderboardMenu(plugin, player);
             case "luckyleaderboard", "lplb", "幸运排行" -> new LeaderboardMenu(plugin, player, MenuSection.LUCKY_PILLARS, RoomListMenu.defaultLuckyFilter());
-            case "brickleaderboard", "bgleaderboard", "brickguardleaderboard", "bricklb", "bglb", "板砖排行" -> new LeaderboardMenu(plugin, player, MenuSection.BRICK_GUARD, RoomListMenu.defaultBrickGuardFilter());
             case "passcount", "pass_count", "通关次数" -> new LeaderboardDetailMenu(plugin, player, "pass_count");
             case "fastesttime", "fastest_time", "最快通关" -> new LeaderboardDetailMenu(plugin, player, "fastest_time");
             case "playcount", "play_count", "游玩次数" -> new LeaderboardDetailMenu(plugin, player, "play_count");
@@ -234,26 +226,12 @@ public class MenuManager {
         openMenu(player, new LuckyPillarsNavigationMenu(plugin, player));
     }
 
-    public void openBrickGuardMenu(Player player) {
-        if (!canOpenGameFunMenu(player)) {
-            return;
-        }
-        openMenu(player, new BrickGuardNavigationMenu(plugin, player));
-    }
-
 
     public void openLuckyPillarsRoomListMenu(Player player) {
         if (!canOpenGameFunMenu(player)) {
             return;
         }
         openMenu(player, RoomListMenu.luckyPillarsOnly(plugin, player));
-    }
-
-    public void openBrickGuardRoomListMenu(Player player) {
-        if (!canOpenGameFunMenu(player)) {
-            return;
-        }
-        openMenu(player, RoomListMenu.brickGuardOnly(plugin, player));
     }
 
 
@@ -287,13 +265,6 @@ public class MenuManager {
             return;
         }
         openMenu(player, new LeaderboardMenu(plugin, player, MenuSection.LUCKY_PILLARS, RoomListMenu.defaultLuckyFilter()));
-    }
-
-    public void openBrickGuardLeaderboardMenu(Player player) {
-        if (!canOpenGameFunMenu(player)) {
-            return;
-        }
-        openMenu(player, new LeaderboardMenu(plugin, player, MenuSection.BRICK_GUARD, RoomListMenu.defaultBrickGuardFilter()));
     }
 
 

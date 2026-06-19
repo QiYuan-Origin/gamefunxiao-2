@@ -37,12 +37,6 @@ public class MiniGameShopCategoryMenu extends BaseMenu {
                 "§f- §b当前可购买: 幸运之柱胜利特效",
                 "§f- §a点击进入幸运之柱商品分类",
                 "§8· · · · · · · · · · · · · ·"));
-        inventory.setItem(24, createItem(Material.BRICK,
-                "   §8[§x§F§F§7§C§0§0▣ §x§F§F§9§0§2§0板§x§F§F§A§4§4§0砖§x§C§C§5§0§2§0守§x§6§6§1§9§0§0卫战§8]",
-                "§8· · · · · · · · · · · · · ·",
-                "§f- §6板砖守卫战独立玩法分区",
-                "§f- §a点击进入该玩法导航与房间入口",
-                "§8· · · · · · · · · · · · · ·"));
         inventory.setItem(36, createBackButton());
     }
 
@@ -60,11 +54,6 @@ public class MiniGameShopCategoryMenu extends BaseMenu {
                 player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.8f, 1.72f);
                 player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.55f, 1.95f);
                 plugin.getMenuManager().openLuckyPillarsShopCategoryMenu(player);
-            }
-            case 24 -> {
-                player.playSound(player.getLocation(), Sound.BLOCK_COPPER_BULB_TURN_ON, 0.72f, 0.82f);
-                player.playSound(player.getLocation(), Sound.BLOCK_GRINDSTONE_USE, 0.48f, 1.25f);
-                plugin.getMenuManager().openBrickGuardMenu(player);
             }
             case 36 -> {
                 playClickSound();

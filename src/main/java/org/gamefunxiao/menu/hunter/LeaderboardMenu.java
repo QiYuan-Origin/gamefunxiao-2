@@ -33,7 +33,6 @@ public class LeaderboardMenu extends BaseMenu {
     private static String resolveTitle(MenuSection section) {
         return switch (section) {
             case LUCKY_PILLARS -> "§0§l🍀 幸运之柱排行榜 🍀";
-            case BRICK_GUARD -> "§0§l▣ 板砖守卫战排行榜 ▣";
             case GENERIC, HUNTER -> "§0§l⚔ 猎人排行榜 ⚔";
         };
     }
@@ -41,7 +40,6 @@ public class LeaderboardMenu extends BaseMenu {
     private static Set<GameMode> defaultFilter(MenuSection section) {
         return switch (section) {
             case LUCKY_PILLARS -> EnumSet.of(GameMode.LUCKY_PILLARS);
-            case BRICK_GUARD -> EnumSet.of(GameMode.BRICK_GUARD);
             case GENERIC, HUNTER -> EnumSet.of(
                     GameMode.CLASSIC,
                     GameMode.RANDOM_COMPASS,
@@ -65,12 +63,11 @@ public class LeaderboardMenu extends BaseMenu {
                 "§8· · · · · · · · · · · · · ·",
                 switch (menuSection) {
                     case LUCKY_PILLARS -> "§f这里只看幸运之柱玩法自己的数据";
-                    case BRICK_GUARD -> "§f这里只看板砖守卫战自己的对抗数据";
                     case GENERIC, HUNTER -> "§f这里只看猎人玩法自己的数据";
                 },
                 "§8· · · · · · · · · · · · · ·"));
 
-        if (menuSection == MenuSection.LUCKY_PILLARS || menuSection == MenuSection.BRICK_GUARD) {
+        if (menuSection == MenuSection.LUCKY_PILLARS) {
             inventory.setItem(22, createMiniGamePointsButton());
             inventory.setItem(36, createBackButton());
             return;
@@ -88,7 +85,6 @@ public class LeaderboardMenu extends BaseMenu {
     private Material getTitleMaterial() {
         return switch (menuSection) {
             case LUCKY_PILLARS -> Material.GOLD_BLOCK;
-            case BRICK_GUARD -> Material.BRICK;
             case GENERIC, HUNTER -> Material.IRON_SWORD;
         };
     }
@@ -96,7 +92,6 @@ public class LeaderboardMenu extends BaseMenu {
     private String getTitleText() {
         return switch (menuSection) {
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱榜单";
-            case BRICK_GUARD -> "§x§F§F§7§C§0§0▣ §x§F§F§8§8§1§1板§x§F§F§9§4§2§2砖§x§D§D§6§6§1§1守§x§B§B§4§4§0§0卫§x§6§6§1§9§0§0战榜单";
             case GENERIC, HUNTER -> "§x§F§F§6§6§0§0⚔ §x§F§F§9§9§3§3猎§x§F§F§C§C§6§6人§x§F§F§F§F§9§9榜§x§C§C§F§F§9§9单";
         };
     }
@@ -138,11 +133,6 @@ public class LeaderboardMenu extends BaseMenu {
     }
 
     private ItemStack createMiniGamePointsButton() {
-        if (menuSection == MenuSection.BRICK_GUARD) {
-            return createButton(Material.RED_GLAZED_TERRACOTTA, "§x§F§F§7§C§0§0板砖战绩榜",
-                    "§f- §a只统计雨云 · 板砖守卫战",
-                    "§f- §6胜利和参与会计入独立小游戏积分");
-        }
         return createButton(Material.GOLD_BLOCK, "§x§F§F§D§D§5§5小游戏积分榜",
                 "§f- §a只统计幸运之柱经典模式",
                 "§f- §7当前分区就是单独的小游戏榜");
@@ -173,7 +163,7 @@ public class LeaderboardMenu extends BaseMenu {
             return;
         }
 
-        if (menuSection == MenuSection.LUCKY_PILLARS || menuSection == MenuSection.BRICK_GUARD) {
+        if (menuSection == MenuSection.LUCKY_PILLARS) {
             switch (slot) {
                 case 22 -> {
                     playClickSound();
@@ -181,8 +171,8 @@ public class LeaderboardMenu extends BaseMenu {
                 }
                 case 36 -> {
                     playClickSound();
-                    if (menuSection == MenuSection.BRICK_GUARD) {
-                        plugin.getMenuManager().openBrickGuardMenu(player);
+                    if (menuSection == MenuSection.LUCKY_PILLARS) {
+                        plugin.getMenuManager().openLuckyPillarsMenu(player);
                     } else {
                         plugin.getMenuManager().openLuckyPillarsMenu(player);
                     }

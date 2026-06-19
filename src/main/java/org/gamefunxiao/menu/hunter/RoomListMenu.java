@@ -46,10 +46,6 @@ public class RoomListMenu extends BaseMenu {
         return new RoomListMenu(plugin, player, MenuSection.LUCKY_PILLARS, getDefaultModes(MenuSection.LUCKY_PILLARS));
     }
 
-    public static RoomListMenu brickGuardOnly(GameFunXiao plugin, Player player) {
-        return new RoomListMenu(plugin, player, MenuSection.BRICK_GUARD, getDefaultModes(MenuSection.BRICK_GUARD));
-    }
-
 
     public static Set<GameMode> defaultHunterFilter() {
         return EnumSet.copyOf(getDefaultModes(MenuSection.HUNTER));
@@ -59,15 +55,10 @@ public class RoomListMenu extends BaseMenu {
         return EnumSet.copyOf(getDefaultModes(MenuSection.LUCKY_PILLARS));
     }
 
-    public static Set<GameMode> defaultBrickGuardFilter() {
-        return EnumSet.copyOf(getDefaultModes(MenuSection.BRICK_GUARD));
-    }
-
 
     private static String resolveTitle(MenuSection section) {
         return switch (section) {
             case LUCKY_PILLARS -> "§0§l🍀 幸运之柱房间 🍀";
-            case BRICK_GUARD -> "§0§l▣ 板砖守卫战房间 ▣";
             case GENERIC, HUNTER -> "§0§l⚔ 猎人房间列表 ⚔";
         };
     }
@@ -75,7 +66,6 @@ public class RoomListMenu extends BaseMenu {
     private static Set<GameMode> getDefaultModes(MenuSection section) {
         return switch (section) {
             case LUCKY_PILLARS -> GameMode.getLuckyPillarsSectionModes();
-            case BRICK_GUARD -> GameMode.getBrickGuardSectionModes();
             case GENERIC, HUNTER -> GameMode.getHunterSectionModes();
         };
     }
@@ -93,7 +83,6 @@ public class RoomListMenu extends BaseMenu {
                         : "§f当前使用 §b本服建世界后端",
                 switch (menuSection) {
                     case LUCKY_PILLARS -> "§f这里只看幸运之柱经典模式房间";
-                    case BRICK_GUARD -> "§f这里只看雨云 · 板砖守卫战房间";
                     case GENERIC, HUNTER -> "§f这里只看猎人玩法相关房间";
                 },
                 "§8· · · · · · · · · · · · · ·"));
@@ -113,17 +102,12 @@ public class RoomListMenu extends BaseMenu {
     }
 
     private Material getTitleMaterial() {
-        return switch (menuSection) {
-            case LUCKY_PILLARS -> Material.GOLD_BLOCK;
-            case BRICK_GUARD -> Material.BRICK;
-            case GENERIC, HUNTER -> Material.ENDER_EYE;
-        };
+        return menuSection == MenuSection.LUCKY_PILLARS ? Material.GOLD_BLOCK : Material.ENDER_EYE;
     }
 
     private String getTitleText() {
         return switch (menuSection) {
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱房间";
-            case BRICK_GUARD -> "§x§F§F§7§C§0§0▣ §x§F§F§8§8§1§1板§x§F§F§9§4§2§2砖§x§D§D§6§6§1§1守§x§B§B§4§4§0§0卫§x§6§6§1§9§0§0战房间";
             case GENERIC, HUNTER -> "§x§5§5§F§F§F§F👁 §x§7§7§F§F§D§D猎§x§9§9§F§F§B§B人§x§B§B§F§F§9§9房§x§D§D§F§F§7§7间";
         };
     }
@@ -140,12 +124,10 @@ public class RoomListMenu extends BaseMenu {
         if (entries.isEmpty()) {
             Material emptyMaterial = switch (menuSection) {
                 case LUCKY_PILLARS -> Material.GOLD_NUGGET;
-                case BRICK_GUARD -> Material.BRICK;
                 case GENERIC, HUNTER -> Material.STRUCTURE_VOID;
             };
             String emptyText = switch (menuSection) {
                 case LUCKY_PILLARS -> "§f- §c当前没有幸运之柱房间";
-                case BRICK_GUARD -> "§f- §c当前没有板砖守卫战房间";
                 case GENERIC, HUNTER -> "§f- §c当前没有猎人玩法房间";
             };
             inventory.setItem(22, createItem(emptyMaterial,
@@ -239,7 +221,7 @@ public class RoomListMenu extends BaseMenu {
                 stateColor = "§b";
             }
             case PLAYING -> {
-                material = entry.mode().isBrickGuard() ? Material.RED_GLAZED_TERRACOTTA : Material.RED_CONCRETE;
+                material = Material.RED_CONCRETE;
                 stateText = "游戏中";
                 stateColor = "§c";
             }
@@ -264,8 +246,6 @@ public class RoomListMenu extends BaseMenu {
             lore.add("§f- §c游戏时长: §e" + formatTime(entry.gameDuration()));
             if (entry.mode().isLuckyPillars()) {
                 lore.add("§f- §a玩法: 每5秒随机物品，最后存活");
-            } else if (entry.mode().isBrickGuard()) {
-                lore.add("§f- §6玩法: 板砖队核心方块与下界砖核心玩家对抗");
             } else if (!entry.preyNames().isEmpty()) {
                 lore.add("§f- §d猎物: §f" + String.join(", ", entry.preyNames()));
             }
@@ -399,7 +379,7 @@ public class RoomListMenu extends BaseMenu {
         }
 
         if (entry.childManaged()
-                && (entry.mode().isLuckyPillars() || entry.mode().isBrickGuard() || entry.mode().isFlashLike())
+                && (entry.mode().isLuckyPillars() || entry.mode().isFlashLike())
                 && (entry.state() == RoomState.PLAYING || entry.state() == RoomState.SELECTING)) {
             playClickSound();
             if (!plugin.getRoomManager().joinRoomById(player, entry.roomId())) {
@@ -416,7 +396,6 @@ public class RoomListMenu extends BaseMenu {
     private void openSectionRoot() {
         switch (menuSection) {
             case LUCKY_PILLARS -> plugin.getMenuManager().openLuckyPillarsMenu(player);
-            case BRICK_GUARD -> plugin.getMenuManager().openBrickGuardMenu(player);
             case GENERIC, HUNTER -> plugin.getMenuManager().openHunterGameMenu(player);
         }
     }
