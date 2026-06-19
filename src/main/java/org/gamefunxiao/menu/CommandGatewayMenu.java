@@ -42,6 +42,13 @@ public class CommandGatewayMenu extends BaseMenu {
                 "§f- §b可选择模式、房间、排行榜",
                 "§f- §7命令: §e/gamefunxiao command menu hunter",
                 "§8· · · · · · · · · · · · · ·"));
+        inventory.setItem(12, createItem(Material.BRICK,
+                "   §8[§x§F§F§7§C§0§0▣ §x§F§F§9§0§2§0板§x§F§F§A§4§4§0砖§x§C§C§5§0§2§0守§x§6§6§1§9§0§0卫战§8]",
+                "§8· · · · · · · · · · · · · ·",
+                "§f- §a打开雨云 · 板砖守卫战导航",
+                "§f- §6快速匹配、创建房间、排行榜都在这里",
+                "§f- §7命令: §e/gamefunxiao command menu brickguard",
+                "§8· · · · · · · · · · · · · ·"));
         inventory.setItem(14, createItem(Material.ENDER_EYE,
                 "   §8[§x§5§5§F§F§F§F👁 §x§7§7§F§F§D§D查§x§9§9§F§F§B§B看§x§B§B§F§F§9§9房§x§D§D§F§F§7§7间§8]",
                 "§8· · · · · · · · · · · · · ·",
@@ -74,6 +81,8 @@ public class CommandGatewayMenu extends BaseMenu {
                 "§x§D§D§A§A§F§F终章 · 闪光", "模拟猎人菜单终章闪光按钮"));
         inventory.setItem(25, createQuickButton(GameMode.FLASH_TOURNAMENT, Material.RED_BANNER,
                 "§x§F§F§F§F§9§9闪光 §c§l赛事", "进入静默赛事：选世界、无职业前缀、67人"));
+        inventory.setItem(31, createQuickButton(GameMode.BRICK_GUARD, Material.NETHER_BRICK,
+                "§x§F§F§7§C§0§0板砖 §x§6§6§1§9§0§0守卫战", "模拟板砖守卫战快速匹配按钮"));
 
         inventory.setItem(37, createItem(Material.EMERALD,
                 "   §8[§x§5§5§F§F§A§A✦ §x§7§7§F§F§B§B小§x§9§9§F§F§C§C游§x§B§B§F§F§D§D戏§x§D§D§F§F§E§E商§x§F§F§F§F§F§F城§8]",
@@ -133,6 +142,7 @@ public class CommandGatewayMenu extends BaseMenu {
         switch (slot) {
             case 10 -> openMenu("main");
             case 11 -> openMenu("hunter");
+            case 12 -> openMenu("brickguard");
             case 14 -> openMenu("rooms");
             case 15 -> openMenu("create");
             case 16 -> openMenu("leaderboard");
@@ -142,6 +152,7 @@ public class CommandGatewayMenu extends BaseMenu {
             case 23 -> quickMatch(GameMode.FLASH);
             case 24 -> quickMatch(GameMode.END_FLASH);
             case 25 -> quickMatch(GameMode.FLASH_TOURNAMENT);
+            case 31 -> quickMatch(GameMode.BRICK_GUARD);
             case 37 -> openMenu("shop");
             case 38 -> openMenu("settings");
             case 39 -> openMenu(event.isRightClick() ? "victorysettings" : "victoryshop");

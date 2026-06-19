@@ -95,6 +95,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "lobbyinteract", "lobbyregion", "等待大厅交互", "大厅交互" -> handleLobbyInteractionRegion(sender, args);
             case "command", "cmd", "命令", "指令" -> handleCommandBranch(sender, args);
             case "huntergame", "hg" -> handleHunterGame(sender, args);
+            case "brickguard", "brick_guard", "bg", "brick", "板砖", "板砖守卫战" -> handleBrickGuard(sender, args);
             case "leave", "quit" -> handleLeave(sender);
             case "rejoin" -> handleRejoin(sender);
             default -> sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.invalid_command"));
@@ -117,6 +118,8 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         entries.add("§e/gamefunxiao menu §7- §f打开主菜单");
         entries.add("§e/gamefunxiao help [页码] §7- §f查看分页帮助");
         entries.add("§e/gamefunxiao huntergame §7- §f打开猎人游戏菜单");
+        entries.add("§e/gamefunxiao brickguard §7- §f打开雨云 · 板砖守卫战菜单");
+        entries.add("§e/gamefunxiao bg quick §7- §f快速匹配板砖守卫战房间");
         entries.add("§e/gamefunxiao leave §7- §f离开当前房间");
         entries.add("§e/gamefunxiao rejoin §7- §f重新加入游戏（猎人断线后使用）");
         entries.add("§e/gamefunxiao endflashkit list §7- §f查看终章闪光 Kit");
@@ -167,6 +170,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             entries.add("§e/gamefunxiao flashmusic nearby <范围> <歌曲名> [Mall] §7- §f给附近玩家播放闪光音符盒音乐");
             entries.add("§e/gamefunxiao flashmusic stopall §7- §f停止所有闪光音符盒播放");
             entries.add("§e/gamefunxiao hg help [页码] §7- §f查看猎人游戏命令帮助");
+            entries.add("§e/gamefunxiao bg create [人数] [public|private] §7- §f创建板砖守卫战房间");
         }
 
         sendPaginatedHelp(sender,
@@ -1383,8 +1387,9 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 }
                 openCommandMenuTarget(player, args[2], backCommand);
             }
-            case "rooms", "roomlist", "房间", "查看房间" -> openCommandMenuTarget(player, "rooms", backCommand);
+            case "rooms", "roomlist", "房间", "查看房间" -> openCommandRoomsTarget(player, args, backCommand);
             case "main", "home", "hunter", "huntergame", "hg",
+                    "brickguard", "brick_guard", "bg", "brick", "板砖", "板砖守卫战",
                     "leaderboard", "lb", "shop", "settings",
                     "victoryshop", "victorysettings", "endflashkit", "endflashkitadmin", "personalkit",
                     "endflashpersonalkit", "pass_count", "fastest_time", "play_count", "hunter_points",
@@ -1410,6 +1415,35 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.85f, 1.0f);
             }
         }
+    }
+
+    private void openCommandRoomsTarget(Player player, String[] args, String backCommand) {
+        if (args.length < 3) {
+            openCommandMenuTarget(player, "rooms", backCommand);
+            return;
+        }
+
+        String target = normalizeCompletionText(args[2]);
+        if (target.equals("all") || target.equals("全部")) {
+            openCommandMenuTarget(player, "rooms", backCommand);
+            return;
+        }
+        if (target.equals("lucky") || target.equals("luckypillars") || target.equals("lp") || target.equals("幸运之柱") || target.equals("幸运柱")) {
+            openCommandMenuTarget(player, "luckyrooms", backCommand);
+            return;
+        }
+        if (target.equals("brickguard") || target.equals("brick") || target.equals("bg") || target.equals("板砖") || target.equals("板砖守卫战")) {
+            openCommandMenuTarget(player, "brickrooms", backCommand);
+            return;
+        }
+        if (target.equals("hunter") || target.equals("huntergame") || target.equals("hg") || target.equals("猎人") || target.equals("猎人游戏")) {
+            openCommandMenuTarget(player, "rooms", backCommand);
+            return;
+        }
+
+        player.sendMessage("§x§7§D§F§F§C§8GameFun §8» §c未知房间分区: §e" + args[2]);
+        player.sendMessage("§8· §7可用分区: §ball§8, §blucky§8, §bbrick_guard§8, §bhunter");
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.85f, 1.0f);
     }
 
     private void openCommandMenuTarget(Player player, String menuId) {
@@ -1590,6 +1624,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                     "赛事", "赛事闪光", "闪光赛事", "闪光_赛事", "普通闪光赛事" -> GameMode.FLASH_TOURNAMENT;
             case "endflash", "end_flash", "终章", "终章闪光", "终章_闪光" -> GameMode.END_FLASH;
             case "lucky", "luckypillars", "lucky_pillars", "幸运之柱", "幸运柱", "经典幸运之柱" -> GameMode.LUCKY_PILLARS;
+            case "brickguard", "brick_guard", "brick", "bg", "板砖", "板砖守卫战", "雨云板砖守卫战", "雨云砖守卫战" -> GameMode.BRICK_GUARD;
             case "custom", "自定义" -> GameMode.CUSTOM;
             default -> null;
         };
@@ -1615,14 +1650,91 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e/gamefunxiao command menu <菜单> §7- §f打开指定菜单，返回会回命令入口");
         player.sendMessage("§e/gamefunxiao command menu <菜单> --backcommand <命令> §7- §f返回按钮执行指定命令");
         player.sendMessage("§e/gamefunxiao command quick <模式> §7- §f模拟点击模式按钮并进入等待房间");
-        player.sendMessage("§8· §7示例: §a/gamefunxiao command quick classic §8/ §d/gamefunxiao command quick end_flash");
+        player.sendMessage("§8· §7示例: §a/gamefunxiao command quick classic §8/ §d/gamefunxiao command quick brick_guard");
         player.sendMessage("§e/gamefunxiao command create <模式> [人数] [public|private] [修饰符] §7- §f直接创建房间");
-        player.sendMessage("§e/gamefunxiao command rooms [all|lucky] §7- §f打开房间列表");
+        player.sendMessage("§e/gamefunxiao command rooms [all|lucky|brick_guard|hunter] §7- §f打开房间列表");
         player.sendMessage("§e/gamefunxiao command join <房间ID> §7- §f加入指定房间");
         player.sendMessage("§8· §7菜单ID: §b" + String.join("§8, §b", plugin.getMenuManager().getCommandMenuIds()));
         player.sendMessage("§8· §7模式ID: §d" + String.join("§8, §d", getCommandModeIds()));
         player.sendMessage("§8· · · · · · · · · · · · · · · · · · · ·");
         player.sendMessage("");
+    }
+
+    private void handleBrickGuard(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_only"));
+            return;
+        }
+        if (!player.hasPermission("gamefunxiao.use.brickguard") && !player.hasPermission("gamefunxiao.admin")) {
+            player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
+            return;
+        }
+
+        if (args.length == 1) {
+            plugin.getMenuManager().openBrickGuardMenu(player);
+            return;
+        }
+
+        String action = args[1].toLowerCase(Locale.ROOT);
+        switch (action) {
+            case "help", "帮助" -> {
+                int page = args.length >= 3 ? parseHelpPage(args[2]) : 1;
+                sendBrickGuardHelp(player, page);
+            }
+            case "menu", "open", "gui", "菜单", "打开" -> plugin.getMenuManager().openBrickGuardMenu(player);
+            case "quick", "match", "play", "快速", "快速匹配" -> runCommandQuickMatch(player, GameMode.BRICK_GUARD);
+            case "rooms", "roomlist", "list", "房间", "列表" -> plugin.getMenuManager().openBrickGuardRoomListMenu(player);
+            case "leaderboard", "lb", "排行", "排行榜" -> plugin.getMenuManager().openBrickGuardLeaderboardMenu(player);
+            case "join", "加入" -> handleCommandJoinRoom(player, args);
+            case "create", "createroom", "创建", "创建房间" -> handleBrickGuardCreate(player, args);
+            default -> plugin.getMenuManager().openBrickGuardMenu(player);
+        }
+    }
+
+    private void handleBrickGuardCreate(Player player, String[] args) {
+        int maxPlayers = 16;
+        boolean isPublic = true;
+        for (int i = 2; i < args.length; i++) {
+            String value = args[i];
+            if (value.equalsIgnoreCase("private") || value.equalsIgnoreCase("invite") || value.equalsIgnoreCase("仅邀请")) {
+                isPublic = false;
+            } else if (value.equalsIgnoreCase("public") || value.equalsIgnoreCase("公开")) {
+                isPublic = true;
+            } else if (value.equalsIgnoreCase("all") || value.equalsIgnoreCase("unlimited") || value.equalsIgnoreCase("infinite") || value.equalsIgnoreCase("无限")) {
+                maxPlayers = -1;
+            } else {
+                try {
+                    maxPlayers = Math.max(1, Integer.parseInt(value));
+                } catch (NumberFormatException ignored) {
+                    // 非人数参数交给上面的公开/仅邀请判断，未知词不影响默认 16 人创建。
+                }
+            }
+        }
+        createCommandRoom(player, GameMode.BRICK_GUARD, maxPlayers, isPublic, new HashSet<>());
+    }
+
+    private void sendBrickGuardHelp(Player player, int page) {
+        List<String> entries = new ArrayList<>();
+        entries.add("§e/gamefunxiao brickguard §7- §f打开雨云 · 板砖守卫战菜单");
+        entries.add("§e/gamefunxiao bg help [页码] §7- §f查看分页帮助");
+        entries.add("§e/gamefunxiao bg quick §7- §f快速匹配板砖守卫战房间");
+        entries.add("§e/gamefunxiao bg rooms §7- §f查看板砖守卫战房间列表");
+        entries.add("§e/gamefunxiao bg leaderboard §7- §f查看板砖守卫战排行榜");
+        entries.add("§e/gamefunxiao bg join <房间ID> §7- §f加入指定房间");
+        entries.add("§e/gamefunxiao command menu brickguard §7- §f从命令入口打开玩法菜单");
+        entries.add("§e/gamefunxiao command quick brick_guard §7- §f模拟按钮快速匹配");
+
+        if (player.hasPermission("gamefunxiao.admin")) {
+            entries.add("§c管理员命令：");
+            entries.add("§e/gamefunxiao bg create [人数] [public|private] §7- §f创建板砖守卫战房间");
+            entries.add("§e/gamefunxiao command create brick_guard 16 §7- §f通过 command 分支创建房间");
+        }
+
+        sendPaginatedHelp(player,
+                "§x§F§F§7§C§0§0▣ §x§F§F§8§8§1§1板§x§F§F§9§4§2§2砖§x§D§D§6§6§1§1守§x§B§B§4§4§0§0卫§x§6§6§1§9§0§0战 §x§F§F§7§C§0§0命令帮助",
+                "/gamefunxiao bg help ",
+                entries,
+                page);
     }
 
     private void handleHunterGame(CommandSender sender, String[] args) {
@@ -1669,6 +1781,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         }
         if (mode.isDirectFlashStart()) {
             player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("room.flash_create_disabled"));
+            return;
+        }
+        if (mode.isBrickGuard()) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.use_dedicated_branch"));
             return;
         }
         if (mode == GameMode.NETHER_CHAPTER || mode == GameMode.END_CHAPTER) {
@@ -2069,6 +2185,28 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 .forEach(completions::add);
     }
 
+    private boolean isBrickGuardCommand(String value) {
+        return value.equalsIgnoreCase("brickguard")
+                || value.equalsIgnoreCase("brick_guard")
+                || value.equalsIgnoreCase("bg")
+                || value.equalsIgnoreCase("brick")
+                || value.equalsIgnoreCase("板砖")
+                || value.equalsIgnoreCase("板砖守卫战");
+    }
+
+    private void addCommandModeCompletions(List<String> completions) {
+        completions.addAll(getCommandModeIds());
+        completions.addAll(Arrays.asList("endflash", "brickguard", "bg", "brick", "板砖", "板砖守卫战"));
+    }
+
+    private void addBrickGuardRoomIds(List<String> completions) {
+        plugin.getRoomManager().getAllRooms().stream()
+                .filter(room -> room.getGameMode().isBrickGuard())
+                .map(room -> room.getRoomId())
+                .sorted()
+                .forEach(completions::add);
+    }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         return tabCompleteRegisteredCommand(sender, command.getName(), args);
@@ -2097,7 +2235,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
 
         if (args.length == 1) {
-            completions.addAll(Arrays.asList("menu", "help", "command", "cmd", "huntergame", "hg", "leave", "rejoin", "wiki", "guidebook", "bookwiki", "flashwiki"));
+            completions.addAll(Arrays.asList("menu", "help", "command", "cmd", "huntergame", "hg", "brickguard", "bg", "板砖", "leave", "rejoin", "wiki", "guidebook", "bookwiki", "flashwiki"));
                 completions.add("endflashkit");
                 completions.add("flashkit");
                 completions.add("endflashender");
@@ -2145,13 +2283,15 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if (isCommandBranch(args[0])) {
                 completions.addAll(Arrays.asList(
                         "help", "menu", "open", "quick", "match", "create", "join", "rooms",
-                        "main", "hunter", "leaderboard", "shop", "settings", "personalkit"
+                        "main", "hunter", "brickguard", "bg", "leaderboard", "shop", "settings", "personalkit"
                 ));
                 if (sender.hasPermission("gamefunxiao.admin")) {
                     completions.add("endflashkit");
                 }
             } else if (args[0].equalsIgnoreCase("help")) {
                 completions.addAll(Arrays.asList("1", "2", "3", "4", "5"));
+            } else if (isBrickGuardCommand(args[0])) {
+                completions.addAll(Arrays.asList("help", "menu", "quick", "match", "create", "join", "rooms", "list", "leaderboard", "lb"));
             } else if (args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg")) {
                 completions.addAll(Arrays.asList("help", "create", "join", "invite", "list", "leaderboard"));
             } else if ((args[0].equalsIgnoreCase("coins") || args[0].equalsIgnoreCase("coin") || args[0].equalsIgnoreCase("money"))
@@ -2189,15 +2329,22 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                     completions.addAll(plugin.getMenuManager().getCommandMenuIds());
                 } else if (action.equals("quick") || action.equals("match") || action.equals("mode")
                         || action.equals("play") || action.equals("create")) {
-                    completions.addAll(getCommandModeIds());
-                    completions.add("endflash");
+                    addCommandModeCompletions(completions);
                 } else if (action.equals("join") || action.equals("加入")) {
                     plugin.getRoomManager().getAllRooms().stream()
                             .map(room -> room.getRoomId())
                             .sorted()
                             .forEach(completions::add);
                 } else if (action.equals("rooms") || action.equals("roomlist")) {
-                    completions.addAll(Arrays.asList("all", "lucky", "hunter"));
+                    completions.addAll(Arrays.asList("all", "lucky", "hunter", "brick_guard", "brickguard", "bg", "板砖"));
+                }
+            } else if (isBrickGuardCommand(args[0])) {
+                if (args[1].equalsIgnoreCase("help")) {
+                    completions.addAll(Arrays.asList("1", "2", "3"));
+                } else if (args[1].equalsIgnoreCase("create")) {
+                    completions.addAll(Arrays.asList("2", "4", "8", "16", "24", "32"));
+                } else if (args[1].equalsIgnoreCase("join")) {
+                    addBrickGuardRoomIds(completions);
                 }
             } else if (args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg")) {
                 if (args[1].equalsIgnoreCase("create")) {
@@ -2257,6 +2404,8 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 if (action.equals("create")) {
                     completions.addAll(Arrays.asList("2", "4", "8", "16", "32", "64", "all", "small", "middle", "large"));
                 }
+            } else if (isBrickGuardCommand(args[0]) && args[1].equalsIgnoreCase("create")) {
+                completions.addAll(Arrays.asList("public", "private", "公开", "仅邀请"));
             } else if ((args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg"))
                 && args[1].equalsIgnoreCase("create")) {
                 completions.addAll(Arrays.asList("2", "4", "8", "16", "all"));

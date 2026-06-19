@@ -29,6 +29,7 @@ public enum GameMode {
     END_FLASH("end_flash", "终章 · 闪光", ModeCategory.HUNTER, true, 220, 420),
 
     LUCKY_PILLARS("lucky_pillars", "幸运之柱", ModeCategory.LUCKY_PILLARS, true, 120, 120),
+    BRICK_GUARD("brick_guard", "雨云 · 板砖守卫战", ModeCategory.BRICK_GUARD, true, 150, 150),
     // 已下架模式：保留枚举只是为了兼容旧房间/旧数据/旧配置，不能创建，不能出现在菜单和补全里。
     LUCKY_PILLARS_PVP("lucky_pillars_pvp", "幸运之柱 · PVP大佬", ModeCategory.REMOVED, false, 120, 120),
     TNT_RUN("tnt_run", "TNT跑酷", ModeCategory.REMOVED, false, 120, 120),
@@ -42,6 +43,7 @@ public enum GameMode {
         HUNTER,
         HUNTER_INTERNAL,
         LUCKY_PILLARS,
+        BRICK_GUARD,
         REMOVED
     }
 
@@ -134,6 +136,10 @@ public enum GameMode {
         return isEnabledInBuild() && category == ModeCategory.LUCKY_PILLARS;
     }
 
+    public boolean isBrickGuard() {
+        return isEnabledInBuild() && category == ModeCategory.BRICK_GUARD;
+    }
+
     public boolean isTntRun() {
         return isEnabledInBuild() && this == TNT_RUN;
     }
@@ -151,7 +157,7 @@ public enum GameMode {
     }
 
     public boolean isIndependentMode() {
-        return isEnabledInBuild() && (category == ModeCategory.LUCKY_PILLARS || isStandaloneMiniGame());
+        return isEnabledInBuild() && (category == ModeCategory.LUCKY_PILLARS || category == ModeCategory.BRICK_GUARD || isStandaloneMiniGame());
     }
 
     public boolean usesHunterFlowMode() {
@@ -191,7 +197,7 @@ public enum GameMode {
     }
 
     public boolean isCommandMode() {
-        return isEnabledInBuild() && (category == ModeCategory.HUNTER || category == ModeCategory.LUCKY_PILLARS);
+        return isEnabledInBuild() && (category == ModeCategory.HUNTER || category == ModeCategory.LUCKY_PILLARS || category == ModeCategory.BRICK_GUARD);
     }
 
     public boolean isHunterSectionMode() {
@@ -209,6 +215,10 @@ public enum GameMode {
 
     public boolean isLuckyPillarsSectionMode() {
         return isLuckyPillars();
+    }
+
+    public boolean isBrickGuardSectionMode() {
+        return isBrickGuard();
     }
 
     public boolean isMiniGameMapEditableMode() {
@@ -237,6 +247,10 @@ public enum GameMode {
 
     public static Set<GameMode> getLuckyPillarsSectionModes() {
         return set(GameMode::isLuckyPillarsSectionMode);
+    }
+
+    public static Set<GameMode> getBrickGuardSectionModes() {
+        return set(GameMode::isBrickGuardSectionMode);
     }
 
 

@@ -169,6 +169,10 @@ public class ConfigManager {
         return config.getString("lucky_pillars_prefix", "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱 §x§F§F§D§D§5§5» §f");
     }
 
+    public String getBrickGuardPrefix() {
+        return config.getString("brick_guard_prefix", "§x§F§F§7§C§0§0▣ §x§F§F§8§B§2§2板§x§F§F§9§A§4§4砖§x§C§C§5§8§2§2守§x§9§9§3§6§1§1卫§x§6§6§1§9§0§0战 §x§F§F§7§C§0§0» §f");
+    }
+
     public String getMiniGameCurrencyName() {
         return config.getString("minigame_currency.name", "小游戏币");
     }

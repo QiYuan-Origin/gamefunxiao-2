@@ -42,6 +42,12 @@ permissions:
       gamefunxiao.use.hg.join: true
       gamefunxiao.use.hg.invite: true
       gamefunxiao.use.hg.leaderboard: true
+      gamefunxiao.use.brickguard: true
+      gamefunxiao.use.brickguard.menu: true
+      gamefunxiao.use.brickguard.quick: true
+      gamefunxiao.use.brickguard.rooms: true
+      gamefunxiao.use.brickguard.join: true
+      gamefunxiao.use.brickguard.leaderboard: true
       gamefunxiao.use.leave: true
       gamefunxiao.use.rejoin: true
       gamefunxiao.use.wiki: true
@@ -73,6 +79,24 @@ permissions:
     default: true
   gamefunxiao.use.hg.leaderboard:
     description: 查看猎人游戏排行榜
+    default: true
+  gamefunxiao.use.brickguard:
+    description: 使用雨云 · 板砖守卫战命令分支
+    default: true
+  gamefunxiao.use.brickguard.menu:
+    description: 打开板砖守卫战菜单
+    default: true
+  gamefunxiao.use.brickguard.quick:
+    description: 快速匹配板砖守卫战房间
+    default: true
+  gamefunxiao.use.brickguard.rooms:
+    description: 查看板砖守卫战房间列表
+    default: true
+  gamefunxiao.use.brickguard.join:
+    description: 加入板砖守卫战房间
+    default: true
+  gamefunxiao.use.brickguard.leaderboard:
+    description: 查看板砖守卫战排行榜
     default: true
   gamefunxiao.use.leave:
     description: 离开当前房间
@@ -144,6 +168,10 @@ permissions:
       gamefunxiao.admin.lobbyinteract.list: true
       gamefunxiao.admin.command: true
       gamefunxiao.admin.command.create: true
+      gamefunxiao.admin.brickguard: true
+      gamefunxiao.admin.brickguard.create: true
+      gamefunxiao.admin.brickguard.map: true
+      gamefunxiao.admin.brickguard.debug: true
       gamefunxiao.admin.hg.create: true
       gamefunxiao.admin.hg.setlobbyspawn: true
       gamefunxiao.admin.endflashtune: true
@@ -254,6 +282,18 @@ permissions:
     default: op
   gamefunxiao.admin.command.create:
     description: 使用 command create 创建房间
+    default: op
+  gamefunxiao.admin.brickguard:
+    description: 管理雨云 · 板砖守卫战
+    default: op
+  gamefunxiao.admin.brickguard.create:
+    description: 创建板砖守卫战房间
+    default: op
+  gamefunxiao.admin.brickguard.map:
+    description: 管理板砖守卫战地图配置
+    default: op
+  gamefunxiao.admin.brickguard.debug:
+    description: 使用板砖守卫战调试命令
     default: op
   gamefunxiao.admin.hg.create:
     description: 使用 hg create 创建房间

@@ -1,6 +1,6 @@
 # 游戏模式配置
 # 配置版本（请勿手动修改）
-config_version: 3
+config_version: 4
 
 modes:
   classic:
@@ -117,3 +117,20 @@ modes:
       - always_drop_inventory
       - silent_compass_tracking
 
+  brick_guard:
+    display_name: "雨云 · 板砖守卫战"
+    description: "独立夺旗升级对抗玩法；板砖队守核心方块，下界砖队保护核心玩家并进攻核心"
+    goal: "DESTROY_ENEMY_CORE"
+    hunter_reward: 150
+    prey_reward: 150
+    min_players: 2
+    max_players: 32
+    wait_countdown: 300
+    game_time_limit_seconds: 3600
+    features:
+      - independent_mode
+      - team_balance
+      - brick_core_block
+      - nether_core_player
+      - resource_trade_upgrade
+      - pseudo_boundary

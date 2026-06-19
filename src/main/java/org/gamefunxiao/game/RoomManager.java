@@ -69,6 +69,8 @@ public class RoomManager {
     private String getModeMessageWithPrefix(GameMode mode, String path) {
         return mode != null && mode.isLuckyPillars()
                 ? plugin.getMessageManager().getLuckyPillarsMessageWithPrefix(path)
+                : mode != null && mode.isBrickGuard()
+                ? plugin.getMessageManager().getBrickGuardMessageWithPrefix(path)
                 : mode != null && (mode.isStandaloneMiniGame() || mode.isIndependentMode())
                 ? plugin.getMessageManager().getMiniGameMessageWithPrefix(path)
                 : plugin.getMessageManager().getHunterGameMessageWithPrefix(path);
@@ -77,6 +79,8 @@ public class RoomManager {
     private String getModeMessageWithPrefix(GameMode mode, String path, Map<String, String> placeholders) {
         return mode != null && mode.isLuckyPillars()
                 ? plugin.getMessageManager().getLuckyPillarsMessageWithPrefix(path, placeholders)
+                : mode != null && mode.isBrickGuard()
+                ? plugin.getMessageManager().getBrickGuardMessageWithPrefix(path, placeholders)
                 : mode != null && (mode.isStandaloneMiniGame() || mode.isIndependentMode())
                 ? plugin.getMessageManager().getMiniGameMessageWithPrefix(path, placeholders)
                 : plugin.getMessageManager().getHunterGameMessageWithPrefix(path, placeholders);

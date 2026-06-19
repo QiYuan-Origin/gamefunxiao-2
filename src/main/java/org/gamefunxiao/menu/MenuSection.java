@@ -3,5 +3,6 @@ package org.gamefunxiao.menu;
 public enum MenuSection {
     GENERIC,
     HUNTER,
-    LUCKY_PILLARS
+    LUCKY_PILLARS,
+    BRICK_GUARD
 }

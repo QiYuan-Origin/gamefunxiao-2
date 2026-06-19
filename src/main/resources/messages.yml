@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 11
+config_version: 12
 
 # 通用消息
 general:
@@ -57,6 +57,7 @@ room:
   child_server_ready: "§x§5§5§F§F§A§A✔ §a子服已就绪，正在把你送过去。"
   child_server_start_failed: "§x§F§F§5§5§5§5✘ §c子服启动失败，已把你的状态恢复回来。"
   child_server_join_loading: "§x§B§B§D§D§F§F🌀 §b正在连接这个房间所在的子服..."
+  invalid_mode: "§x§F§F§8§8§5§5⚠ §c这个玩法当前不可用或已下架。"
   child_server_wait_owner: "§x§F§F§B§B§6§6⌛ §e房主还没先进入这个对子服房间，已把你送回大厅。"
   child_server_returning_lobby: ""
   cross_server_disabled: "§x§F§F§B§B§6§6⌛ §e小游戏服暂未开启，已改为在当前服务器创建房间。"
@@ -112,6 +113,13 @@ room:
   rejoined: "§x§5§5§F§F§A§A✔ §a成功重新加入游戏！"
   rejoin_failed: "§x§F§F§5§5§5§5✘ §c重新加入失败！游戏可能已经结束。"
   no_hunters_left: "§x§F§F§8§8§8§8⚠ §c游戏中已经没有其他猎人了，无法重新加入！"
+
+brick_guard:
+  guide_header: "§x§F§F§7§C§0§0▣ §x§F§F§9§0§2§0雨云 §x§D§D§5§5§1§1· §x§9§9§3§3§0§0板砖守卫战 §7玩法要点"
+  menu_opened: "§x§F§F§9§0§2§0已打开板砖守卫战导航菜单。"
+  quick_matching: "§x§F§F§A§4§4§0正在为你匹配板砖守卫战房间。"
+  room_created: "§x§5§5§F§F§A§A已创建板砖守卫战房间 §e{room_id}§a。"
+  use_dedicated_branch: "§x§F§F§9§0§2§0这是独立玩法，请使用 §e/gamefunxiao bg create §6或 §e/gamefunxiao command create brick_guard §6创建。"
 
 # 游戏消息
 game:
@@ -173,6 +181,8 @@ game:
   lucky_pillars_win: "§x§F§F§D§D§5§5🍀 §a§l幸运之柱胜利！§f最后存活者: §e{winner}"
   lucky_pillars_cancelled: "§x§F§F§8§8§5§5⊗ §c幸运之柱人数不足，已取消本局。"
   lucky_pillars_countdown: "§x§F§F§D§D§5§5🍀 §e幸运之柱将在 §c{time} §e后开始！"
+  brick_guard_countdown: "§x§F§F§7§C§0§0▣ §e板砖守卫战将在 §c{time} §e后开始！"
+  brick_guard_started: "§x§F§F§7§C§0§0▣ §6雨云 · 板砖守卫战 §f已开局，§c破坏对面的核心才能获胜！"
   lucky_pillars_event_arrow_rain: "§x§F§F§D§D§5§5🍀 §c万箭齐发：§f抬头，小心头顶箭雨。"
   lucky_pillars_event_supply: "§x§F§F§D§D§5§5🍀 §e补给事件：§f中心圆盘掉下了一波随机物品。"
   lucky_pillars_event_thunder: "§x§F§F§D§D§5§5🍀 §6雷击事件：§f几根柱子被雷盯上了！"
