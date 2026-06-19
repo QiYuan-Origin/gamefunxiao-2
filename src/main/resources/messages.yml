@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 13
+config_version: 14
 
 # 通用消息
 general:
@@ -114,6 +114,7 @@ room:
   rejoin_failed: "§x§F§F§5§5§5§5✘ §c重新加入失败！游戏可能已经结束。"
   no_hunters_left: "§x§F§F§8§8§8§8⚠ §c游戏中已经没有其他猎人了，无法重新加入！"
   brick_guard_map_not_found: "§x§F§F§8§8§5§5⚠ §c找不到板砖守卫战地图 §e{map}§c，请检查地图配置。"
+  brick_guard_map_not_ready: "§x§F§F§8§8§5§5⚠ §c地图 §e{map} §c当前还不能加入：§f{reason}"
 
 brick_guard:
   menu_opened: "§x§F§F§9§0§2§0已打开板砖守卫战导航菜单。"
@@ -142,6 +143,26 @@ brick_guard:
   core_forced: "§x§6§6§1§9§0§0管理员已把 §e{player} §x§6§6§1§9§0§0设为下界核心。"
   achievement_unlocked: "§x§F§F§D§7§0§0成就达成：§e{name} §8- §f{description}"
   core_under_attack: "§x§F§F§7§C§0§0板砖核心正在被攻击！"
+  map_edit_local: "§x§F§F§7§C§0§0当前就在编辑服，正在为你打开板砖地图编辑。"
+  map_edit_failed: "§x§F§F§8§8§5§5板砖守卫战地图编辑打开失败。"
+  map_edit_request_sent: "§x§5§5§F§F§A§A正在前往编辑服，地图 §e{map} §a的 §f{kind} §a编辑即将打开。"
+  map_edit_joined: "§x§5§5§F§F§A§A已进入 §e{map} §a的 §f{kind} §a编辑世界 §7(§f{world}§7)"
+  map_edit_exit: "§x§5§5§F§F§A§A已退出板砖地图编辑，并恢复原背包。"
+  map_not_found: "§x§F§F§8§8§5§5找不到板砖守卫战地图 §e{map}§c。"
+  map_saved: "§x§5§5§F§F§A§A已保存地图 §e{map} §a当前世界 §f{world}"
+  map_validate_ok: "§x§5§5§F§F§A§A地图 §e{map} §a已经满足开局要求。"
+  map_validate_failed: "§x§F§F§8§8§5§5地图 §e{map} §c缺少必要元素：§f{missing}"
+  map_allow_in_game_changed: "§x§5§5§F§F§A§A地图 §e{map} §a的加入状态已改为 §f{state}"
+  map_spawn_set: "§x§5§5§F§F§A§A已写入 §e{map} §a的 §f{kind} §a出生点。"
+  map_core_set: "§x§5§5§F§F§A§A已写入地图 §e{map} §a的板砖核心位置。"
+  map_core_only_brick: "§x§F§F§8§8§5§5板砖核心只能在板砖世界里设置。"
+  map_border_set: "§x§5§5§F§F§A§A已设置地图 §e{map} §a的伪边界，当前半径 §f{radius}"
+  map_point_added: "§x§5§5§F§F§A§A已为地图 §e{map} §a添加 §f{target}"
+  map_point_removed: "§x§5§5§F§F§A§A已从地图 §e{map} §a移除最近的 §f{target}"
+  map_point_cleared: "§x§5§5§F§F§A§A已清空地图 §e{map} §a的 §f{target}"
+  map_tool_given: "§x§5§5§F§F§A§A已重新给你工具包。"
+  map_tool_not_editing: "§x§F§F§8§8§5§5你当前不在板砖地图编辑状态。"
+  map_bindworld_done: "§x§5§5§F§F§A§A地图 §e{map} §a的 §f{kind} §a模板已绑定到世界 §e{world}"
   command_map_alias_usage: "§x§F§F§B§B§6§6用法：§e/gamefunxiao bg <setcore|setbrickspawn|setnetherbrickspawn|setvillagerarea|setminearea> <地图ID> [pos1|pos2]"
   command_setspawn_usage: "§x§F§F§B§B§6§6用法：§e/gamefunxiao bg setspawn <地图ID> <lobby|brick|nether>"
   command_forcecore_usage: "§x§F§F§B§B§6§6用法：§e/gamefunxiao bg forcecore <玩家> [房间ID]"

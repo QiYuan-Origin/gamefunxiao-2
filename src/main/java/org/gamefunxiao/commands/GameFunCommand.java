@@ -442,6 +442,13 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "setvillagerarea", "villagerarea", "villagers", "村民区域" -> "setvillagerarea";
             case "setminearea", "minearea", "mine", "矿区" -> "setminearea";
             case "setborder", "border", "fakeborder", "边界", "伪边界" -> "setborder";
+            case "edit", "open", "编辑", "打开" -> "edit";
+            case "tool", "tools", "工具包" -> "tool";
+            case "exit", "leave", "退出编辑" -> "exit";
+            case "allow", "enablejoin", "允许加入" -> "allow";
+            case "deny", "blockjoin", "禁止加入" -> "deny";
+            case "validate", "check", "校验" -> "validate";
+            case "bindworld", "adddimension", "维度绑定", "绑定世界" -> "bindworld";
             case "worlds", "world", "template", "templates", "世界" -> "worlds";
             default -> action;
         };
@@ -475,6 +482,13 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "setvillagerarea" -> handleBrickGuardMapSetArea(player, args, "villager_area", "村民刷新区域");
             case "setminearea" -> handleBrickGuardMapSetArea(player, args, "mine_area", "矿区区域");
             case "setborder" -> handleBrickGuardMapSetBorder(player, args);
+            case "edit" -> handleBrickGuardMapEdit(player, args);
+            case "tool" -> handleBrickGuardMapTool(player, args);
+            case "exit" -> handleBrickGuardMapExit(player);
+            case "allow" -> handleBrickGuardMapAllow(player, args, true);
+            case "deny" -> handleBrickGuardMapAllow(player, args, false);
+            case "validate" -> handleBrickGuardMapValidate(player, args);
+            case "bindworld" -> handleBrickGuardMapBindWorld(player, args);
             case "worlds" -> handleBrickGuardMapWorlds(player, args);
             default -> sendBrickGuardMapUsage(player);
         }
@@ -633,6 +647,92 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_CONDUIT_ACTIVATE, 0.52f, 1.28f);
     }
 
+    private void handleBrickGuardMapEdit(Player player, String[] args) {
+        BrickGuardMapManager.MapDefinition definition = requireBrickGuardMapDefinition(player, args, 4);
+        if (definition == null || plugin.getBrickGuardMapEditorManager() == null) {
+            return;
+        }
+        BrickGuardMapManager.EditWorldKind kind = args.length >= 5
+                ? BrickGuardMapManager.EditWorldKind.fromString(args[4])
+                : BrickGuardMapManager.EditWorldKind.BRICK;
+        plugin.getChildServerManager().requestBrickGuardMapEdit(player, definition.mapId(), kind, definition.maxPlayers());
+    }
+
+    private void handleBrickGuardMapTool(Player player, String[] args) {
+        if (plugin.getBrickGuardMapEditorManager() == null) {
+            return;
+        }
+        if (!plugin.getBrickGuardMapEditorManager().isEditing(player)) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_tool_not_editing"));
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.7f, 1.0f);
+            return;
+        }
+        plugin.getBrickGuardMapEditorManager().refreshToolkit(player);
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_tool_given"));
+        player.playSound(player.getLocation(), org.bukkit.Sound.ITEM_BOOK_PAGE_TURN, 0.55f, 1.42f);
+    }
+
+    private void handleBrickGuardMapExit(Player player) {
+        if (plugin.getBrickGuardMapEditorManager() == null || !plugin.getBrickGuardMapEditorManager().isEditing(player)) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_tool_not_editing"));
+            return;
+        }
+        plugin.getBrickGuardMapEditorManager().exitEditorSession(player, true);
+    }
+
+    private void handleBrickGuardMapAllow(Player player, String[] args, boolean allow) {
+        BrickGuardMapManager.MapDefinition definition = requireBrickGuardMapDefinition(player, args, 4);
+        if (definition == null) {
+            return;
+        }
+        if (allow && !plugin.getBrickGuardMapManager().hasAllRequiredElements(definition)) {
+            BrickGuardMapManager.ValidationResult validation = plugin.getBrickGuardMapManager().validateMap(definition);
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_validate_failed",
+                    Map.of("map", definition.displayName(), "missing", String.join("、", validation.missingElements()))));
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.75f, 1.0f);
+            return;
+        }
+        definition = plugin.getBrickGuardMapManager().setAllowInGame(definition.mapId(), allow);
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_allow_in_game_changed",
+                Map.of("map", definition.displayName(), "state", allow ? "允许" : "禁止")));
+        player.playSound(player.getLocation(), allow ? org.bukkit.Sound.BLOCK_NOTE_BLOCK_CHIME : org.bukkit.Sound.BLOCK_BEACON_DEACTIVATE,
+                0.65f, allow ? 1.32f : 0.88f);
+    }
+
+    private void handleBrickGuardMapValidate(Player player, String[] args) {
+        BrickGuardMapManager.MapDefinition definition = requireBrickGuardMapDefinition(player, args, 4);
+        if (definition == null) {
+            return;
+        }
+        BrickGuardMapManager.ValidationResult validation = plugin.getBrickGuardMapManager().validateMap(definition);
+        if (validation.complete()) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_validate_ok",
+                    Map.of("map", definition.displayName())));
+            player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_NOTE_BLOCK_CHIME, 0.7f, 1.3f);
+            return;
+        }
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_validate_failed",
+                Map.of("map", definition.displayName(), "missing", String.join("、", validation.missingElements()))));
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.75f, 1.0f);
+    }
+
+    private void handleBrickGuardMapBindWorld(Player player, String[] args) {
+        if (args.length < 6) {
+            sendBrickGuardMapUsage(player);
+            return;
+        }
+        BrickGuardMapManager.MapDefinition definition = requireBrickGuardMapDefinition(player, args, 4);
+        if (definition == null) {
+            return;
+        }
+        BrickGuardMapManager.EditWorldKind kind = BrickGuardMapManager.EditWorldKind.fromString(args[4]);
+        String worldName = args[5];
+        definition = plugin.getBrickGuardMapManager().bindTemplateWorld(definition.mapId(), kind, worldName);
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_bindworld_done",
+                Map.of("map", definition.displayName(), "kind", kind.displayName(), "world", worldName)));
+        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_POWER_SELECT, 0.6f, 1.28f);
+    }
+
     private void handleBrickGuardMapWorlds(Player player, String[] args) {
         BrickGuardMapManager.MapDefinition definition = requireBrickGuardMapDefinition(player, args, 4);
         if (definition == null) {
@@ -714,6 +814,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e/gamefunxiao map brickguard setlobbyspawn|setbrickspawn|setnetherbrickspawn|setcore <地图ID> §7- §f保存当前位置");
         player.sendMessage("§e/gamefunxiao map brickguard setvillagerarea|setminearea <地图ID> <pos1|pos2> §7- §f设置区域角点");
         player.sendMessage("§e/gamefunxiao map brickguard setborder <地图ID> [半径] §7- §f设置伪边界中心和半径");
+        player.sendMessage("§e/gamefunxiao map brickguard edit <地图ID> [lobby|brick|nether] §7- §f进入地图编辑");
+        player.sendMessage("§e/gamefunxiao map brickguard tool|exit §7- §f重新获取工具包或退出编辑");
+        player.sendMessage("§e/gamefunxiao map brickguard allow|deny|validate <地图ID> §7- §f控制是否允许加入并校验地图");
+        player.sendMessage("§e/gamefunxiao map brickguard bindworld <地图ID> <lobby|brick|nether> <世界名> §7- §f绑定现有维度");
         player.sendMessage("§e/gamefunxiao map brickguard worlds <地图ID> [房间ID] [brick|nether] §7- §f准备模板或运行世界");
     }
 
@@ -3088,7 +3192,8 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
     private List<String> getBrickGuardMapActions() {
         return Arrays.asList("help", "list", "create", "active", "info", "enable", "disable", "delete", "name",
                 "setlobbyspawn", "setbrickspawn", "setnetherbrickspawn", "setcore",
-                "setvillagerarea", "setminearea", "setborder", "worlds");
+                "setvillagerarea", "setminearea", "setborder", "edit", "tool", "exit",
+                "allow", "deny", "validate", "bindworld", "worlds");
     }
 
     private boolean needsMapIdCompletion(String action) {
@@ -3103,7 +3208,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 || action.equals("setlobbyspawn") || action.equals("setbrickspawn")
                 || action.equals("setnetherbrickspawn") || action.equals("setcore")
                 || action.equals("setvillagerarea") || action.equals("setminearea")
-                || action.equals("setborder") || action.equals("worlds");
+                || action.equals("setborder") || action.equals("worlds")
+                || action.equals("edit") || action.equals("allow")
+                || action.equals("deny") || action.equals("validate")
+                || action.equals("bindworld");
     }
 
     private void addBrickGuardMapIdCompletions(List<String> completions) {
@@ -3123,10 +3231,16 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 case "create" -> completions.addAll(Arrays.asList("2", "4", "8", "12", "16", "24", "32"));
                 case "setvillagerarea", "setminearea" -> completions.addAll(Arrays.asList("pos1", "pos2", "min", "max"));
                 case "setborder" -> completions.addAll(Arrays.asList("500", "1000", "1500", "2000"));
+                case "edit" -> completions.addAll(Arrays.asList("lobby", "brick", "nether", "下界砖"));
+                case "bindworld" -> completions.addAll(Arrays.asList("lobby", "brick", "nether"));
                 case "worlds" -> completions.addAll(Arrays.asList("preview", "test", "default"));
             }
-        } else if (args.length == 6 && action.equals("worlds")) {
-            completions.addAll(Arrays.asList("brick", "nether", "nether_brick", "板砖", "下界砖"));
+        } else if (args.length == 6) {
+            if (action.equals("worlds")) {
+                completions.addAll(Arrays.asList("brick", "nether", "nether_brick", "板砖", "下界砖"));
+            } else if (action.equals("bindworld")) {
+                Bukkit.getWorlds().stream().map(World::getName).sorted(String.CASE_INSENSITIVE_ORDER).forEach(completions::add);
+            }
         }
     }
 
@@ -3149,10 +3263,16 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 case "create" -> completions.addAll(Arrays.asList("2", "4", "8", "12", "16", "24", "32"));
                 case "setvillagerarea", "setminearea" -> completions.addAll(Arrays.asList("pos1", "pos2", "min", "max"));
                 case "setborder" -> completions.addAll(Arrays.asList("500", "1000", "1500", "2000"));
+                case "edit" -> completions.addAll(Arrays.asList("lobby", "brick", "nether", "下界砖"));
+                case "bindworld" -> completions.addAll(Arrays.asList("lobby", "brick", "nether"));
                 case "worlds" -> completions.addAll(Arrays.asList("preview", "test", "default"));
             }
-        } else if (args.length == 6 && action.equals("worlds")) {
-            completions.addAll(Arrays.asList("brick", "nether", "nether_brick", "板砖", "下界砖"));
+        } else if (args.length == 6) {
+            if (action.equals("worlds")) {
+                completions.addAll(Arrays.asList("brick", "nether", "nether_brick", "板砖", "下界砖"));
+            } else if (action.equals("bindworld")) {
+                Bukkit.getWorlds().stream().map(World::getName).sorted(String.CASE_INSENSITIVE_ORDER).forEach(completions::add);
+            }
         }
     }
 

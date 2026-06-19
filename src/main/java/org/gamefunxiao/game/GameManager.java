@@ -1888,58 +1888,7 @@ public class GameManager {
         if (room == null || !room.getGameMode().isBrickGuard()) {
             return;
         }
-
-        cancelCountdown(room);
-        cancelDivisionTask(room);
-        room.setEndChapterDivisionActive(false);
-        room.clearDualPreyProposal();
-        room.clearDualPreyStack();
-
-        List<UUID> participants = onlineRoomParticipants(room);
-        if (participants.size() < plugin.getRoomManager().getMinimumPlayersForMode(GameMode.BRICK_GUARD)) {
-            room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.countdown_cancelled"));
-            endGameWithoutReward(room);
-            return;
-        }
-
-        BrickGuardMapManager.MapDefinition definition = resolveBrickGuardMap(room, participants.size());
-        if (definition == null) {
-            room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix(
-                    "room.brick_guard_map_not_found",
-                    Map.of("map", room.getBrickGuardMapId())));
-            endGameWithoutReward(room);
-            return;
-        }
-
-        BrickGuardMapManager.RuntimeWorlds worlds = new BrickGuardMapManager.RuntimeWorlds(
-                room.getGameWorld(),
-                plugin.getWorldManager().getNetherWorld(room.getRoomId()));
-        if (!worlds.complete()) {
-            worlds = plugin.getWorldManager().createBrickGuardWorlds(room.getRoomId(), definition);
-        }
-        if (!worlds.complete()) {
-            room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.brick_guard_world_failed"));
-            endGameWithoutReward(room);
-            return;
-        }
-
-        room.setGameWorld(worlds.brickWorld());
-        applyBrickGuardRuntimeSettings(room, definition, worlds);
-        room.setState(RoomState.PLAYING);
-        room.setGameActuallyStarted(true);
-        room.setPreyStarted(true);
-        room.setGameStartTime(System.currentTimeMillis());
-        plugin.getRoomManager().clearAllRoleNameTags(room);
-
-        Map<String, String> placeholders = new HashMap<>();
-        placeholders.put("map", definition.displayName());
-        placeholders.put("radius", String.valueOf((int) Math.round(definition.fakeBorderRadius())));
-        room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.brick_guard_map_selected", placeholders));
-
-        teleportBrickGuardParticipants(room, participants, worlds);
-        room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix("game.brick_guard_start"));
-        startIndependentModeGuardTask(room);
-        plugin.getChildServerManager().syncRoom(room);
+        plugin.getBrickGuardManager().start(room);
     }
 
     private BrickGuardMapManager.MapDefinition resolveBrickGuardMap(GameRoom room, int playerCount) {

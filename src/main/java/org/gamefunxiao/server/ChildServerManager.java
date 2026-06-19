@@ -19,6 +19,7 @@ import org.gamefunxiao.game.GameMode;
 import org.gamefunxiao.game.GameRoom;
 import org.gamefunxiao.game.HunterGameBackendMode;
 import org.gamefunxiao.game.RoomState;
+import org.gamefunxiao.world.BrickGuardMapManager;
 import org.gamefunxiao.world.MiniGameMapManager;
 
 import java.io.ByteArrayInputStream;
@@ -67,6 +68,7 @@ public class ChildServerManager implements PluginMessageListener {
     private final File templateEditRequestFolder;
     private final File endFlashTuningRequestFolder;
     private final File miniGameMapEditRequestFolder;
+    private final File brickGuardMapEditRequestFolder;
     private final File bootstrapFile;
     private final String lobbyServerName;
     private final String crossLobbyServerName;
@@ -127,6 +129,12 @@ public class ChildServerManager implements PluginMessageListener {
                 : crossRequestFolder.getParentFile(), "minigame-map-edit-requests");
         if (!miniGameMapEditRequestFolder.exists()) {
             miniGameMapEditRequestFolder.mkdirs();
+        }
+        this.brickGuardMapEditRequestFolder = new File(crossRequestFolder.getParentFile() == null
+                ? plugin.getDataFolder()
+                : crossRequestFolder.getParentFile(), "brickguard-map-edit-requests");
+        if (!brickGuardMapEditRequestFolder.exists()) {
+            brickGuardMapEditRequestFolder.mkdirs();
         }
 
         this.bootstrapFile = new File(plugin.getDataFolder(), "child-bootstrap.yml");
@@ -1035,6 +1043,74 @@ public class ChildServerManager implements PluginMessageListener {
         return true;
     }
 
+    public boolean requestBrickGuardMapEdit(Player player, String mapId,
+                                            BrickGuardMapManager.EditWorldKind kind, int maxPlayers) {
+        if (player == null || !player.isOnline() || plugin.getBrickGuardMapManager() == null) {
+            return false;
+        }
+        if (kind == null) {
+            kind = BrickGuardMapManager.EditWorldKind.BRICK;
+        }
+        String normalizedMapId = plugin.getBrickGuardMapManager().normalizeMapId(mapId);
+
+        if (isCurrentProxyServer(crossGameServerName) || !isCrossServerBackendConfigured()) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_edit_local"));
+            return plugin.getBrickGuardMapEditorManager().requestEdit(player, normalizedMapId, kind, maxPlayers);
+        }
+
+        if (!ensureCrossServerAvailable(player, crossGameServerName)) {
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_edit_failed"));
+            return false;
+        }
+
+        File file = getBrickGuardMapEditRequestFile(player.getUniqueId());
+        FileConfiguration config = new org.bukkit.configuration.file.YamlConfiguration();
+        config.set("uuid", player.getUniqueId().toString());
+        config.set("name", player.getName());
+        config.set("map_id", normalizedMapId);
+        config.set("kind", kind.id());
+        config.set("max_players", maxPlayers);
+        config.set("created_at", System.currentTimeMillis());
+        try {
+            config.save(file);
+        } catch (IOException exception) {
+            plugin.getLogger().warning("保存板砖守卫战地图编辑请求失败: " + exception.getMessage());
+            player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_edit_failed"));
+            return false;
+        }
+
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("map", normalizedMapId);
+        placeholders.put("kind", kind.displayName());
+        player.sendMessage(plugin.getMessageManager().getBrickGuardMessageWithPrefix("brick_guard.map_edit_request_sent", placeholders));
+        playMiniGameMapEditSound(player);
+        connectPlayer(player, crossGameServerName);
+        return true;
+    }
+
+    public boolean handleBrickGuardMapEditJoin(Player player) {
+        if (player == null || plugin.getBrickGuardMapManager() == null) {
+            return false;
+        }
+        File file = getBrickGuardMapEditRequestFile(player.getUniqueId());
+        if (!file.exists()) {
+            return false;
+        }
+        FileConfiguration config = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(file);
+        file.delete();
+
+        String mapId = config.getString("map_id", "default");
+        BrickGuardMapManager.EditWorldKind kind = BrickGuardMapManager.EditWorldKind.fromString(config.getString("kind", "brick"));
+        int maxPlayers = config.getInt("max_players", -1);
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                plugin.getBrickGuardMapEditorManager().requestEdit(player, mapId, kind, maxPlayers);
+            }
+        }, 10L);
+        return true;
+    }
+
     public void returnCrossServerRoomPlayerToLobby(Player player) {
         if (player == null) {
             return;
@@ -1570,6 +1646,10 @@ public class ChildServerManager implements PluginMessageListener {
 
     private File getMiniGameMapEditRequestFile(UUID uuid) {
         return new File(miniGameMapEditRequestFolder, uuid.toString() + ".yml");
+    }
+
+    private File getBrickGuardMapEditRequestFile(UUID uuid) {
+        return new File(brickGuardMapEditRequestFolder, uuid.toString() + ".yml");
     }
 
     private ChildRoomRegistryEntry loadRegistryEntry(String roomId) {

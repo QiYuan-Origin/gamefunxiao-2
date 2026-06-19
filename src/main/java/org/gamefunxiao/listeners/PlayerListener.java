@@ -464,6 +464,10 @@ public class PlayerListener implements Listener {
             event.joinMessage(null);
             return;
         }
+        if (plugin.getChildServerManager().handleBrickGuardMapEditJoin(player)) {
+            event.joinMessage(null);
+            return;
+        }
         if (plugin.getChildServerManager().handleEndFlashTuningJoin(player)) {
             event.joinMessage(null);
             return;

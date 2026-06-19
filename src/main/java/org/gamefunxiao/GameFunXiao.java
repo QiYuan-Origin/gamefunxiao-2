@@ -15,6 +15,7 @@ import org.gamefunxiao.game.GameManager;
 import org.gamefunxiao.game.RoomManager;
 import org.gamefunxiao.leaderboard.LeaderboardManager;
 import org.gamefunxiao.listeners.FlashModeListener;
+import org.gamefunxiao.listeners.BrickGuardMapEditListener;
 import org.gamefunxiao.listeners.MenuListener;
 import org.gamefunxiao.listeners.MiniGameMapEditListener;
 import org.gamefunxiao.listeners.PlayerListener;
@@ -24,6 +25,7 @@ import org.gamefunxiao.scoreboard.ScoreboardManager;
 import org.gamefunxiao.server.ChildServerManager;
 import org.gamefunxiao.tab.TabHeaderFooterManager;
 import org.gamefunxiao.world.BrickGuardMapManager;
+import org.gamefunxiao.world.BrickGuardMapEditorManager;
 import org.gamefunxiao.world.MiniGameMapManager;
 import org.gamefunxiao.world.WorldManager;
 
@@ -53,6 +55,7 @@ public final class GameFunXiao extends JavaPlugin {
     private MiniGameMapManager miniGameMapManager;
     private BrickGuardManager brickGuardManager;
     private BrickGuardMapManager brickGuardMapManager;
+    private BrickGuardMapEditorManager brickGuardMapEditorManager;
 
     @Override
     public void onEnable() {
@@ -68,6 +71,7 @@ public final class GameFunXiao extends JavaPlugin {
         // 初始化管理器
         miniGameMapManager = new MiniGameMapManager(this);
         brickGuardMapManager = new BrickGuardMapManager(this);
+        brickGuardMapEditorManager = new BrickGuardMapEditorManager(this);
         worldManager = new WorldManager(this);
         playerDataManager = new PlayerDataManager(this);
         leaderboardManager = new LeaderboardManager(this);
@@ -278,6 +282,7 @@ public final class GameFunXiao extends JavaPlugin {
         playerListener = new PlayerListener(this);
         getServer().getPluginManager().registerEvents(playerListener, this);
         getServer().getPluginManager().registerEvents(new MiniGameMapEditListener(this), this);
+        getServer().getPluginManager().registerEvents(new BrickGuardMapEditListener(this), this);
         getServer().getPluginManager().registerEvents(new FlashModeListener(this), this);
     }
 
@@ -360,5 +365,9 @@ public final class GameFunXiao extends JavaPlugin {
 
     public BrickGuardMapManager getBrickGuardMapManager() {
         return brickGuardMapManager;
+    }
+
+    public BrickGuardMapEditorManager getBrickGuardMapEditorManager() {
+        return brickGuardMapEditorManager;
     }
 }

@@ -270,9 +270,32 @@ public class BrickGuardManager {
             return;
         }
 
-        BrickGuardMapManager.MapDefinition definition = plugin.getBrickGuardMapManager() == null
-                ? null
-                : plugin.getBrickGuardMapManager().findUsableMap(Math.max(2, room.getPlayerCount()));
+        BrickGuardMapManager.MapDefinition definition = null;
+        if (plugin.getBrickGuardMapManager() != null) {
+            String roomMapId = room.getBrickGuardMapId();
+            if (roomMapId != null && !roomMapId.isBlank()) {
+                definition = plugin.getBrickGuardMapManager().getMapDefinition(roomMapId);
+            }
+            if (definition == null) {
+                definition = plugin.getBrickGuardMapManager().findUsableMap(Math.max(2, room.getPlayerCount()));
+            }
+        }
+        if (plugin.getBrickGuardMapManager() != null) {
+            if (definition == null) {
+                room.broadcast(plugin.getMessageManager().getBrickGuardMessageWithPrefix(
+                        "room.brick_guard_map_not_found",
+                        Map.of("map", room.getBrickGuardMapId() == null ? "default" : room.getBrickGuardMapId())));
+                plugin.getGameManager().endGameWithoutReward(room);
+                return;
+            }
+            List<String> reasons = plugin.getBrickGuardMapManager().getUnavailableReasons(definition, Math.max(2, room.getPlayerCount()), true);
+            if (!reasons.isEmpty()) {
+                room.broadcast(plugin.getMessageManager().getBrickGuardMessageWithPrefix("room.brick_guard_map_not_ready",
+                        Map.of("map", definition.displayName(), "reason", String.join("、", reasons))));
+                plugin.getGameManager().endGameWithoutReward(room);
+                return;
+            }
+        }
         BrickGuardMapManager.RuntimeWorlds runtimeWorlds = null;
         if (plugin.getWorldManager() != null && definition != null) {
             runtimeWorlds = plugin.getWorldManager().createBrickGuardWorlds(room.getRoomId(), definition);
@@ -292,9 +315,16 @@ public class BrickGuardManager {
             netherWorld = plugin.getWorldManager().ensureNetherWorld(room.getRoomId());
         }
         if (brickWorld == null || netherWorld == null) {
-            room.broadcast(plugin.getMessageManager().getBrickGuardMessageWithPrefix("lobby.lobby_creation_failed"));
+            room.broadcast(plugin.getMessageManager().getBrickGuardMessageWithPrefix("game.brick_guard_world_failed"));
             plugin.getGameManager().endGameWithoutReward(room);
             return;
+        }
+
+        for (UUID uuid : room.getAllPlayerUUIDs()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 100, 0, false, false, false));
+            }
         }
 
         MapConfig mapConfig = loadActiveMap(definition);
@@ -306,6 +336,12 @@ public class BrickGuardManager {
         session.mapName = mapConfig.displayName();
         applyRuntimeLocations(room, session, definition, brickWorld, netherWorld, mapConfig);
 
+        room.broadcast(plugin.getMessageManager().getBrickGuardMessageWithPrefix("game.brick_guard_map_selected",
+                Map.of(
+                        "map", session.mapName,
+                        "radius", String.valueOf(session.boundaryRadius)
+                )));
+
         room.setState(RoomState.PLAYING);
         room.setGameActuallyStarted(true);
         room.setPreyStarted(true);
@@ -316,15 +352,15 @@ public class BrickGuardManager {
             prepareBrickWorld(brickWorld, session);
         } else {
             buildCorePad(brickWorld, session.brickCoreLocation, Material.RED_GLAZED_TERRACOTTA, Material.GRAY_CONCRETE);
-            placeBrickResources(brickWorld, session);
+            placeBrickResources(brickWorld, session, definition);
         }
         if (session.netherSpawn == null) {
             prepareNetherWorld(netherWorld, session);
         } else {
-            placeNetherResources(netherWorld, session);
+            placeNetherResources(netherWorld, session, definition);
         }
-        spawnBrickVillagers(brickWorld, session);
-        spawnNetherPiglins(netherWorld, session);
+        spawnBrickVillagers(brickWorld, session, definition);
+        spawnNetherPiglins(netherWorld, session, definition);
         chooseCorePlayer(room, session);
 
         for (UUID uuid : room.getAllPlayerUUIDs()) {
@@ -1200,7 +1236,7 @@ public class BrickGuardManager {
         world.setSpawnLocation(session.brickSpawn);
         world.getBlockAt(session.brickCoreLocation).setType(Material.RED_GLAZED_TERRACOTTA, false);
         buildCorePad(world, session.brickCoreLocation, Material.RED_GLAZED_TERRACOTTA, Material.GRAY_CONCRETE);
-        placeBrickResources(world, session);
+        placeBrickResources(world, session, null);
     }
 
     private void prepareNetherWorld(World world, Session session) {
@@ -1210,7 +1246,7 @@ public class BrickGuardManager {
         buildPortal(world, 5, baseY, 0);
         session.netherSpawn = new Location(world, 0.5D, baseY, 0.5D, -90.0F, 0.0F);
         world.setSpawnLocation(session.netherSpawn);
-        placeNetherResources(world, session);
+        placeNetherResources(world, session, null);
     }
 
     private void chooseCorePlayer(GameRoom room, Session session) {
@@ -1603,12 +1639,20 @@ public class BrickGuardManager {
         return merchant;
     }
 
-    private void spawnBrickVillagers(World world, Session session) {
+    private void spawnBrickVillagers(World world, Session session, BrickGuardMapManager.MapDefinition definition) {
         clearNpcEntities(session.brickVillagers);
         session.brickVillagers.clear();
-        int count = ThreadLocalRandom.current().nextInt(3, 5);
-        for (int i = 0; i < count; i++) {
-            Location location = session.brickSpawn.clone().add(-5 + i * 3, 0.0D, 5 + (i % 2) * 2);
+        List<Location> spawns = plugin.getBrickGuardMapManager() == null
+                ? List.of()
+                : plugin.getBrickGuardMapManager().getBrickVillagerSpawns(definition, world);
+        if (spawns.isEmpty() && session.brickSpawn != null) {
+            spawns = List.of(
+                    session.brickSpawn.clone().add(-5.0D, 0.0D, 5.0D),
+                    session.brickSpawn.clone().add(-2.0D, 0.0D, 7.0D),
+                    session.brickSpawn.clone().add(1.0D, 0.0D, 5.0D)
+            );
+        }
+        for (Location location : spawns) {
             Villager villager = world.spawn(location, Villager.class, spawned -> {
                 spawned.setAI(false);
                 spawned.setAdult();
@@ -1621,11 +1665,20 @@ public class BrickGuardManager {
         }
     }
 
-    private void spawnNetherPiglins(World world, Session session) {
+    private void spawnNetherPiglins(World world, Session session, BrickGuardMapManager.MapDefinition definition) {
         clearNpcEntities(session.netherPiglins);
         session.netherPiglins.clear();
-        for (int i = 0; i < 3; i++) {
-            Location location = session.netherSpawn.clone().add(-4 + i * 4, 0.0D, 5.0D);
+        List<Location> spawns = plugin.getBrickGuardMapManager() == null
+                ? List.of()
+                : plugin.getBrickGuardMapManager().getNetherPiglinSpawns(definition, world);
+        if (spawns.isEmpty() && session.netherSpawn != null) {
+            spawns = List.of(
+                    session.netherSpawn.clone().add(-4.0D, 0.0D, 5.0D),
+                    session.netherSpawn.clone().add(0.0D, 0.0D, 5.0D),
+                    session.netherSpawn.clone().add(4.0D, 0.0D, 5.0D)
+            );
+        }
+        for (Location location : spawns) {
             Piglin piglin = world.spawn(location, Piglin.class, spawned -> {
                 spawned.setAI(false);
                 spawned.setAdult();
@@ -1639,7 +1692,19 @@ public class BrickGuardManager {
         }
     }
 
-    private void placeBrickResources(World world, Session session) {
+    private void placeBrickResources(World world, Session session, BrickGuardMapManager.MapDefinition definition) {
+        session.managedResources.clear();
+        List<Location> configured = plugin.getBrickGuardMapManager() == null
+                ? List.of()
+                : plugin.getBrickGuardMapManager().getBrickResourceBlocks(definition, world);
+        if (!configured.isEmpty()) {
+            for (int i = 0; i < configured.size(); i++) {
+                Location location = configured.get(i);
+                setManagedResource(world, session, location.getBlockX(), location.getBlockY(), location.getBlockZ(),
+                        i % 2 == 0 ? Material.BRICKS : Material.DIAMOND_ORE);
+            }
+            return;
+        }
         for (int x = -9; x <= -3; x++) {
             for (int z = -9; z <= -3; z++) {
                 if ((x + z) % 3 == 0) {
@@ -1654,7 +1719,18 @@ public class BrickGuardManager {
         }
     }
 
-    private void placeNetherResources(World world, Session session) {
+    private void placeNetherResources(World world, Session session, BrickGuardMapManager.MapDefinition definition) {
+        List<Location> configured = plugin.getBrickGuardMapManager() == null
+                ? List.of()
+                : plugin.getBrickGuardMapManager().getNetherResourceBlocks(definition, world);
+        if (!configured.isEmpty()) {
+            for (int i = 0; i < configured.size(); i++) {
+                Location location = configured.get(i);
+                setManagedResource(world, session, location.getBlockX(), location.getBlockY(), location.getBlockZ(),
+                        i % 2 == 0 ? Material.GLOWSTONE : Material.NETHER_GOLD_ORE);
+            }
+            return;
+        }
         for (int x = -9; x <= -3; x++) {
             for (int z = -9; z <= -3; z++) {
                 if ((x + z) % 2 == 0) {

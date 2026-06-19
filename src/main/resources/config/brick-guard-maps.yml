@@ -1,5 +1,5 @@
 # 雨云 · 板砖守卫战地图配置
-config_version: 1
+config_version: 3
 
 # active_map 可填写地图 ID，或填写 random / all / * 随机选择可用地图。
 active_map: default
@@ -8,6 +8,7 @@ maps:
   default:
     display_name: "默认板砖守卫战"
     enabled: true
+    allow_in_game: true
     min_players: 2
     max_players: 16
     core_health: 500
@@ -50,35 +51,119 @@ maps:
       yaw: 0.0
       pitch: 0.0
 
-    villager_area:
-      min:
-        world: ""
-        x: -10.0
-        y: 79.0
-        z: -6.0
+    brick_villager_spawns:
+      - world: ""
+        x: -7.5
+        y: 80.0
+        z: 5.5
         yaw: 0.0
         pitch: 0.0
-      max:
-        world: ""
-        x: -4.0
-        y: 84.0
-        z: 6.0
+      - world: ""
+        x: -4.5
+        y: 80.0
+        z: 7.5
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: -1.5
+        y: 80.0
+        z: 5.5
         yaw: 0.0
         pitch: 0.0
 
-    mine_area:
-      min:
-        world: ""
-        x: 4.0
-        y: 70.0
-        z: -10.0
+    nether_piglin_spawns:
+      - world: ""
+        x: -4.5
+        y: 80.0
+        z: 5.5
         yaw: 0.0
         pitch: 0.0
-      max:
-        world: ""
-        x: 18.0
-        y: 85.0
-        z: 10.0
+      - world: ""
+        x: 0.5
+        y: 80.0
+        z: 5.5
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: 4.5
+        y: 80.0
+        z: 5.5
+        yaw: 0.0
+        pitch: 0.0
+
+    brick_resource_blocks:
+      - world: ""
+        x: -9.0
+        y: 80.0
+        z: -9.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: -7.0
+        y: 80.0
+        z: -7.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: -5.0
+        y: 80.0
+        z: -5.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: 3.0
+        y: 80.0
+        z: -9.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: 5.0
+        y: 80.0
+        z: -7.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: 7.0
+        y: 80.0
+        z: -5.0
+        yaw: 0.0
+        pitch: 0.0
+
+    nether_resource_blocks:
+      - world: ""
+        x: -9.0
+        y: 80.0
+        z: -9.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: -7.0
+        y: 80.0
+        z: -7.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: -5.0
+        y: 80.0
+        z: -5.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: 3.0
+        y: 80.0
+        z: -9.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: 5.0
+        y: 80.0
+        z: -7.0
+        yaw: 0.0
+        pitch: 0.0
+      - world: ""
+        x: 7.0
+        y: 80.0
+        z: -5.0
         yaw: 0.0
         pitch: 0.0
 

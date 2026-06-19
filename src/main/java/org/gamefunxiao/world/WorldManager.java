@@ -410,6 +410,7 @@ public class WorldManager {
         if (world == null || definition == null || kind == null) {
             return;
         }
+        boolean defaultMap = "default".equalsIgnoreCase(definition.mapId());
         switch (kind) {
             case LOBBY -> {
                 createMiniGameLobbyTemplate(world, null);
@@ -423,10 +424,12 @@ public class WorldManager {
                 if (spawn != null) {
                     world.setSpawnLocation(spawn);
                 }
-                createBrickGuardPlatform(world, Material.BRICKS, Material.ORANGE_STAINED_GLASS, 0);
-                Location core = plugin.getBrickGuardMapManager().getBrickCore(definition, world);
-                if (core != null) {
-                    core.getBlock().setType(Material.RED_GLAZED_TERRACOTTA, false);
+                createBrickGuardPlatform(world, Material.BRICKS, Material.ORANGE_STAINED_GLASS, 0, defaultMap);
+                if (defaultMap) {
+                    Location core = plugin.getBrickGuardMapManager().getBrickCore(definition, world);
+                    if (core != null) {
+                        core.getBlock().setType(Material.RED_GLAZED_TERRACOTTA, false);
+                    }
                 }
             }
             case NETHER_BRICK -> {
@@ -434,27 +437,31 @@ public class WorldManager {
                 if (spawn != null) {
                     world.setSpawnLocation(spawn);
                 }
-                createBrickGuardPlatform(world, Material.NETHER_BRICKS, Material.RED_STAINED_GLASS, 0);
+                createBrickGuardPlatform(world, Material.NETHER_BRICKS, Material.RED_STAINED_GLASS, 0, defaultMap);
             }
         }
     }
 
-    private void createBrickGuardPlatform(World world, Material floor, Material marker, int centerZ) {
-        int baseY = 78;
-        for (int x = -24; x <= 24; x++) {
-            for (int z = centerZ - 24; z <= centerZ + 24; z++) {
-                boolean edge = Math.abs(x) == 24 || Math.abs(z - centerZ) == 24;
+    private void createBrickGuardPlatform(World world, Material floor, Material marker, int centerZ, boolean decorated) {
+        int baseY = decorated ? 78 : 80;
+        int radius = decorated ? 24 : 8;
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = centerZ - radius; z <= centerZ + radius; z++) {
+                boolean edge = Math.abs(x) == radius || Math.abs(z - centerZ) == radius;
                 world.getBlockAt(x, baseY, z).setType(edge ? marker : floor, false);
             }
         }
+        if (!decorated) {
+            return;
+        }
         for (int y = baseY + 1; y <= baseY + 3; y++) {
-            for (int x = -24; x <= 24; x++) {
-                world.getBlockAt(x, y, centerZ - 24).setType(Material.BARRIER, false);
-                world.getBlockAt(x, y, centerZ + 24).setType(Material.BARRIER, false);
+            for (int x = -radius; x <= radius; x++) {
+                world.getBlockAt(x, y, centerZ - radius).setType(Material.BARRIER, false);
+                world.getBlockAt(x, y, centerZ + radius).setType(Material.BARRIER, false);
             }
-            for (int z = centerZ - 24; z <= centerZ + 24; z++) {
-                world.getBlockAt(-24, y, z).setType(Material.BARRIER, false);
-                world.getBlockAt(24, y, z).setType(Material.BARRIER, false);
+            for (int z = centerZ - radius; z <= centerZ + radius; z++) {
+                world.getBlockAt(-radius, y, z).setType(Material.BARRIER, false);
+                world.getBlockAt(radius, y, z).setType(Material.BARRIER, false);
             }
         }
     }

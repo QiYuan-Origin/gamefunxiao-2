@@ -172,12 +172,24 @@ public class RoomManager {
             brickGuardMap = requestedBrickGuardMapId == null
                     ? plugin.getBrickGuardMapManager().findUsableMap(Math.max(2, maxPlayers <= 0 ? 2 : maxPlayers))
                     : plugin.getBrickGuardMapManager().getMapDefinition(requestedBrickGuardMapId);
-            if (brickGuardMap == null && requestedBrickGuardMapId != null) {
-                player.sendMessage(getModeMessageWithPrefix(mode, "room.brick_guard_map_not_found",
-                        Map.of("map", requestedBrickGuardMapId)));
+            if (brickGuardMap == null) {
+                String targetName = requestedBrickGuardMapId == null ? "当前可用地图" : requestedBrickGuardMapId;
+                player.sendMessage(getModeMessageWithPrefix(mode, "room.brick_guard_map_not_ready",
+                        Map.of("map", targetName, "reason", "当前没有满足人数与元素要求的可用地图")));
                 restorePlayerAfterFailedRoomCreate(player, previousLocation, previousHealth, previousFoodLevel,
                         previousExpLevel, previousExp, previousPotionEffects, persistSession);
                 return null;
+            }
+            if (brickGuardMap != null) {
+                int targetPlayers = Math.max(2, maxPlayers <= 0 ? 2 : maxPlayers);
+                List<String> reasons = plugin.getBrickGuardMapManager().getUnavailableReasons(brickGuardMap, targetPlayers, true);
+                if (!reasons.isEmpty()) {
+                    player.sendMessage(getModeMessageWithPrefix(mode, "room.brick_guard_map_not_ready",
+                            Map.of("map", brickGuardMap.displayName(), "reason", String.join("、", reasons))));
+                    restorePlayerAfterFailedRoomCreate(player, previousLocation, previousHealth, previousFoodLevel,
+                            previousExpLevel, previousExp, previousPotionEffects, persistSession);
+                    return null;
+                }
             }
             if (brickGuardMap != null) {
                 room.setBrickGuardRuntimeSettings(
