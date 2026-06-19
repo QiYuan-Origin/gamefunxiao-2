@@ -871,6 +871,7 @@ public class GameManager {
                 if (countdown <= 10 || countdown % 60 == 0) {
                     Map<String, String> placeholders = new HashMap<>();
                     placeholders.put("time", formatTime(countdown));
+                    placeholders.put("mode", room.getModeName());
                     String countdownKey = room.getGameMode().isDirectFlashStart()
                             ? (room.getGameMode() == GameMode.END_FLASH ? "game.countdown_end_flash_direct" : "game.countdown_flash_direct")
                             : room.getGameMode().isLuckyPillars()
@@ -880,7 +881,7 @@ public class GameManager {
                             : room.getGameMode() == GameMode.BLOCK_PARTY
                             ? "game.block_party_countdown"
                             : !usesPreySelection(room)
-                            ? "game.independent_countdown"
+                            ? "game.mode_countdown"
                             : "game.countdown";
                     if (!isTournamentSilent(room)) {
                         if (room.getGameMode().isLuckyPillars()) {
@@ -915,7 +916,7 @@ public class GameManager {
                                     ? (room.getGameMode() == GameMode.END_FLASH ? "§7后终章末地直接开局" : "§7后闪光模式直接开局")
                                     : usesWorldSelection(room)
                                     ? "§7后猎物将开始选择游戏世界"
-                                    : "§7后将进入独立模式";
+                                    : "§7后开始 " + room.getModeName();
                             Component subComp = LegacyComponentSerializer.legacySection().deserialize(subtitle);
                             Title title = Title.title(titleComp, subComp,
                                     Title.Times.times(Duration.ZERO, Duration.ofMillis(1200), Duration.ofMillis(200)));
