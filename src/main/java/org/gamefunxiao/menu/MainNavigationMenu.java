@@ -35,9 +35,8 @@ public class MainNavigationMenu extends BaseMenu {
 
         // 主菜单直达入口
         inventory.setItem(8, createShopButton());
-        inventory.setItem(20, createHunterGameButton());
-        inventory.setItem(22, createLuckyPillarsButton());
-        inventory.setItem(24, createBedWarsButton());
+        inventory.setItem(21, createHunterGameButton());
+        inventory.setItem(23, createLuckyPillarsButton());
         inventory.setItem(44, createSettingsButton());
 
         // 关闭按钮
@@ -82,27 +81,6 @@ public class MainNavigationMenu extends BaseMenu {
         }
         return item;
     }
-
-    private ItemStack createBedWarsButton() {
-        ItemStack item = new ItemStack(Material.RED_BED);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName("   §8[§x§F§F§8§8§2§2✦ 起床战争§8]");
-            List<String> lore = new ArrayList<>();
-            lore.add("§8· · · · · · · · · · · · · ·");
-            lore.add("§f- §a守住核心，争夺资源");
-            lore.add("§f- §b快速加入、房间列表、排行榜");
-            lore.add("§8· · · · · · · · · · · · · ·");
-            lore.add("§f- §a点击进入");
-            meta.setLore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-
-
-
 
     private ItemStack createShopButton() {
         ItemStack item = new ItemStack(Material.EMERALD);
@@ -151,19 +129,14 @@ public class MainNavigationMenu extends BaseMenu {
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.5f, 1.8f);
                 plugin.getMenuManager().openMiniGameShopCategoryMenu(player);
             }
-            case 20 -> {
+            case 21 -> {
                 playClickSound();
                 plugin.getMenuManager().openHunterGameMenu(player);
             }
-            case 22 -> {
+            case 23 -> {
                 player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_CLUSTER_BREAK, 0.62f, 1.72f);
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_FIREWORK_ROCKET_BLAST, 0.35f, 1.8f);
                 plugin.getMenuManager().openLuckyPillarsMenu(player);
-            }
-            case 24 -> {
-                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_POWER_SELECT, 0.72f, 1.35f);
-                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.46f, 1.48f);
-                plugin.getMenuManager().openBedWarsMenu(player);
             }
             case 44 -> {
                 player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_NOTE_BLOCK_CHIME, 0.8f, 1.45f);
