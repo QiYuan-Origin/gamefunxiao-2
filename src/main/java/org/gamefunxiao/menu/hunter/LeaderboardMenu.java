@@ -115,14 +115,14 @@ public class LeaderboardMenu extends BaseMenu {
     }
 
     private ItemStack createHunterPointsButton() {
-        return createButton(Material.IRON_SWORD, "§x§F§F§5§5§5§5猎人积分榜",
-                "§f- §c只统计猎人玩法里的猎人积分",
+        return createButton(Material.IRON_SWORD, "§x§F§F§5§5§5§5猎人表现榜",
+                "§f- §c只统计猎人玩法里的猎人表现值",
                 "§f- §7不会串到幸运之柱");
     }
 
     private ItemStack createPreyPointsButton() {
-        return createButton(Material.RABBIT_FOOT, "§x§5§5§F§F§A§A猎物积分榜",
-                "§f- §a只统计猎人玩法里的猎物积分",
+        return createButton(Material.RABBIT_FOOT, "§x§5§5§F§F§A§A猎物表现榜",
+                "§f- §a只统计猎人玩法里的猎物表现值",
                 "§f- §7更方便看当前模式生态");
     }
 

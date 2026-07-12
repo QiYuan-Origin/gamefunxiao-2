@@ -145,14 +145,14 @@ public class RoomPlayerListMenu extends BaseMenu {
                 lore.add("§f  - §a猎物通关: §b" + data.getPreyWins("total") + " §a次");
                 lore.add("§f  - §c猎人胜利: §b" + data.getHunterWins("total") + " §c次");
                 lore.add("§f  - §d游玩次数: §b" + data.getPlayCount("total") + " §d次");
-                // 显示积分
+                // 显示表现值
                 int hunterPts = data.getHunterPoints("total");
                 int preyPts = data.getPreyPoints("total");
                 String hColor = hunterPts >= 0 ? "§6" : "§c";
                 String pColor = preyPts >= 0 ? "§6" : "§c";
-                lore.add("§f- §e积分:");
-                lore.add("§f  - §c猎人积分: " + hColor + hunterPts);
-                lore.add("§f  - §a猎物积分: " + pColor + preyPts);
+                lore.add("§f- §e表现值:");
+                lore.add("§f  - §c猎人表现: " + hColor + hunterPts);
+                lore.add("§f  - §a猎物表现: " + pColor + preyPts);
 
                 // 只在游戏进行中时显示当前职业的详细信息
                 if (showRole) {

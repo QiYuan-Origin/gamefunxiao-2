@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 15
+config_version: 16
 
 # 通用消息
 general:
@@ -227,19 +227,25 @@ game:
   leaderboard_prey_row: "  {rank} §a[猎物] §f{name}  §7攻击猎人: §e{attacks} §7伤害猎人: §c{damage} §7移动距离: §a{distance}m"
   leaderboard_hunter_row: "  {rank} §c[猎人] §f{name}  §7攻击猎物: §e{attacks} §7伤害猎物: §c{damage} §7移动距离: §a{distance}m"
 
-# 积分消息
+# 表现值消息
 points:
-  hunter_win: "§x§F§F§D§7§0§0⚔ §6猎人胜利！§e你的猎人积分 §6+{points}"
-  prey_win: "§x§5§5§F§F§A§A🏆 §a猎物完成目标！§e你的猎物积分 §6+{points}"
-  prey_kill_hunter_reward: "§x§5§5§F§F§5§5✦ §a你已累计击杀 §e{count} §a名猎人！§6猎物积分 +1"
+  hunter_win: "§x§F§F§D§7§0§0⚔ §6猎人胜利！§e你的猎人表现 §6+{points}"
+  prey_win: "§x§5§5§F§F§A§A🏆 §a猎物完成目标！§e你的猎物表现 §6+{points}"
+  hunter_result: "§x§F§F§D§7§0§0⚔ §e本局猎人表现 §6{points} §8| §7段位: {rank} §8| §7{breakdown}"
+  prey_result: "§x§5§5§F§F§A§A🏆 §a本局猎物表现 §6{points} §8| §7段位: {rank} §8| §7{breakdown}"
+  hunter_death: "§x§F§F§8§8§5§5✘ §c猎人阵亡，猎人表现 §6{points} §8| §7当前段位: {rank}"
+  prey_death: "§x§F§F§8§8§5§5✘ §c猎物阵亡，猎物表现 §6{points} §8| §7当前段位: {rank}"
+  hunter_quit: "§x§F§F§5§5§5§5✘ §c主动退出，猎人表现 §6{points} §8| §7当前段位: {rank}"
+  prey_quit: "§x§F§F§5§5§5§5✘ §c主动退出，猎物表现 §6{points} §8| §7当前段位: {rank}"
+  prey_kill_hunter_reward: "§x§5§5§F§F§5§5✦ §a你已累计击杀 §e{count} §a名猎人！§6猎物表现 +1"
   minigame_win: "§x§F§F§D§D§5§5🏆 §a小游戏胜利！§e你的小游戏积分 §6+{points}"
   minigame_participate: "§x§8§8§D§D§F§F✦ §b参与结算，§e你的小游戏积分 §6+{points}"
   minigame_kill: "§x§F§F§B§B§6§6⚔ §e淘汰 §f{player}§e！§6小游戏积分 +{points}"
 
 # 击杀消息
 kill:
-  hunter_kill_prey: "§x§F§F§5§5§5§5⚔ §c击杀猎物 §e{player}§c！§6猎人积分 {points}"
-  prey_kill_hunter: "§x§5§5§F§F§A§A⚡ §a击杀猎人 §e{player}§a！"
+  hunter_kill_prey: "§x§F§F§5§5§5§5⚔ §c击杀猎物 §e{player}§c！§6本局猎人表现 {points}"
+  prey_kill_hunter: "§x§5§5§F§F§A§A⚡ §a反杀猎人 §e{player}§a！§6本局猎物表现 {points}"
 
 # 大厅消息
 lobby:

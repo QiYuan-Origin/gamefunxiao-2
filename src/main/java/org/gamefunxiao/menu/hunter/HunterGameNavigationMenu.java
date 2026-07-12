@@ -33,6 +33,7 @@ public class HunterGameNavigationMenu extends BaseMenu {
 
         // 左上角 - 排行榜
         inventory.setItem(0, createLeaderboardButton());
+        inventory.setItem(2, createPerformanceButton());
 
         // 右上角 - 查看所有房间
         inventory.setItem(8, createRoomListButton());
@@ -71,6 +72,24 @@ public class HunterGameNavigationMenu extends BaseMenu {
             lore.add("§f- §d游玩次数统计");
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §6天榜/周榜/年榜/总榜");
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §a点击查看");
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createPerformanceButton() {
+        ItemStack item = new ItemStack(Material.NETHERITE_INGOT);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName("   §8[§x§8§8§D§D§F§F✦ §x§A§A§E§E§F§F表§x§C§C§F§F§F§F现§x§F§F§D§D§5§5值§8]");
+            List<String> lore = new ArrayList<>();
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §c猎人表现 §7和 §a猎物表现 §7分开计算");
+            lore.add("§f- §e查看段位、加扣分规则、防刷限制");
+            lore.add("§f- §b也能快速打开表现排行榜");
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a点击查看");
             meta.setLore(lore);
@@ -327,6 +346,11 @@ public class HunterGameNavigationMenu extends BaseMenu {
                 // 排行榜
                 playClickSound();
                 plugin.getMenuManager().openLeaderboardMenu(player);
+            }
+            case 2 -> {
+                // 表现值与段位
+                playClickSound();
+                plugin.getMenuManager().openHunterPerformanceMenu(player);
             }
             case 8 -> {
                 // 查看房间

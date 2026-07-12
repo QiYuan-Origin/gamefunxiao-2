@@ -1328,9 +1328,8 @@ public class PlayerListener implements Listener {
 
             boolean tournament = room.getGameMode().isFlashTournament();
 
-            // 猎物死亡扣分 -5
             if (!tournament) {
-                plugin.getPlayerDataManager().addPreyPoints(player.getUniqueId(), -5, room.getGameMode());
+                plugin.getGameManager().applyPreyDeathPerformancePenalty(room, player);
             }
 
             // 记录击杀（1v1情况下不记录）
@@ -1340,18 +1339,11 @@ public class PlayerListener implements Listener {
                 if (!isOneVsOne && !tournament) {
                     plugin.getPlayerDataManager().incrementHunterKills(killer.getUniqueId(), room.getGameMode());
                 }
-                // 猎人击杀猎物+3积分
-                if (!tournament) {
-                    plugin.getPlayerDataManager().addHunterPoints(killer.getUniqueId(), 3, room.getGameMode());
-                }
-
                 // 发送击杀消息和播放雷击音效
                 killer.playSound(killer.getLocation(), org.bukkit.Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.5f, 1.2f);
                 if (!tournament) {
-                    Map<String, String> killMsg = new HashMap<>();
-                    killMsg.put("player", player.getName());
-                    killMsg.put("points", "+3");
-                    killer.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("kill.hunter_kill_prey", killMsg));
+                    boolean finalKill = !keepPreyInventory && room.getPreyUUIDs().size() <= 1;
+                    plugin.getGameManager().recordHunterKillPreyPerformance(room, killer, player, finalKill);
                 }
                 // 击杀特效已在死亡事件入口统一播放，避免终章闪光/普通分支漏播或重复播。
             }
@@ -1402,23 +1394,15 @@ public class PlayerListener implements Listener {
 
             boolean tournament = room.getGameMode().isFlashTournament();
 
-            // 猎人死亡扣分 -2
             if (!tournament) {
-                plugin.getPlayerDataManager().addHunterPoints(player.getUniqueId(), -2, room.getGameMode());
+                plugin.getGameManager().applyHunterDeathPerformancePenalty(room, player);
             }
 
-            // 如果凶手是猎物，统计猎物击杀猎人次数（每10次+1猎物积分）
+            // 如果凶手是猎物，统计本局反杀表现
             Player hunterKiller = resolveDeathKiller(player, room);
             if (hunterKiller != null && room.isPrey(hunterKiller.getUniqueId())) {
                 if (!tournament) {
-                    boolean rewarded = plugin.getPlayerDataManager().incrementPreyKillHunter(hunterKiller.getUniqueId(), room.getGameMode());
-                    if (rewarded) {
-                        hunterKiller.playSound(hunterKiller.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
-                        int total = plugin.getPlayerDataManager().getPlayerData(hunterKiller.getUniqueId()).getPreyKillHunterTotal();
-                        Map<String, String> ph = new HashMap<>();
-                        ph.put("count", String.valueOf(total));
-                        hunterKiller.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.prey_kill_hunter_reward", ph));
-                    }
+                    plugin.getGameManager().recordPreyKillHunterPerformance(room, hunterKiller, player);
                 }
                 // 击杀特效已在死亡事件入口统一播放，避免分支差异导致漏播。
             }
@@ -1483,19 +1467,17 @@ public class PlayerListener implements Listener {
         }
 
         if (room.isPrey(player.getUniqueId())) {
-            plugin.getPlayerDataManager().addPreyPoints(player.getUniqueId(), -5, room.getGameMode());
+            plugin.getGameManager().applyPreyDeathPerformancePenalty(room, player);
             if (killer != null && room.isHunter(killer.getUniqueId())) {
                 plugin.getPlayerDataManager().incrementHunterKills(killer.getUniqueId(), room.getGameMode());
-                plugin.getPlayerDataManager().addHunterPoints(killer.getUniqueId(), 3, room.getGameMode());
                 room.setVictoryEffectTrigger(killer.getUniqueId(), deathLoc.clone());
-                Map<String, String> killMsg = new HashMap<>();
-                killMsg.put("player", player.getName());
-                killMsg.put("points", "+3");
-                killer.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("kill.hunter_kill_prey", killMsg));
                 // 击杀特效已在死亡事件入口统一播放，避免终章闪光重复播。
             }
 
             boolean lastPrey = countAliveEndFlashPrey(room, player.getUniqueId()) <= 0;
+            if (killer != null && room.isHunter(killer.getUniqueId())) {
+                plugin.getGameManager().recordHunterKillPreyPerformance(room, killer, player, lastPrey);
+            }
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
                     player.spigot().respawn();
@@ -1518,8 +1500,9 @@ public class PlayerListener implements Listener {
             return;
         }
 
-        plugin.getPlayerDataManager().addHunterPoints(player.getUniqueId(), -2, room.getGameMode());
+        plugin.getGameManager().applyHunterDeathPerformancePenalty(room, player);
         if (killer != null && room.isPrey(killer.getUniqueId())) {
+            plugin.getGameManager().recordPreyKillHunterPerformance(room, killer, player);
             // 击杀特效已在死亡事件入口统一播放，避免终章闪光重复播。
         }
         int respawnSeconds = ThreadLocalRandom.current().nextInt(90, 231);
@@ -2335,8 +2318,11 @@ public class PlayerListener implements Listener {
                 }
             }
 
-            // 游戏正式开始后，追踪攻击猎物的统计数据
+            // 游戏正式开始后，追踪双方有效战斗统计数据
             if (room.isPrey(victim.getUniqueId()) && room.isHunter(attacker.getUniqueId())) {
+                room.addAttack(attacker.getUniqueId());
+                room.addDamage(attacker.getUniqueId(), event.getFinalDamage());
+            } else if (room.isHunter(victim.getUniqueId()) && room.isPrey(attacker.getUniqueId())) {
                 room.addAttack(attacker.getUniqueId());
                 room.addDamage(attacker.getUniqueId(), event.getFinalDamage());
             }

@@ -95,6 +95,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "lobbyinteract", "lobbyregion", "等待大厅交互", "大厅交互" -> handleLobbyInteractionRegion(sender, args);
             case "command", "cmd", "命令", "指令" -> handleCommandBranch(sender, args);
             case "huntergame", "hg" -> handleHunterGame(sender, args);
+            case "rank", "ranks", "points", "performance", "表现值", "段位" -> handleHunterPerformance(sender);
             case "leave", "quit" -> handleLeave(sender);
             case "rejoin" -> handleRejoin(sender);
             default -> sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.invalid_command"));
@@ -111,12 +112,25 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         plugin.getPlayerListener().advertiseCurrentRoom(player);
     }
 
+    private void handleHunterPerformance(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_only"));
+            return;
+        }
+        if (!player.hasPermission("gamefunxiao.use.rank")) {
+            player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
+            return;
+        }
+        plugin.getMenuManager().openHunterPerformanceMenu(player);
+    }
+
     private void sendHelp(CommandSender sender, int page) {
         List<String> entries = new ArrayList<>();
         entries.add("§e/gamefunxiao §7- §f打开主菜单");
         entries.add("§e/gamefunxiao menu §7- §f打开主菜单");
         entries.add("§e/gamefunxiao help [页码] §7- §f查看分页帮助");
         entries.add("§e/gamefunxiao huntergame §7- §f打开猎人游戏菜单");
+        entries.add("§e/gamefunxiao rank §7- §f查看猎人/猎物表现值和段位规则");
         entries.add("§e/gamefunxiao leave §7- §f离开当前房间");
         entries.add("§e/gamefunxiao rejoin §7- §f重新加入游戏（猎人断线后使用）");
         entries.add("§e/gamefunxiao endflashkit list §7- §f查看终章闪光 Kit");
@@ -1385,10 +1399,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             }
             case "rooms", "roomlist", "房间", "查看房间" -> openCommandMenuTarget(player, "rooms", backCommand);
             case "main", "home", "hunter", "huntergame", "hg",
-                    "leaderboard", "lb", "shop", "settings",
+                    "leaderboard", "lb", "rank", "ranks", "points", "performance", "shop", "settings",
                     "victoryshop", "victorysettings", "endflashkit", "endflashkitadmin", "personalkit",
                     "endflashpersonalkit", "pass_count", "fastest_time", "play_count", "hunter_points",
-                    "prey_points", "minigame_points", "主菜单", "猎人游戏", "排行榜", "商城", "设置" ->
+                    "prey_points", "minigame_points", "主菜单", "猎人游戏", "排行榜", "表现值", "段位", "商城", "设置" ->
                     openCommandMenuTarget(player, action, backCommand);
             case "create", "createroom", "创建房间", "创建" -> {
                 if (args.length >= 3) {
@@ -1648,6 +1662,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "invite" -> handleInvitePlayer(player, args);
             case "list" -> plugin.getMenuManager().openRoomListMenu(player);
             case "leaderboard", "lb" -> plugin.getMenuManager().openLeaderboardMenu(player);
+            case "rank", "ranks", "points", "performance", "表现值", "段位" -> plugin.getMenuManager().openHunterPerformanceMenu(player);
             case "setlobbyspawn" -> handleSetLobbySpawn(player);
             default -> plugin.getMenuManager().openHunterGameMenu(player);
         }
@@ -1859,6 +1874,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         entries.add("§e/gamefunxiao hg join <房间ID> §7- §f加入指定房间");
         entries.add("§e/gamefunxiao hg invite <玩家名> §7- §f邀请玩家进入你的仅邀请房间");
         entries.add("§e/gamefunxiao hg leaderboard §7- §f查看排行榜");
+        entries.add("§e/gamefunxiao hg rank §7- §f查看表现值、段位和规则");
         entries.add("§e/hh §7- §f宣传当前等待中的房间");
 
         if (player.hasPermission("gamefunxiao.admin")) {
@@ -2097,7 +2113,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
 
         if (args.length == 1) {
-            completions.addAll(Arrays.asList("menu", "help", "command", "cmd", "huntergame", "hg", "leave", "rejoin", "wiki", "guidebook", "bookwiki", "flashwiki"));
+            completions.addAll(Arrays.asList("menu", "help", "command", "cmd", "huntergame", "hg", "rank", "points", "performance", "leave", "rejoin", "wiki", "guidebook", "bookwiki", "flashwiki"));
                 completions.add("endflashkit");
                 completions.add("flashkit");
                 completions.add("endflashender");
@@ -2145,7 +2161,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if (isCommandBranch(args[0])) {
                 completions.addAll(Arrays.asList(
                         "help", "menu", "open", "quick", "match", "create", "join", "rooms",
-                        "main", "hunter", "leaderboard", "shop", "settings", "personalkit"
+                        "main", "hunter", "leaderboard", "rank", "points", "performance", "shop", "settings", "personalkit"
                 ));
                 if (sender.hasPermission("gamefunxiao.admin")) {
                     completions.add("endflashkit");
@@ -2153,7 +2169,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if (args[0].equalsIgnoreCase("help")) {
                 completions.addAll(Arrays.asList("1", "2", "3", "4", "5"));
             } else if (args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg")) {
-                completions.addAll(Arrays.asList("help", "create", "join", "invite", "list", "leaderboard"));
+                completions.addAll(Arrays.asList("help", "create", "join", "invite", "list", "leaderboard", "rank", "points", "performance"));
             } else if ((args[0].equalsIgnoreCase("coins") || args[0].equalsIgnoreCase("coin") || args[0].equalsIgnoreCase("money"))
                     && sender.hasPermission("gamefunxiao.admin")) {
                 completions.addAll(Arrays.asList("set", "add", "get"));

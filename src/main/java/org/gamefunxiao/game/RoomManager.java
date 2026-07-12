@@ -626,6 +626,8 @@ public class RoomManager {
             captureHunterReconnectSnapshot(player, room);
         }
 
+        plugin.getGameManager().applyQuitPerformancePenalty(room, player, wasPrey, wasSpectator);
+
         if (plugin.getChildServerManager().isManagedNodeRoom(roomId)) {
             handleManagedNodeLeave(player, room, currentState, wasPrey, wasSpectator);
             return;

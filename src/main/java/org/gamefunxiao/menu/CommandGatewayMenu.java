@@ -42,6 +42,13 @@ public class CommandGatewayMenu extends BaseMenu {
                 "§f- §b可选择模式、房间、排行榜",
                 "§f- §7命令: §e/gamefunxiao command menu hunter",
                 "§8· · · · · · · · · · · · · ·"));
+        inventory.setItem(12, createItem(Material.NETHERITE_INGOT,
+                "   §8[§x§8§8§D§D§F§F✦ §x§A§A§E§E§F§F表§x§C§C§F§F§F§F现§x§F§F§D§D§5§5值§8]",
+                "§8· · · · · · · · · · · · · ·",
+                "§f- §a查看猎人/猎物表现值",
+                "§f- §b包含段位表、规则和防刷限制",
+                "§f- §7命令: §e/gamefunxiao command menu rank",
+                "§8· · · · · · · · · · · · · ·"));
         inventory.setItem(14, createItem(Material.ENDER_EYE,
                 "   §8[§x§5§5§F§F§F§F👁 §x§7§7§F§F§D§D查§x§9§9§F§F§B§B看§x§B§B§F§F§9§9房§x§D§D§F§F§7§7间§8]",
                 "§8· · · · · · · · · · · · · ·",
@@ -133,6 +140,7 @@ public class CommandGatewayMenu extends BaseMenu {
         switch (slot) {
             case 10 -> openMenu("main");
             case 11 -> openMenu("hunter");
+            case 12 -> openMenu("rank");
             case 14 -> openMenu("rooms");
             case 15 -> openMenu("create");
             case 16 -> openMenu("leaderboard");

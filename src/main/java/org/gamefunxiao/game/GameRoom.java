@@ -36,6 +36,12 @@ public class GameRoom {
     private final Map<UUID, Double> damageDealt; // 对猎物造成的伤害
     private final Map<UUID, Double> distanceRun; // 奔跑距离
     private final Map<UUID, Location> lastLocation; // 上次位置（用于计算距离）
+    private final Map<UUID, Map<UUID, Integer>> hunterPerformanceKillCounts; // 猎人本局击杀猎物计数（防刷）
+    private final Map<UUID, Map<UUID, Integer>> preyPerformanceKillCounts; // 猎物本局击杀猎人计数（防刷）
+    private final Map<UUID, Integer> hunterPerformanceDeathCounts; // 猎人本局死亡扣分次数
+    private final Map<UUID, Integer> preyPerformanceDeathCounts; // 猎物本局死亡扣分次数
+    private final Map<UUID, Integer> hunterPerformanceFinalKills; // 猎人最终击杀次数
+    private final Map<UUID, Long> preyPerformanceFirstDeathTime; // 猎物首次阵亡时间，用于计算存活表现
     private final Map<UUID, Integer> randomCompassUseCounts; // 随机指南针使用次数
     private final Set<UUID> usedPreyRespawn; // 猎物复活修饰符已使用玩家
     private final Set<String> luckyPillarBlocks; // 幸运之柱模式生成的幸运方块坐标
@@ -147,6 +153,12 @@ public class GameRoom {
         this.damageDealt = new HashMap<>();
         this.distanceRun = new HashMap<>();
         this.lastLocation = new HashMap<>();
+        this.hunterPerformanceKillCounts = new HashMap<>();
+        this.preyPerformanceKillCounts = new HashMap<>();
+        this.hunterPerformanceDeathCounts = new HashMap<>();
+        this.preyPerformanceDeathCounts = new HashMap<>();
+        this.hunterPerformanceFinalKills = new HashMap<>();
+        this.preyPerformanceFirstDeathTime = new HashMap<>();
         this.randomCompassUseCounts = new HashMap<>();
         this.usedPreyRespawn = new HashSet<>();
         this.luckyPillarBlocks = new HashSet<>();
@@ -1075,6 +1087,95 @@ public class GameRoom {
 
     public double getDistanceRun(UUID uuid) {
         return distanceRun.getOrDefault(uuid, 0.0);
+    }
+
+    public int recordHunterPerformanceKill(UUID hunterUuid, UUID preyUuid) {
+        if (hunterUuid == null || preyUuid == null) {
+            return 0;
+        }
+        Map<UUID, Integer> kills = hunterPerformanceKillCounts.computeIfAbsent(hunterUuid, ignored -> new HashMap<>());
+        int count = kills.getOrDefault(preyUuid, 0) + 1;
+        kills.put(preyUuid, count);
+        return count;
+    }
+
+    public int recordPreyPerformanceKill(UUID preyUuid, UUID hunterUuid) {
+        if (preyUuid == null || hunterUuid == null) {
+            return 0;
+        }
+        Map<UUID, Integer> kills = preyPerformanceKillCounts.computeIfAbsent(preyUuid, ignored -> new HashMap<>());
+        int count = kills.getOrDefault(hunterUuid, 0) + 1;
+        kills.put(hunterUuid, count);
+        return count;
+    }
+
+    public void recordHunterPerformanceFinalKill(UUID hunterUuid) {
+        if (hunterUuid != null) {
+            hunterPerformanceFinalKills.merge(hunterUuid, 1, Integer::sum);
+        }
+    }
+
+    public int recordHunterPerformanceDeath(UUID hunterUuid) {
+        if (hunterUuid == null) {
+            return 0;
+        }
+        int count = hunterPerformanceDeathCounts.getOrDefault(hunterUuid, 0) + 1;
+        hunterPerformanceDeathCounts.put(hunterUuid, count);
+        return count;
+    }
+
+    public int recordPreyPerformanceDeath(UUID preyUuid) {
+        if (preyUuid == null) {
+            return 0;
+        }
+        preyPerformanceFirstDeathTime.putIfAbsent(preyUuid, System.currentTimeMillis());
+        int count = preyPerformanceDeathCounts.getOrDefault(preyUuid, 0) + 1;
+        preyPerformanceDeathCounts.put(preyUuid, count);
+        return count;
+    }
+
+    public int getHunterPerformanceKillCredit(UUID hunterUuid) {
+        Map<UUID, Integer> kills = hunterPerformanceKillCounts.get(hunterUuid);
+        if (kills == null || kills.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (int count : kills.values()) {
+            total += Math.min(1, Math.max(0, count));
+        }
+        return total;
+    }
+
+    public int getPreyPerformanceKillCredit(UUID preyUuid) {
+        Map<UUID, Integer> kills = preyPerformanceKillCounts.get(preyUuid);
+        if (kills == null || kills.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (int count : kills.values()) {
+            total += Math.min(2, Math.max(0, count));
+        }
+        return total;
+    }
+
+    public int getHunterPerformanceFinalKillCount(UUID hunterUuid) {
+        return hunterPerformanceFinalKills.getOrDefault(hunterUuid, 0);
+    }
+
+    public int getHunterPerformanceDeathCount(UUID hunterUuid) {
+        return hunterPerformanceDeathCounts.getOrDefault(hunterUuid, 0);
+    }
+
+    public int getPreyPerformanceDeathCount(UUID preyUuid) {
+        return preyPerformanceDeathCounts.getOrDefault(preyUuid, 0);
+    }
+
+    public long getPreyPerformanceAliveMillis(UUID preyUuid) {
+        if (gameStartTime <= 0L) {
+            return 0L;
+        }
+        long end = preyPerformanceFirstDeathTime.getOrDefault(preyUuid, System.currentTimeMillis());
+        return Math.max(0L, end - gameStartTime);
     }
 
     // 计算贡献值（用于排行榜排序）

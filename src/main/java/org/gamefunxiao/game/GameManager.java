@@ -10814,7 +10814,7 @@ public class GameManager {
             giveRewards(room, preyWin);
         }
 
-        // 发放积分奖励
+        // 发放表现值奖励
         if (!isTournamentSilent(room)) {
             givePoints(room, preyWin);
         }
@@ -11143,36 +11143,211 @@ public class GameManager {
     }
 
     private void givePoints(GameRoom room, boolean preyWin) {
-        // 自定义房间不给积分（除非是管理员房间）
-        if (room.isCustomRoom()) {
-            Player owner = Bukkit.getPlayer(room.getOwnerUuid());
-            if (owner == null || !owner.hasPermission("gamefunxiao.admin")) {
-                return;
-            }
+        if (!shouldCountHunterPerformance(room)) {
+            return;
         }
 
         for (UUID uuid : room.getAllPlayerUUIDs()) {
             Player player = Bukkit.getPlayer(uuid);
-            if (player == null) continue;
+            if (player == null) {
+                continue;
+            }
 
             if (room.isPrey(uuid)) {
-                if (preyWin) {
-                    int preyPoints = room.getGameMode() == GameMode.SURVIVAL ? 10 : 25;
-                    plugin.getPlayerDataManager().addPreyPoints(uuid, preyPoints, room.getGameMode());
-                    Map<String, String> ph = new HashMap<>();
-                    ph.put("points", String.valueOf(preyPoints));
-                    player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.prey_win", ph));
-                }
-            } else {
-                // 猎人胜利 +1（但猎物退出不算）
-                if (!preyWin && !room.isPreyQuit()) {
-                    plugin.getPlayerDataManager().addHunterPoints(uuid, 1, room.getGameMode());
-                    Map<String, String> ph = new HashMap<>();
-                    ph.put("points", "1");
-                    player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.hunter_win", ph));
-                }
+                awardPreyPerformance(room, player, preyWin);
+            } else if (room.isHunter(uuid)) {
+                awardHunterPerformance(room, player, preyWin);
             }
         }
+    }
+
+    public boolean shouldCountHunterPerformance(GameRoom room) {
+        if (room == null || room.getGameMode() == null) {
+            return false;
+        }
+        if (!room.getGameMode().usesHunterFlowMode() || room.getGameMode().isLuckyPillars()
+                || room.getGameMode().isStandaloneMiniGame() || room.getGameMode().isIndependentMode()
+                || room.getGameMode().isFlashTournament()) {
+            return false;
+        }
+        if (!plugin.getConfigManager().getConfig().getBoolean("hunter_game.performance_value.enabled", true)) {
+            return false;
+        }
+        if (room.isCustomRoom()) {
+            Player owner = Bukkit.getPlayer(room.getOwnerUuid());
+            return owner != null && owner.hasPermission("gamefunxiao.admin");
+        }
+        return true;
+    }
+
+    public void recordHunterKillPreyPerformance(GameRoom room, Player hunter, Player prey, boolean finalKill) {
+        if (!shouldCountHunterPerformance(room) || hunter == null || prey == null) {
+            return;
+        }
+        int count = room.recordHunterPerformanceKill(hunter.getUniqueId(), prey.getUniqueId());
+        if (finalKill) {
+            room.recordHunterPerformanceFinalKill(hunter.getUniqueId());
+        }
+        int killLimit = getPerformanceInt("hunter.kill_same_prey_limit", 1);
+        if (count <= Math.max(1, killLimit)) {
+            Map<String, String> ph = new HashMap<>();
+            int base = getPerformanceInt("hunter.kill_prey", 6);
+            int finalBonus = finalKill ? getPerformanceInt("hunter.final_kill_bonus", 4) : 0;
+            ph.put("player", prey.getName());
+            ph.put("points", signed(base + finalBonus));
+            hunter.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("kill.hunter_kill_prey", ph));
+        }
+    }
+
+    public void recordPreyKillHunterPerformance(GameRoom room, Player prey, Player hunter) {
+        if (!shouldCountHunterPerformance(room) || prey == null || hunter == null) {
+            return;
+        }
+        int count = room.recordPreyPerformanceKill(prey.getUniqueId(), hunter.getUniqueId());
+        int killLimit = getPerformanceInt("prey.kill_same_hunter_limit", 2);
+        if (count <= Math.max(1, killLimit)) {
+            Map<String, String> ph = new HashMap<>();
+            ph.put("player", hunter.getName());
+            ph.put("points", signed(getPerformanceInt("prey.kill_hunter", 3)));
+            prey.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("kill.prey_kill_hunter", ph));
+        }
+    }
+
+    public void applyPreyDeathPerformancePenalty(GameRoom room, Player prey) {
+        if (!shouldCountHunterPerformance(room) || prey == null) {
+            return;
+        }
+        room.recordPreyPerformanceDeath(prey.getUniqueId());
+        int penalty = -Math.abs(getPerformanceInt("prey.death_penalty", 4));
+        if (penalty == 0) {
+            return;
+        }
+        plugin.getPlayerDataManager().addPreyPoints(prey.getUniqueId(), penalty, room.getGameMode());
+        Map<String, String> ph = new HashMap<>();
+        ph.put("points", signed(penalty));
+        ph.put("rank", HunterPerformanceRank.coloredPreyRank(plugin.getPlayerDataManager().getPlayerData(prey.getUniqueId()).getPreyPointsTotal()));
+        prey.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.prey_death", ph));
+    }
+
+    public void applyHunterDeathPerformancePenalty(GameRoom room, Player hunter) {
+        if (!shouldCountHunterPerformance(room) || hunter == null) {
+            return;
+        }
+        int count = room.recordHunterPerformanceDeath(hunter.getUniqueId());
+        int maxPenaltyCount = Math.max(1, getPerformanceInt("hunter.death_penalty_max_times", 5));
+        if (count > maxPenaltyCount) {
+            return;
+        }
+        int penalty = -Math.abs(getPerformanceInt("hunter.death_penalty", 1));
+        if (penalty == 0) {
+            return;
+        }
+        plugin.getPlayerDataManager().addHunterPoints(hunter.getUniqueId(), penalty, room.getGameMode());
+        Map<String, String> ph = new HashMap<>();
+        ph.put("points", signed(penalty));
+        ph.put("rank", HunterPerformanceRank.coloredHunterRank(plugin.getPlayerDataManager().getPlayerData(hunter.getUniqueId()).getHunterPointsTotal()));
+        hunter.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.hunter_death", ph));
+    }
+
+    public void applyQuitPerformancePenalty(GameRoom room, Player player, boolean wasPrey, boolean wasSpectator) {
+        if (!shouldCountHunterPerformance(room) || player == null || wasSpectator || room.getState() != RoomState.PLAYING) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        if (wasPrey) {
+            int penalty = -Math.abs(getPerformanceInt("prey.quit_penalty", 10));
+            if (penalty != 0) {
+                plugin.getPlayerDataManager().addPreyPoints(uuid, penalty, room.getGameMode());
+                Map<String, String> ph = new HashMap<>();
+                ph.put("points", signed(penalty));
+                ph.put("rank", HunterPerformanceRank.coloredPreyRank(plugin.getPlayerDataManager().getPlayerData(uuid).getPreyPointsTotal()));
+                player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.prey_quit", ph));
+            }
+            return;
+        }
+
+        int penalty = -Math.abs(getPerformanceInt("hunter.quit_penalty", 8));
+        if (penalty != 0) {
+            plugin.getPlayerDataManager().addHunterPoints(uuid, penalty, room.getGameMode());
+            Map<String, String> ph = new HashMap<>();
+            ph.put("points", signed(penalty));
+            ph.put("rank", HunterPerformanceRank.coloredHunterRank(plugin.getPlayerDataManager().getPlayerData(uuid).getHunterPointsTotal()));
+            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.hunter_quit", ph));
+        }
+    }
+
+    private void awardHunterPerformance(GameRoom room, Player player, boolean preyWin) {
+        UUID uuid = player.getUniqueId();
+        int win = (!preyWin && !room.isPreyQuit()) ? getPerformanceInt("hunter.win", 5) : 0;
+        int kill = room.getHunterPerformanceKillCredit(uuid) * getPerformanceInt("hunter.kill_prey", 6);
+        int finalKill = room.getHunterPerformanceFinalKillCount(uuid) * getPerformanceInt("hunter.final_kill_bonus", 4);
+        int damageUnit = Math.max(1, getPerformanceInt("hunter.damage_unit", 30));
+        int damage = (int) Math.floor(room.getDamageDealt(uuid) / damageUnit) * getPerformanceInt("hunter.damage_points", 1);
+        int raw = Math.max(0, win + kill + finalKill + damage);
+        int capped = Math.min(raw, Math.max(1, getPerformanceInt("hunter.max_per_game", 25)));
+        int awarded = applyShortGameReduction(room, capped);
+        if (awarded <= 0) {
+            return;
+        }
+
+        plugin.getPlayerDataManager().addHunterPoints(uuid, awarded, room.getGameMode());
+        int total = plugin.getPlayerDataManager().getPlayerData(uuid).getHunterPointsTotal();
+        Map<String, String> ph = new HashMap<>();
+        ph.put("points", signed(awarded));
+        ph.put("rank", HunterPerformanceRank.coloredHunterRank(total));
+        ph.put("breakdown", "胜利 " + win + " / 击杀 " + kill + " / 终结 " + finalKill + " / 伤害 " + damage);
+        player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.hunter_result", ph));
+    }
+
+    private void awardPreyPerformance(GameRoom room, Player player, boolean preyWin) {
+        UUID uuid = player.getUniqueId();
+        int win = preyWin ? getPerformanceInt("prey.win", 8) : 0;
+        long aliveMillis = room.getPreyPerformanceAliveMillis(uuid);
+        int survivalUnitMinutes = Math.max(1, getPerformanceInt("prey.survival_unit_minutes", 6));
+        int survival = (int) (aliveMillis / (survivalUnitMinutes * 60_000L)) * getPerformanceInt("prey.survival_points", 2);
+        int kill = room.getPreyPerformanceKillCredit(uuid) * getPerformanceInt("prey.kill_hunter", 3);
+        int distanceUnit = Math.max(1, getPerformanceInt("prey.distance_unit", 800));
+        int distance = (int) Math.floor(room.getDistanceRun(uuid) / distanceUnit) * getPerformanceInt("prey.distance_points", 1);
+        int raw = Math.max(0, win + survival + kill + distance);
+        int capped = Math.min(raw, Math.max(1, getPerformanceInt("prey.max_per_game", 30)));
+        int awarded = applyShortGameReduction(room, capped);
+        if (preyWin && room.getDistanceRun(uuid) < getPerformanceInt("prey.win_min_distance", 200)) {
+            awarded = halfPositive(awarded);
+        }
+        if (awarded <= 0) {
+            return;
+        }
+
+        plugin.getPlayerDataManager().addPreyPoints(uuid, awarded, room.getGameMode());
+        int total = plugin.getPlayerDataManager().getPlayerData(uuid).getPreyPointsTotal();
+        Map<String, String> ph = new HashMap<>();
+        ph.put("points", signed(awarded));
+        ph.put("rank", HunterPerformanceRank.coloredPreyRank(total));
+        ph.put("breakdown", "胜利 " + win + " / 存活 " + survival + " / 反杀 " + kill + " / 移动 " + distance);
+        player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.prey_result", ph));
+    }
+
+    private int applyShortGameReduction(GameRoom room, int amount) {
+        int minMinutes = Math.max(1, getPerformanceInt("anti_farm.short_game_minutes", 5));
+        if (amount > 0 && room.getGameDuration() < minMinutes * 60_000L) {
+            return halfPositive(amount);
+        }
+        return amount;
+    }
+
+    private int halfPositive(int amount) {
+        if (amount <= 0) {
+            return amount;
+        }
+        return Math.max(1, amount / 2);
+    }
+
+    private int getPerformanceInt(String path, int fallback) {
+        return plugin.getConfigManager().getConfig().getInt("hunter_game.performance_value." + path, fallback);
+    }
+
+    private String signed(int value) {
+        return value > 0 ? "+" + value : String.valueOf(value);
     }
 
     private void recordGameData(GameRoom room, boolean preyWin) {

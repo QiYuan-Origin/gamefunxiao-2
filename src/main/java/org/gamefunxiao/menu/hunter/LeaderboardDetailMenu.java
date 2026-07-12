@@ -9,6 +9,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.data.PlayerData;
 import org.gamefunxiao.game.GameMode;
+import org.gamefunxiao.game.HunterPerformanceRank;
 import org.gamefunxiao.menu.MenuSection;
 import org.gamefunxiao.menu.base.BaseMenu;
 import org.gamefunxiao.util.PlayerHeadUtil;
@@ -74,8 +75,8 @@ public class LeaderboardDetailMenu extends BaseMenu {
             case "pass_count" -> "§0§l✓ 通关次数排行榜 ✓";
             case "fastest_time" -> "§0§l⏱ 最快通关排行榜 ⏱";
             case "play_count" -> "§0§l📊 游玩次数排行榜 📊";
-            case "hunter_points" -> "§0§l⚔ 猎人积分排行榜 ⚔";
-            case "prey_points" -> "§0§l🎯 猎物积分排行榜 🎯";
+            case "hunter_points" -> "§0§l⚔ 猎人表现排行榜 ⚔";
+            case "prey_points" -> "§0§l🎯 猎物表现排行榜 🎯";
             case "minigame_points" -> "§0§l🍀 小游戏积分排行榜 🍀";
             default -> "§0§l🏆 排行榜详情 🏆";
         };
@@ -149,8 +150,8 @@ public class LeaderboardDetailMenu extends BaseMenu {
             case "pass_count" -> "§x§5§5§F§F§D§D✓ §x§7§7§F§F§C§C通§x§9§9§F§F§B§B关§x§B§B§F§F§A§A / §x§D§D§F§F§9§9击§x§F§F§E§E§8§8杀榜";
             case "fastest_time" -> "§x§F§F§E§E§5§5⏱ §x§F§F§D§D§7§7最§x§F§F§C§C§9§9快§x§F§F§B§B§B§B通§x§F§F§A§A§D§D关";
             case "play_count" -> "§x§A§A§F§F§5§5📊 §x§B§B§F§F§7§7游§x§C§C§F§F§9§9玩§x§D§D§F§F§B§B次§x§E§E§F§F§D§D数";
-            case "hunter_points" -> "§x§F§F§5§5§5§5⚔ §x§F§F§7§7§5§5猎§x§F§F§9§9§5§5人§x§F§F§B§B§5§5积§x§F§F§D§D§5§5分榜";
-            case "prey_points" -> "§x§5§5§F§F§A§A🎯 §x§7§7§F§F§B§B猎§x§9§9§F§F§C§C物§x§B§B§F§F§D§D积§x§D§D§F§F§E§E分榜";
+            case "hunter_points" -> "§x§F§F§5§5§5§5⚔ §x§F§F§7§7§5§5猎§x§F§F§9§9§5§5人§x§F§F§B§B§5§5表§x§F§F§D§D§5§5现榜";
+            case "prey_points" -> "§x§5§5§F§F§A§A🎯 §x§7§7§F§F§B§B猎§x§9§9§F§F§C§C物§x§B§B§F§F§D§D表§x§D§D§F§F§E§E现榜";
             case "minigame_points" -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6小§x§F§F§B§B§7§7游§x§F§F§A§A§8§8戏§x§F§F§9§9§9§9积§x§F§F§8§8§A§A分榜";
             default -> "§x§F§F§D§7§0§0🏆 §x§F§F§B§B§0§0排§x§F§F§9§9§0§0行§x§F§F§7§7§0§0榜";
         };
@@ -244,8 +245,16 @@ public class LeaderboardDetailMenu extends BaseMenu {
             case "pass_count" -> appendPassCountLore(lore, data);
             case "fastest_time" -> appendFastestLore(lore, data);
             case "play_count" -> lore.add("§f- §d游玩次数: §e" + getPlayCount(data) + " §d次");
-            case "hunter_points" -> lore.add("§f- §c猎人积分: §6" + getHunterPoints(data));
-            case "prey_points" -> lore.add("§f- §a猎物积分: §6" + getPreyPoints(data));
+            case "hunter_points" -> {
+                int points = getHunterPoints(data);
+                lore.add("§f- §c猎人表现: §6" + points);
+                lore.add("§f- §7段位: " + HunterPerformanceRank.coloredHunterRank(points));
+            }
+            case "prey_points" -> {
+                int points = getPreyPoints(data);
+                lore.add("§f- §a猎物表现: §6" + points);
+                lore.add("§f- §7段位: " + HunterPerformanceRank.coloredPreyRank(points));
+            }
             case "minigame_points" -> lore.add("§f- §e小游戏积分: §6" + getMiniGamePoints(data));
             default -> lore.add("§f- §7暂无显示内容");
         }

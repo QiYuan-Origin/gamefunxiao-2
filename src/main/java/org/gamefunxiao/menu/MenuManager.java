@@ -33,6 +33,7 @@ public class MenuManager {
             "rooms", "roomlist", "luckyrooms", "lprooms",
             "create", "createroom", "luckycreate", "lpcreate",
             "leaderboard", "lb", "luckyleaderboard", "lplb",
+            "rank", "ranks", "points", "performance", "performancevalue",
             "shop", "settings", "victoryshop", "victorysettings",
             "endflashkit", "endflashkitadmin", "personalkit", "endflashpersonalkit",
             "pass_count", "fastest_time", "play_count", "hunter_points", "prey_points", "minigame_points"
@@ -98,12 +99,13 @@ public class MenuManager {
             case "create", "createroom", "创建", "创建房间" -> new CreateRoomMenu(plugin, player);
             case "luckycreate", "lpcreate", "幸运创建" -> new CreateRoomMenu(plugin, player, MenuSection.LUCKY_PILLARS);
             case "leaderboard", "lb", "排行", "排行榜" -> new LeaderboardMenu(plugin, player);
+            case "rank", "ranks", "points", "performance", "performancevalue", "段位", "表现", "表现值" -> new HunterPerformanceMenu(plugin, player);
             case "luckyleaderboard", "lplb", "幸运排行" -> new LeaderboardMenu(plugin, player, MenuSection.LUCKY_PILLARS, RoomListMenu.defaultLuckyFilter());
             case "passcount", "pass_count", "通关次数" -> new LeaderboardDetailMenu(plugin, player, "pass_count");
             case "fastesttime", "fastest_time", "最快通关" -> new LeaderboardDetailMenu(plugin, player, "fastest_time");
             case "playcount", "play_count", "游玩次数" -> new LeaderboardDetailMenu(plugin, player, "play_count");
-            case "hunterpoints", "hunter_points", "猎人积分" -> new LeaderboardDetailMenu(plugin, player, "hunter_points");
-            case "preypoints", "prey_points", "猎物积分" -> new LeaderboardDetailMenu(plugin, player, "prey_points");
+            case "hunterpoints", "hunter_points", "猎人积分", "猎人表现" -> new LeaderboardDetailMenu(plugin, player, "hunter_points");
+            case "preypoints", "prey_points", "猎物积分", "猎物表现" -> new LeaderboardDetailMenu(plugin, player, "prey_points");
             case "minigamepoints", "minigame_points", "小游戏积分" -> new LeaderboardDetailMenu(plugin, player, "minigame_points", MenuSection.LUCKY_PILLARS, RoomListMenu.defaultLuckyFilter());
             case "shop", "商城", "商店" -> new MiniGameShopCategoryMenu(plugin, player);
             case "settings", "setting", "设置", "个人设置" -> new SettingsCategoryMenu(plugin, player);
@@ -264,6 +266,13 @@ public class MenuManager {
             return;
         }
         openMenu(player, new LeaderboardMenu(plugin, player, MenuSection.LUCKY_PILLARS, RoomListMenu.defaultLuckyFilter()));
+    }
+
+    public void openHunterPerformanceMenu(Player player) {
+        if (!canOpenGameFunMenu(player)) {
+            return;
+        }
+        openMenu(player, new HunterPerformanceMenu(plugin, player));
     }
 
 

@@ -162,17 +162,17 @@ public class VotePreyMenu extends BaseMenu {
 
             lore.add("§f- §b当前票数: §e" + voteCount + " §b票");
 
-            // 显示游玩次数和积分
+            // 显示游玩次数和表现值
             org.gamefunxiao.data.PlayerData playerData = data;
             if (playerData != null) {
                 int playCount = playerData.getPlayCount("total");
                 lore.add("§f- §d游玩次数: §e" + playCount + " §d次");
-                // 显示猎人积分和猎物积分
+                // 显示猎人表现和猎物表现
                 int hunterPts = playerData.getHunterPoints("total");
                 int preyPts = playerData.getPreyPoints("total");
                 String hColor = hunterPts >= 0 ? "§6" : "§c";
                 String pColor = preyPts >= 0 ? "§6" : "§c";
-                lore.add("§f- §c猎人积分: " + hColor + hunterPts + " §8| §a猎物积分: " + pColor + preyPts);
+                lore.add("§f- §c猎人表现: " + hColor + hunterPts + " §8| §a猎物表现: " + pColor + preyPts);
             }
 
             lore.add("§8· · · · · · · · · · · · · ·");

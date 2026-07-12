@@ -42,6 +42,7 @@ permissions:
       gamefunxiao.use.hg.join: true
       gamefunxiao.use.hg.invite: true
       gamefunxiao.use.hg.leaderboard: true
+      gamefunxiao.use.rank: true
       gamefunxiao.use.leave: true
       gamefunxiao.use.rejoin: true
       gamefunxiao.use.wiki: true
@@ -74,6 +75,9 @@ permissions:
     default: true
   gamefunxiao.use.hg.leaderboard:
     description: 查看猎人游戏排行榜
+    default: true
+  gamefunxiao.use.rank:
+    description: 查看猎人游戏表现值和段位
     default: true
   gamefunxiao.use.leave:
     description: 离开当前房间

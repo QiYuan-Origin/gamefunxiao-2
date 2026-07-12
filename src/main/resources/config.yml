@@ -1,6 +1,6 @@
 # GameFunXiao 主配置文件
 # 配置版本（请勿手动修改）
-config_version: 8
+config_version: 9
 
 # GameFun消息前缀
 prefix: "§x§5§5§F§F§A§A⚔ §x§6§6§F§F§B§BGameFun §x§7§7§F§F§C§C>> §f"
@@ -102,6 +102,36 @@ hunter_game:
   force_start_mode: "direct"
   # 1v1时猎人退出是否扣分
   one_vs_one_quit_penalty: true
+
+  # 猎人游戏表现值设置（底层继续兼容旧 hunter_points/prey_points 数据）
+  performance_value:
+    enabled: true
+    anti_farm:
+      # 游戏开始后少于这个分钟数就结束，本局获得表现值减半
+      short_game_minutes: 5
+    hunter:
+      win: 5
+      kill_prey: 6
+      final_kill_bonus: 4
+      damage_unit: 30
+      damage_points: 1
+      max_per_game: 25
+      kill_same_prey_limit: 1
+      death_penalty: 1
+      death_penalty_max_times: 5
+      quit_penalty: 8
+    prey:
+      win: 8
+      survival_unit_minutes: 6
+      survival_points: 2
+      kill_hunter: 3
+      kill_same_hunter_limit: 2
+      distance_unit: 800
+      distance_points: 1
+      max_per_game: 30
+      win_min_distance: 200
+      death_penalty: 4
+      quit_penalty: 10
 
   # 聊天设置
   chat:

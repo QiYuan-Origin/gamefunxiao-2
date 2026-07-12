@@ -7400,6 +7400,7 @@ public class FlashModeManager {
         crossbow.setItemMeta(meta);
         inventory.setItemInMainHand(crossbow);
         player.updateInventory();
+        clearFlashCrossbowCooldown(player);
         ItemStack loadedSnapshot = crossbow.clone();
         Bukkit.getScheduler().runTask(plugin, () -> ensureFlashCrossbowLoadApplied(player, loadedSnapshot));
         Bukkit.getScheduler().runTaskLater(plugin, () -> ensureFlashCrossbowLoadApplied(player, loadedSnapshot), 2L);
@@ -7465,6 +7466,7 @@ public class FlashModeManager {
         boolean crossbow = bow.getType() == Material.CROSSBOW;
         if (crossbow && isRecentCrossbowPayloadShot(player)) {
             cancelCrossbowShotEvent(event);
+            clearFlashCrossbowCooldown(player);
             return true;
         }
         ItemStack loadedCrossbow = crossbow ? resolveLoadedFlashCrossbowForShot(player, bow) : bow;
@@ -7518,6 +7520,7 @@ public class FlashModeManager {
             clearCrossbowPayload(player, loadedCrossbow);
             damageLoadedCrossbow(player, loadedCrossbow, payload);
             player.updateInventory();
+            clearFlashCrossbowCooldown(player);
         }
 
         switch (payload) {
@@ -7608,8 +7611,26 @@ public class FlashModeManager {
 
     private void rememberCrossbowPayloadShot(Player player) {
         if (player != null) {
-            recentCrossbowPayloadShots.put(player.getUniqueId(), System.currentTimeMillis() + 700L);
+            recentCrossbowPayloadShots.put(player.getUniqueId(), System.currentTimeMillis() + 180L);
         }
+    }
+
+    private void clearFlashCrossbowCooldown(Player player) {
+        if (player == null) {
+            return;
+        }
+        player.setCooldown(Material.CROSSBOW, 0);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                player.setCooldown(Material.CROSSBOW, 0);
+                player.updateInventory();
+            }
+        });
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                player.setCooldown(Material.CROSSBOW, 0);
+            }
+        }, 2L);
     }
 
     private void cancelCrossbowShotEvent(EntityShootBowEvent event) {
@@ -16207,6 +16228,7 @@ public class FlashModeManager {
             if (projectile != null) {
                 projectile.remove();
             }
+            clearFlashCrossbowCooldown(player);
             return true;
         }
 
@@ -16241,6 +16263,7 @@ public class FlashModeManager {
         clearCrossbowPayload(player, crossbow);
         damageLoadedCrossbow(player, crossbow, tmtPayload ? CrossbowPayload.TMT : CrossbowPayload.TNT);
         player.updateInventory();
+        clearFlashCrossbowCooldown(player);
         if (tmtPayload) {
             launchNoGravityTmtPayload(player, velocity, fuseTicks, canFlashExplosionBreakBlocks(player, room), shotCount);
         } else {
@@ -16285,6 +16308,7 @@ public class FlashModeManager {
         if (isRecentCrossbowPayloadShot(player)) {
             event.setCancelled(true);
             firework.remove();
+            clearFlashCrossbowCooldown(player);
             return true;
         }
         EquipmentSlot payloadHand = findFireworkCrossbowExplosivePayloadHand(player);
@@ -16312,6 +16336,7 @@ public class FlashModeManager {
         clearCrossbowPayload(player, crossbow);
         damageLoadedCrossbow(player, crossbow, tmtPayload ? CrossbowPayload.TMT : CrossbowPayload.TNT);
         player.updateInventory();
+        clearFlashCrossbowCooldown(player);
         if (tmtPayload) {
             launchNoGravityTmtPayload(player, velocity, fuseTicks, canFlashExplosionBreakBlocks(player, room), shotCount);
         } else {
@@ -17143,6 +17168,7 @@ public class FlashModeManager {
         }
         event.setCancelled(true);
         projectile.remove();
+        clearFlashCrossbowCooldown(player);
         return true;
     }
 
@@ -18694,8 +18720,7 @@ public class FlashModeManager {
         }
         world.spawnParticle(Particle.END_ROD, hit, 34, 0.32, 0.28, 0.32, 0.85);
         world.spawnParticle(Particle.GUST, hit, 6, 0.22, 0.18, 0.22, 0.04);
-        world.playSound(hit, Sound.ITEM_MACE_SMASH_GROUND, 0.95f, 1.05f);
-        world.playSound(hit, Sound.ENTITY_BREEZE_WIND_BURST, 0.55f, 1.45f);
+        playFlashMaceSmashImpactSound(world, hit);
         if (unstableLevel > 0) {
             world.spawnParticle(Particle.ELECTRIC_SPARK, hit, 12 + unstableLevel * 3, 0.32D, 0.32D, 0.32D, 0.08D);
             maybeTriggerUnstableMaceRebound(attacker, victim, room, unstableLevel);
@@ -18704,8 +18729,31 @@ public class FlashModeManager {
         return applyRecordedAxeShieldMaceCombo(event, attacker, victim, room);
     }
 
+    private void playFlashMaceSmashImpactSound(World world, Location hit) {
+        if (world == null || hit == null) {
+            return;
+        }
+        world.playSound(hit, Sound.ITEM_MACE_SMASH_GROUND_HEAVY, 1.0f, 1.0f);
+        world.playSound(hit, Sound.ENTITY_GENERIC_EXPLODE, 0.35f, 1.0f);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (hit.getWorld() == world) {
+                world.playSound(hit, Sound.ENTITY_BREEZE_WIND_BURST, 0.65f, 1.0f);
+            }
+        }, 1L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (hit.getWorld() == world) {
+                world.playSound(hit, Sound.BLOCK_ANVIL_LAND, 0.45f, 1.0f);
+            }
+        }, 2L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (hit.getWorld() == world) {
+                world.playSound(hit, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.35f, 1.05f);
+            }
+        }, 4L);
+    }
+
     private void applyUnstableMaceSmashDamage(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim,
-                                             GameRoom room, int unstableLevel) {
+                                              GameRoom room, int unstableLevel) {
         UnstableMaceAmbushBonus ambush = getActiveUnstableMaceAmbushBonus(attacker, victim, room);
         if (ambush != null) {
             unstableMaceAmbushBonuses.remove(attacker.getUniqueId());
