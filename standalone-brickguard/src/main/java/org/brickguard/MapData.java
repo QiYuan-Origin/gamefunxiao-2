@@ -1,4 +1,4 @@
-package org.yuyun.brickguard;
+package org.brickguard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +14,8 @@ final class MapData {
     Point obsidianPool;
     final List<Point> brickTraders = new ArrayList<>();
     final List<Point> netherTraders = new ArrayList<>();
+    final List<Point> brickGuards = new ArrayList<>();
+    final List<Point> netherGuards = new ArrayList<>();
     final List<Point> brickMines = new ArrayList<>();
     final List<Point> netherMines = new ArrayList<>();
 

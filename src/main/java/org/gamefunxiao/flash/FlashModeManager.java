@@ -267,6 +267,7 @@ public class FlashModeManager {
     private static final double SHIELD_WIND_CHARGE_DASH_SPEED_MULTIPLIER = 1.65D;
     private static final float FLASH_BOW_DOWN_WIND_CHARGE_PITCH_DEGREES = 70.0F;
     private static final double FLASH_BOW_DOWN_WIND_CHARGE_SHIELD_Y_MULTIPLIER = 0.40D;
+    private static final double FLASH_BOW_DOWN_WIND_CHARGE_PLAYER_VELOCITY_MULTIPLIER = 4.0D;
     private static final double SHIELD_WIND_CHARGE_AIR_BOUNCE_BASE_CHANCE = 1.00D;
     private static final int SHIELD_WIND_CHARGE_AIR_BOUNCE_MAX_HALVES = 12;
     private static final String UNSTABLE_CORE_SHIELD_NAME = "§x§6§0§6§0§6§0沉§x§6§0§6§0§6§0重§x§6§0§6§0§6§0盾§x§6§0§6§0§6§0牌";
@@ -1817,7 +1818,7 @@ public class FlashModeManager {
     private void refreshMaterialArmorLore(ItemStack item, ItemMeta meta) {
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.removeIf(line -> line != null && line.startsWith(ARMOR_MATERIAL_LINE_PREFIX));
-        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f斧增伤抵消 +" + formatPercent(getMaterialArmorAxeBonusReduction(item))
+        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f完全免疫斧头强化增伤"
                 + "§8 / §f通用免伤 +" + formatPercent(MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE));
         meta.setLore(lore);
     }
@@ -5920,9 +5921,8 @@ public class FlashModeManager {
         }
         meta.getPersistentDataContainer().set(materialArmorLayerKey, PersistentDataType.BYTE, (byte) 1);
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
-        double axeBonusReduction = getMaterialArmorAxeBonusReduction(armor);
         lore.removeIf(line -> line != null && line.startsWith(ARMOR_MATERIAL_LINE_PREFIX));
-        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f斧增伤抵消 +" + formatPercent(axeBonusReduction) + "§8 / §f通用免伤 +" + formatPercent(MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE));
+        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f完全免疫斧头强化增伤§8 / §f通用免伤 +" + formatPercent(MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE));
         meta.setLore(lore);
         result.setItemMeta(meta);
         return result;
@@ -7123,7 +7123,7 @@ public class FlashModeManager {
         }
         consumeHandItem(player, EquipmentSlot.OFF_HAND, 1);
         player.clearActiveItem();
-        player.setVelocity(velocity);
+        applyShieldWindChargePlayerVelocity(player, velocity);
         player.setFallDistance(0.0F);
         shieldWindChargeSafeFallExpires.put(playerId, now + 6500L);
         Location effect = player.getLocation().add(0.0D, 0.75D, 0.0D);
@@ -7248,7 +7248,7 @@ public class FlashModeManager {
         }
 
         player.clearActiveItem();
-        player.setVelocity(velocity);
+        applyShieldWindChargePlayerVelocity(player, velocity);
         player.setFallDistance(0.0F);
         shieldWindChargeSafeFallExpires.put(playerId, now + 6500L + safeCharges * 850L);
 
@@ -7261,6 +7261,14 @@ public class FlashModeManager {
         player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.34f, 1.52f);
         player.sendActionBar("§x§6§0§6§0§6§0沉重盾牌释放 §8| §f" + safeCharges
                 + "层蓄力 §7已进入 §c10秒§7 冷却");
+    }
+
+    private void applyShieldWindChargePlayerVelocity(Player player, Vector dashVelocity) {
+        if (player.isGliding()) {
+            player.setVelocity(player.getVelocity().clone().add(dashVelocity));
+            return;
+        }
+        player.setVelocity(dashVelocity);
     }
 
     public boolean handleEnhancedWindChargeUse(PlayerInteractEvent event) {
@@ -7455,6 +7463,10 @@ public class FlashModeManager {
         }
 
         boolean crossbow = bow.getType() == Material.CROSSBOW;
+        if (crossbow && isRecentCrossbowPayloadShot(player)) {
+            cancelCrossbowShotEvent(event);
+            return true;
+        }
         ItemStack loadedCrossbow = crossbow ? resolveLoadedFlashCrossbowForShot(player, bow) : bow;
         CrossbowPayload payload = crossbow ? getCrossbowPayload(loadedCrossbow) : null;
         ItemStack payloadItem = crossbow ? getCrossbowPayloadItem(loadedCrossbow) : null;
@@ -7537,7 +7549,9 @@ public class FlashModeManager {
     private void applyDownwardBowWindChargeDash(Player player) {
         UUID playerId = player.getUniqueId();
         double shieldAirStrength = 0.86D * SHIELD_WIND_CHARGE_DASH_SPEED_MULTIPLIER;
-        double upwardY = shieldAirStrength * FLASH_BOW_DOWN_WIND_CHARGE_SHIELD_Y_MULTIPLIER;
+        double upwardY = shieldAirStrength
+                * FLASH_BOW_DOWN_WIND_CHARGE_SHIELD_Y_MULTIPLIER
+                * FLASH_BOW_DOWN_WIND_CHARGE_PLAYER_VELOCITY_MULTIPLIER;
         Vector velocity = player.getVelocity().clone();
         velocity.setY(Math.max(velocity.getY(), upwardY));
         player.setVelocity(velocity);
@@ -7594,7 +7608,19 @@ public class FlashModeManager {
 
     private void rememberCrossbowPayloadShot(Player player) {
         if (player != null) {
-            recentCrossbowPayloadShots.put(player.getUniqueId(), System.currentTimeMillis() + 360L);
+            recentCrossbowPayloadShots.put(player.getUniqueId(), System.currentTimeMillis() + 700L);
+        }
+    }
+
+    private void cancelCrossbowShotEvent(EntityShootBowEvent event) {
+        if (event == null) {
+            return;
+        }
+        event.setCancelled(true);
+        event.setConsumeArrow(false);
+        event.setConsumeItem(false);
+        if (event.getProjectile() != null) {
+            event.getProjectile().remove();
         }
     }
 
@@ -12892,7 +12918,7 @@ public class FlashModeManager {
     }
 
     public void handleSpyglassFocus(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND
+        if (event.getHand() == null
                 || (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
             return;
         }
@@ -12901,7 +12927,10 @@ public class FlashModeManager {
         if (!isFlashCombatAvailable(player, room)) {
             return;
         }
-        ItemStack item = player.getInventory().getItemInMainHand();
+        ItemStack item = event.getItem();
+        if (!isUsableFlashSpyglass(item)) {
+            item = getItemInHand(player, event.getHand());
+        }
         if (!isUsableFlashSpyglass(item)) {
             return;
         }
@@ -15632,17 +15661,7 @@ public class FlashModeManager {
         if (!isArmor(item)) {
             return 0.0D;
         }
-        String name = item.getType().name();
-        if (name.startsWith("IRON_")) {
-            return 0.05D;
-        }
-        if (name.startsWith("DIAMOND_")) {
-            return 0.10D;
-        }
-        if (name.startsWith("NETHERITE_")) {
-            return 0.18D;
-        }
-        return 0.03D;
+        return 1.0D;
     }
 
     private int countTntArmorLayers(Player player) {
@@ -17111,8 +17130,27 @@ public class FlashModeManager {
         }
     }
 
+    private boolean handleRecentCrossbowPayloadProjectileLaunch(ProjectileLaunchEvent event) {
+        if (event == null || event.isCancelled()) {
+            return false;
+        }
+        Projectile projectile = event.getEntity();
+        if (!(projectile instanceof AbstractArrow || projectile instanceof Firework) || projectile instanceof Trident) {
+            return false;
+        }
+        if (!(projectile.getShooter() instanceof Player player) || !isRecentCrossbowPayloadShot(player)) {
+            return false;
+        }
+        event.setCancelled(true);
+        projectile.remove();
+        return true;
+    }
+
     public void handleProjectileLaunch(ProjectileLaunchEvent event) {
         handleFlashTamedProjectileLaunch(event);
+        if (handleRecentCrossbowPayloadProjectileLaunch(event)) {
+            return;
+        }
         if (handleFireworkCrossbowTntProjectileLaunch(event)) {
             return;
         }
@@ -19763,6 +19801,15 @@ public class FlashModeManager {
         if (now < cooldownUntil) {
             return;
         }
+        if (victim instanceof Player playerVictim && hasMaterialArmorLayer(playerVictim)) {
+            neutralizeMaterialAxeDamageBonus(event, damageBonus);
+            playerVictim.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, playerVictim.getLocation().add(0.0D, 1.0D, 0.0D), 10, 0.22, 0.2, 0.22, 0.03);
+            playerVictim.playSound(playerVictim.getLocation(), Sound.ITEM_ARMOR_EQUIP_DIAMOND, 0.55f, 1.45f);
+            long baseMs = Math.max(250L, (long) (attacker.getCooldownPeriod() * 50L));
+            long extraMs = Math.max(1L, (long) (baseMs * Math.max(0.0D, cooldownIncrease == null ? 0.0D : cooldownIncrease)));
+            materialAxeCooldowns.put(attacker.getUniqueId(), now + extraMs);
+            return;
+        }
         double effectiveDamageBonus = damageBonus;
         if (victim instanceof Player playerVictim) {
             double armorBonusReduction = getMaterialArmorAxeBonusReduction(playerVictim);
@@ -19797,6 +19844,25 @@ public class FlashModeManager {
         materialAxeCooldowns.put(attacker.getUniqueId(), now + extraMs);
         attacker.getWorld().spawnParticle(Particle.CRIT, victim.getLocation().add(0.0D, Math.min(1.0D, victim.getHeight() * 0.55D), 0.0D), 18, 0.18, 0.18, 0.18, 0.05);
         attacker.playSound(attacker.getLocation(), Sound.ITEM_AXE_SCRAPE, 0.75f, 1.35f);
+    }
+
+    private void neutralizeMaterialAxeDamageBonus(EntityDamageByEntityEvent event, double damageBonus) {
+        double multiplier = 1.0D + Math.max(0.0D, damageBonus);
+        if (multiplier <= 1.0D) {
+            return;
+        }
+        double currentDamage = event.getDamage();
+        double originalBaseDamage = getOriginalBaseDamage(event, currentDamage);
+        double neutralBaseDamage = Math.max(0.0D, originalBaseDamage / multiplier);
+        if (event.isApplicable(EntityDamageEvent.DamageModifier.BASE)) {
+            try {
+                event.setDamage(EntityDamageEvent.DamageModifier.BASE, neutralBaseDamage);
+            } catch (IllegalArgumentException | UnsupportedOperationException ignored) {
+                event.setDamage(Math.max(0.0D, currentDamage / multiplier));
+            }
+        } else {
+            event.setDamage(Math.max(0.0D, currentDamage / multiplier));
+        }
     }
 
     private void applyFlashHoeMaterialDamage(EntityDamageByEntityEvent event, Player attacker) {
@@ -21068,7 +21134,6 @@ public class FlashModeManager {
     private boolean isUsableFlashSpyglass(ItemStack item) {
         return item != null
                 && item.getType() == Material.SPYGLASS
-                && isUpgradeApplied(item)
                 && item.getEnchantmentLevel(Enchantment.FIRE_ASPECT) > 0;
     }
 

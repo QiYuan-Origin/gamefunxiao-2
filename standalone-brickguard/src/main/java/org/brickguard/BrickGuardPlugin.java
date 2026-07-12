@@ -1,4 +1,4 @@
-package org.yuyun.brickguard;
+package org.brickguard;
 
 import io.papermc.paper.scoreboard.numbers.NumberFormat;
 import net.kyori.adventure.text.Component;
@@ -25,10 +25,12 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
@@ -71,7 +73,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @SuppressWarnings({"deprecation", "removal"})
-public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
+public final class BrickGuardPlugin extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
     private NamespacedKey actionKey;
     private NamespacedKey typeKey;
     private NamespacedKey roomKey;
@@ -84,6 +86,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     private final Map<UUID, InventorySnapshot> toolkitSnapshots = new HashMap<>();
     private final Map<UUID, Long> shoutCooldowns = new HashMap<>();
     private final Map<UUID, Long> clickCooldowns = new HashMap<>();
+    private final Map<UUID, Long> portalCooldowns = new HashMap<>();
     private final Set<UUID> downingPlayers = new HashSet<>();
     private final Set<UUID> homeNightVisionPlayers = new HashSet<>();
     private final Set<UUID> respawnGhosts = new HashSet<>();
@@ -93,6 +96,8 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        getConfig().options().copyDefaults(true);
+        saveConfig();
         actionKey = new NamespacedKey(this, "action");
         typeKey = new NamespacedKey(this, "type");
         roomKey = new NamespacedKey(this, "room");
@@ -153,11 +158,11 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     }
 
     private boolean isAdmin(CommandSender sender) {
-        return sender.hasPermission("brickguard.admin") || sender.hasPermission("yuyunbrickguard.admin");
+        return sender.hasPermission("brickguard.admin");
     }
 
     private boolean hasUsePermission(CommandSender sender) {
-        return sender.hasPermission("brickguard.use") || sender.hasPermission("yuyunbrickguard.use");
+        return sender.hasPermission("brickguard.use");
     }
 
     private boolean isPlayer(CommandSender sender) {
@@ -215,6 +220,9 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
                     return true;
                 }
                 saveDefaultConfig();
+                reloadConfig();
+                getConfig().options().copyDefaults(true);
+                saveConfig();
                 reloadConfig();
                 msg(sender, "§x§7§D§F§F§C§8配置已重新读取。");
             }
@@ -451,7 +459,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         inv.setItem(4, items.item(Material.MAP, "§x§7§D§F§F§C§8[ 地图编辑 ]", List.of("§f- §a选择编辑大厅或双方地图")));
         inv.setItem(20, items.action(Material.COMPASS, "§x§7§D§F§F§C§8[ 等待大厅 ]", List.of("§f- §a设置玩家等待位置"), "map_edit_lobby"));
         inv.setItem(22, items.action(Material.BRICKS, "§x§f§f§7§c§0§0[ 板砖地图 ]", List.of("§f- §a设置核心、商人和矿点"), "map_edit_brick"));
-            inv.setItem(24, items.action(Material.NETHER_BRICKS, "§x§6§6§1§9§0§0[ 下界砖地图 ]", List.of("§f- §a设置出生点、商人、矿点和黑曜石池"), "map_edit_nether"));
+        inv.setItem(24, items.action(Material.NETHER_BRICKS, "§x§6§6§1§9§0§0[ 下界砖地图 ]", List.of("§f- §a设置出生点、商人、矿点和充能点"), "map_edit_nether"));
         inv.setItem(40, items.action(Material.SPYGLASS, "§x§7§D§F§F§C§8[ 检查元素 ]", List.of("§f- §a查看地图缺少什么"), "map_check"));
         inv.setItem(36, items.action(Material.BARRIER, "§x§F§F§8§8§5§5[ 关闭 ]", List.of("§f- §7关闭这个菜单"), "close"));
         player.openInventory(inv);
@@ -475,15 +483,19 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         } else if (side == MapSide.BRICK) {
             inv.setItem(19, items.action(Material.RESPAWN_ANCHOR, "§x§f§f§7§c§0§0[ 板砖出生点 ]", List.of("§f- §a保存当前位置"), "set_brick_spawn"));
             inv.setItem(21, items.action(Material.RED_GLAZED_TERRACOTTA, "§x§f§f§7§c§0§0[ 板砖核心 ]", List.of("§f- §a保存当前方块位置"), "set_brick_core"));
-            inv.setItem(23, items.action(Material.OBSIDIAN, "§x§f§f§7§c§0§0[ 板砖门位置 ]", List.of("§f- §a保存门生成位置"), "set_brick_portal"));
+            inv.setItem(23, items.action(Material.OBSIDIAN, "§x§f§f§7§c§0§0[ 板砖门位置 ]", List.of("§f- §a保存门生成位置", "§f- §7紫色混凝土粉末会识别成门面"), "set_brick_portal"));
             inv.setItem(25, items.action(Material.VILLAGER_SPAWN_EGG, "§x§f§f§7§c§0§0[ 板砖商人 ]", List.of("§f- §a添加当前位置"), "add_brick_trader"));
+            inv.setItem(29, items.action(Material.IRON_GOLEM_SPAWN_EGG, "§x§f§f§7§c§0§0[ 板砖守卫 ]", List.of("§f- §a添加当前位置", "§f- §7开局随机出现一部分"), "add_brick_guard"));
             inv.setItem(31, items.action(Material.REDSTONE_BLOCK, "§x§F§F§8§8§5§5[ 清空板砖商人 ]", List.of("§f- §c清空已添加的商人"), "clear_brick_points"));
+            inv.setItem(33, items.action(Material.BARRIER, "§x§F§F§8§8§5§5[ 清空板砖守卫 ]", List.of("§f- §c清空已添加的守卫"), "clear_brick_guards"));
         } else {
             inv.setItem(19, items.action(Material.RESPAWN_ANCHOR, "§x§6§6§1§9§0§0[ 下界出生点 ]", List.of("§f- §a保存当前位置"), "set_nether_spawn"));
             inv.setItem(21, items.action(Material.CRYING_OBSIDIAN, "§x§6§6§1§9§0§0[ 下界门位置 ]", List.of("§f- §a保存门展示位置"), "set_nether_portal"));
-            inv.setItem(23, items.item(Material.CRYING_OBSIDIAN, "§x§6§6§1§9§0§0[ 黑曜石池自动识别 ]", List.of("§f- §a在地图放置哭泣的黑曜石即可", "§f- §7掉落物黑曜石落在上方会自动计数")));
+            inv.setItem(23, items.item(Material.CRYING_OBSIDIAN, "§x§6§6§1§9§0§0[ 充能点自动识别 ]", List.of("§f- §a地图中的哭泣黑曜石会随机保留", "§f- §7拿黑曜石右键即可充能")));
             inv.setItem(25, items.action(Material.PIGLIN_SPAWN_EGG, "§x§6§6§1§9§0§0[ 下界商人 ]", List.of("§f- §a添加当前位置"), "add_nether_trader"));
+            inv.setItem(29, items.action(Material.PIGLIN_BRUTE_SPAWN_EGG, "§x§6§6§1§9§0§0[ 下界守卫 ]", List.of("§f- §a添加当前位置", "§f- §7开局随机出现一部分"), "add_nether_guard"));
             inv.setItem(31, items.action(Material.REDSTONE_BLOCK, "§x§F§F§8§8§5§5[ 清空下界商人 ]", List.of("§f- §c清空已添加的商人"), "clear_nether_points"));
+            inv.setItem(33, items.action(Material.BARRIER, "§x§F§F§8§8§5§5[ 清空下界守卫 ]", List.of("§f- §c清空已添加的守卫"), "clear_nether_guards"));
         }
         inv.setItem(45, items.action(Material.SPYGLASS, "§x§7§D§F§F§C§8[ 检查元素 ]", List.of("§f- §a检查地图完整度"), "map_check"));
         inv.setItem(49, items.action(Material.PAPER, "§x§7§D§F§F§C§8[ 领取工具包 ]", List.of("§f- §a工具包会替换当前物品栏", "§f- §7可移动，关闭后恢复"), "give_toolkit"));
@@ -579,8 +591,8 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             for (Map<?, ?> map : maps) {
                 Object soundValue = map.get("sound");
                 String rawSound = soundValue == null ? "" : String.valueOf(soundValue);
-                Sound sound = parseSound(rawSound);
-                String alias = sound == null && rawSound.startsWith("@") ? rawSound.substring(1) : null;
+                String alias = rawSound.startsWith("@") ? rawSound.substring(1) : null;
+                Sound sound = alias == null ? parseSound(rawSound) : null;
                 if (sound == null && alias == null) continue;
                 float volume = num(map.get("volume"), 0.8F);
                 float pitch = num(map.get("pitch"), 1.0F);
@@ -592,8 +604,8 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         for (String raw : getConfig().getStringList(path)) {
             String[] split = raw.trim().split("\\s+");
             if (split.length == 0) continue;
-            Sound sound = parseSound(split[0]);
-            String alias = sound == null && split[0].startsWith("@") ? split[0].substring(1) : null;
+            String alias = split[0].startsWith("@") ? split[0].substring(1) : null;
+            Sound sound = alias == null ? parseSound(split[0]) : null;
             if (sound == null && alias == null) continue;
             float vol = split.length >= 2 ? parseFloat(split[1], 0.8F) : 0.8F;
             float pit = split.length >= 3 ? parseFloat(split[2], 1.0F) : 1.0F;
@@ -605,6 +617,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
 
     private Sound parseSound(String name) {
         if (name == null || name.isBlank()) return null;
+        if (name.trim().startsWith("@")) return null;
         String normalized = name.trim().toUpperCase(Locale.ROOT).replace('.', '_').replace("MINECRAFT:", "");
         try {
             return Sound.valueOf(normalized);
@@ -793,6 +806,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         room.dyingSeconds.remove(player.getUniqueId());
         room.respawnSeconds.remove(player.getUniqueId());
         playerRoom.remove(player.getUniqueId());
+        portalCooldowns.remove(player.getUniqueId());
         resetPlayer(player, room);
         InventorySnapshot snapshot = room.snapshots.remove(player.getUniqueId());
         if (snapshot != null) snapshot.restore(player);
@@ -888,6 +902,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         Location netherSpawn = roomLoc(room, data.netherSpawn, MapSide.NETHER);
         Location brickCore = roomLoc(room, data.brickCore, MapSide.BRICK);
         if (brickCore != null) brickCore.getBlock().setType(Material.RED_GLAZED_TERRACOTTA, false);
+        preparePortalMarkers(room, data);
         room.title("§x§f§f§7§c§0§0板砖守卫战", "§f核心已经出现");
         List<Player> netherPlayers = room.onlineTeam(Team.NETHER);
         if (netherPlayers.isEmpty() && !room.onlinePlayers().isEmpty()) {
@@ -913,8 +928,10 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             else setupNetherPlayer(player, netherSpawn, Objects.equals(room.corePlayer, player.getUniqueId()));
             applyGameName(player, room, team);
         }
+        placeMines(room, data);
         spawnShops(room, data);
-        refreshObsidianPools(room);
+        spawnGuards(room, data);
+        initializeObsidianChargePoints(room, data);
         createBossBars(room);
         room.broadcast(prefix() + "§x§7§D§F§F§C§8核心已生成，双方开始进攻。");
         if (room.corePlayer != null) {
@@ -1019,6 +1036,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             }
         }
         updateShopFacing(room);
+        updateGuards(room);
         updateBossBars(room);
         tickObsidianPools(room);
         tickDying(room);
@@ -1182,87 +1200,138 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     }
 
     private void tickObsidianPools(Room room) {
-        consumeObsidianDrops(room);
         refreshObsidianPools(room);
     }
 
-    private void consumeObsidianDrops(Room room) {
-        if (room.netherWorld == null || room.portalOpened) return;
-        for (Item item : room.netherWorld.getEntitiesByClass(Item.class)) {
-            ItemStack stack = item.getItemStack();
-            if (stack.getType() != Material.OBSIDIAN || stack.getAmount() <= 0) continue;
-            Block pool = cryingObsidianBelow(item.getLocation());
-            if (pool == null) continue;
-            int need = cfg("obsidian_required", 10);
-            int add = Math.min(stack.getAmount(), Math.max(0, need - room.obsidianDeposited));
-            if (add <= 0) continue;
-            room.obsidianDeposited += add;
-            if (stack.getAmount() <= add) item.remove();
-            else {
-                stack.setAmount(stack.getAmount() - add);
-                item.setItemStack(stack);
-            }
-            Location center = pool.getLocation().add(0.5, 1.1, 0.5);
-            room.broadcast(prefix() + "§x§6§6§1§9§0§0黑曜石池 §f" + room.obsidianDeposited + "§7/§f" + need);
-            pool.getWorld().spawnParticle(Particle.PORTAL, center, 48, 0.45, 0.55, 0.45, 0.12);
-            pool.getWorld().spawnParticle(Particle.REVERSE_PORTAL, center, 18, 0.3, 0.45, 0.3, 0.06);
-            playWorldSound(center, "pool.deposit", Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.85F, 1.25F);
-            if (room.obsidianDeposited >= need && !room.portalOpened) buildPortal(room);
+    private void initializeObsidianChargePoints(Room room, MapData data) {
+        room.obsidianPoolDisplays.values().forEach(Entity::remove);
+        room.obsidianPoolDisplays.clear();
+        room.obsidianChargePoints.clear();
+        room.chargedObsidianPoints.clear();
+        room.obsidianDeposited = 0;
+        room.obsidianRequired = 0;
+        room.portalOpened = false;
+        if (room.netherWorld == null) return;
+        List<Location> centers = new ArrayList<>();
+        addScanCenter(centers, roomLoc(room, data.netherSpawn, MapSide.NETHER));
+        addScanCenter(centers, roomLoc(room, data.netherPortal, MapSide.NETHER));
+        addScanCenter(centers, roomLoc(room, data.obsidianPool, MapSide.NETHER));
+        for (Player player : room.onlineTeam(Team.NETHER)) {
+            addScanCenter(centers, player.getLocation());
         }
+        int radius = Math.max(16, cfg("obsidian_auto_scan_radius", 128));
+        List<Block> candidates = findBlocksAround(room.netherWorld, centers, radius, Material.CRYING_OBSIDIAN);
+        if (candidates.isEmpty()) {
+            room.broadcast(prefix() + "§x§F§F§8§8§5§5没有识别到哭泣的黑曜石充能点。");
+            return;
+        }
+        Collections.shuffle(candidates);
+        int max = Math.max(1, Math.min(candidates.size(), cfg("obsidian_charge_max", cfg("obsidian_required", 10))));
+        int minDefault = Math.min(max, Math.max(1, Math.min(3, candidates.size())));
+        int min = Math.max(1, Math.min(max, cfg("obsidian_charge_min", minDefault)));
+        int selected = ThreadLocalRandom.current().nextInt(min, max + 1);
+        Set<String> selectedKeys = new HashSet<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            Block block = candidates.get(i);
+            String key = blockKey(block.getLocation());
+            if (i < selected) {
+                selectedKeys.add(key);
+                room.obsidianChargePoints.add(key);
+                if (block.getType() != Material.CRYING_OBSIDIAN) block.setType(Material.CRYING_OBSIDIAN, false);
+            } else {
+                block.setType(Material.OBSIDIAN, false);
+            }
+        }
+        room.obsidianRequired = selectedKeys.size();
+        room.broadcast(prefix() + "§x§6§6§1§9§0§0黑曜石门需要 §f" + room.obsidianRequired + " §x§6§6§1§9§0§0个黑曜石充能点。");
+        refreshObsidianPools(room);
     }
 
-    private Block cryingObsidianBelow(Location location) {
-        if (location == null || location.getWorld() == null) return null;
-        World world = location.getWorld();
-        int x = location.getBlockX();
-        int z = location.getBlockZ();
-        int top = location.getBlockY();
-        for (int y = top; y >= top - 2; y--) {
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    Block block = world.getBlockAt(x + dx, y, z + dz);
-                    if (block.getType() != Material.CRYING_OBSIDIAN || !block.getRelative(BlockFace.UP).getType().isAir()) continue;
-                    Location center = block.getLocation().add(0.5, 1.0, 0.5);
-                    if (center.distanceSquared(location) <= 2.25D) return block;
+    private void addScanCenter(List<Location> centers, Location location) {
+        if (location != null && location.getWorld() != null) centers.add(location.clone());
+    }
+
+    private List<Block> findBlocksAround(World world, List<Location> centers, int radius, Material material) {
+        return findBlocksAround(world, centers, radius, material, true);
+    }
+
+    private List<Block> findBlocksAround(World world, List<Location> centers, int radius, Material material, boolean loadChunks) {
+        if (world == null) return List.of();
+        Set<String> loaded = new HashSet<>();
+        Set<String> seen = new LinkedHashSet<>();
+        int chunkRadius = Math.max(1, (int) Math.ceil(radius / 16.0D));
+        for (Location center : centers) {
+            if (center == null || center.getWorld() != world) continue;
+            int chunkX = center.getBlockX() >> 4;
+            int chunkZ = center.getBlockZ() >> 4;
+            for (int cx = chunkX - chunkRadius; cx <= chunkX + chunkRadius; cx++) {
+                for (int cz = chunkZ - chunkRadius; cz <= chunkZ + chunkRadius; cz++) {
+                    String key = cx + ":" + cz;
+                    if (!loaded.add(key)) continue;
+                    if (!world.isChunkLoaded(cx, cz)) {
+                        if (!loadChunks || !world.loadChunk(cx, cz, false)) continue;
+                    }
+                    Chunk chunk = world.getChunkAt(cx, cz);
+                    int minY = world.getMinHeight();
+                    int maxY = world.getMaxHeight();
+                    for (int x = 0; x < 16; x++) {
+                        for (int z = 0; z < 16; z++) {
+                            int absoluteX = (cx << 4) + x;
+                            int absoluteZ = (cz << 4) + z;
+                            boolean nearAnyCenter = false;
+                            for (Location scanCenter : centers) {
+                                if (scanCenter.getWorld() == world
+                                        && Math.abs(absoluteX - scanCenter.getBlockX()) <= radius
+                                        && Math.abs(absoluteZ - scanCenter.getBlockZ()) <= radius) {
+                                    nearAnyCenter = true;
+                                    break;
+                                }
+                            }
+                            if (!nearAnyCenter) continue;
+                            for (int y = minY; y < maxY; y++) {
+                                Block block = chunk.getBlock(x, y, z);
+                                if (block.getType() == material) seen.add(blockKey(block.getLocation()));
+                            }
+                        }
+                    }
                 }
             }
         }
-        return null;
+        List<Block> out = new ArrayList<>();
+        for (String key : seen) {
+            Block block = blockFromKey(world, key);
+            if (block != null && block.getType() == material) out.add(block);
+        }
+        return out;
     }
 
     private void refreshObsidianPools(Room room) {
         if (room.netherWorld == null) return;
         Set<String> seen = new HashSet<>();
-        for (Player player : room.onlinePlayers()) {
-            if (player.getWorld() != room.netherWorld) continue;
-            int radius = Math.max(8, cfg("obsidian_pool_scan_radius", 24));
-            Location base = player.getLocation();
-            for (int x = base.getBlockX() - radius; x <= base.getBlockX() + radius; x++) {
-                for (int y = base.getBlockY() - 8; y <= base.getBlockY() + 8; y++) {
-                    for (int z = base.getBlockZ() - radius; z <= base.getBlockZ() + radius; z++) {
-                        Block block = room.netherWorld.getBlockAt(x, y, z);
-                        if (block.getType() != Material.CRYING_OBSIDIAN || !block.getRelative(BlockFace.UP).getType().isAir()) continue;
-                        String key = blockKey(block.getLocation());
-                        seen.add(key);
-                        Entity display = room.obsidianPoolDisplays.get(key);
-                        Location loc = block.getLocation().add(0.5, 1.18, 0.5);
-                        if (display == null || !display.isValid()) {
-                            ItemDisplay itemDisplay = room.netherWorld.spawn(loc, ItemDisplay.class, spawned -> {
-                                spawned.setItemStack(new ItemStack(Material.OBSIDIAN));
-                                spawned.setGlowing(true);
-                                spawned.setPersistent(false);
-                                spawned.setBrightness(new Display.Brightness(15, 15));
-                                spawned.setViewRange(48.0F);
-                            });
-                            room.obsidianPoolDisplays.put(key, itemDisplay);
-                        } else {
-                            Location now = display.getLocation();
-                            loc.setYaw(now.getYaw() + 18.0F);
-                            loc.setPitch(0.0F);
-                            display.teleport(loc);
-                        }
-                    }
-                }
+        for (String key : new ArrayList<>(room.obsidianChargePoints)) {
+            Block block = blockFromKey(room.netherWorld, key);
+            if (block == null || block.getType() != Material.CRYING_OBSIDIAN) {
+                room.obsidianChargePoints.remove(key);
+                continue;
+            }
+            if (!block.getRelative(BlockFace.UP).getType().isAir()) continue;
+            seen.add(key);
+            Entity display = room.obsidianPoolDisplays.get(key);
+            Location loc = block.getLocation().add(0.5, 1.18, 0.5);
+            if (display == null || !display.isValid()) {
+                ItemDisplay itemDisplay = room.netherWorld.spawn(loc, ItemDisplay.class, spawned -> {
+                    spawned.setItemStack(new ItemStack(Material.OBSIDIAN));
+                    spawned.setGlowing(true);
+                    spawned.setPersistent(false);
+                    spawned.setBrightness(new Display.Brightness(15, 15));
+                    spawned.setViewRange(48.0F);
+                });
+                room.obsidianPoolDisplays.put(key, itemDisplay);
+            } else {
+                Location now = display.getLocation();
+                loc.setYaw(now.getYaw() + 18.0F);
+                loc.setPitch(0.0F);
+                display.teleport(loc);
             }
         }
         Iterator<Map.Entry<String, Entity>> iterator = room.obsidianPoolDisplays.entrySet().iterator();
@@ -1307,6 +1376,48 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         for (Point point : data.netherTraders) spawnShop(room, point, MapSide.NETHER, Team.NETHER);
     }
 
+    private void spawnGuards(Room room, MapData data) {
+        int chance = Math.max(0, Math.min(100, cfg("guard_spawn_chance_percent", 70)));
+        for (Point point : data.brickGuards) {
+            if (ThreadLocalRandom.current().nextInt(100) < chance) spawnGuard(room, point, MapSide.BRICK, Team.BRICK);
+        }
+        for (Point point : data.netherGuards) {
+            if (ThreadLocalRandom.current().nextInt(100) < chance) spawnGuard(room, point, MapSide.NETHER, Team.NETHER);
+        }
+    }
+
+    private void spawnGuard(Room room, Point point, MapSide side, Team team) {
+        Location loc = roomLoc(room, point, side);
+        if (loc == null || loc.getWorld() == null) return;
+        LivingEntity guard;
+        if (team == Team.BRICK) {
+            guard = loc.getWorld().spawn(loc, Vindicator.class, entity -> {
+                entity.customName(Text.c("§x§f§f§7§c§0§0板砖守卫"));
+                entity.setCustomNameVisible(true);
+                entity.getEquipment().setItemInMainHand(new ItemStack(Material.IRON_AXE));
+                entity.getPersistentDataContainer().set(typeKey, PersistentDataType.STRING, "guard_brick");
+            });
+        } else {
+            guard = loc.getWorld().spawn(loc, PiglinBrute.class, entity -> {
+                entity.customName(Text.c("§x§6§6§1§9§0§0下界守卫"));
+                entity.setCustomNameVisible(true);
+                entity.setImmuneToZombification(true);
+                entity.getPersistentDataContainer().set(typeKey, PersistentDataType.STRING, "guard_nether");
+            });
+        }
+        guard.setPersistent(false);
+        guard.setRemoveWhenFarAway(false);
+        guard.getPersistentDataContainer().set(roomKey, PersistentDataType.STRING, room.id);
+        AttributeInstance maxHealth = guard.getAttribute(Attribute.MAX_HEALTH);
+        double hp = team == Team.BRICK ? 56.0D : 64.0D;
+        if (maxHealth != null) maxHealth.setBaseValue(hp);
+        guard.setHealth(Math.min(hp, maxHealth == null ? hp : maxHealth.getValue()));
+        AttributeInstance damage = guard.getAttribute(Attribute.ATTACK_DAMAGE);
+        if (damage != null) damage.setBaseValue(team == Team.BRICK ? 5.0D : 6.0D);
+        room.guardEntities.add(guard);
+        playWorldSound(loc, "guard.spawn", team == Team.BRICK ? Sound.ENTITY_VINDICATOR_AMBIENT : Sound.ENTITY_PIGLIN_BRUTE_AMBIENT, 0.65F, 1.0F);
+    }
+
     private void spawnShop(Room room, Point point, MapSide side, Team team) {
         Location loc = roomLoc(room, point, side);
         if (loc == null || loc.getWorld() == null) return;
@@ -1340,6 +1451,35 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         room.shopHealth.put(entity.getUniqueId(), 80.0D);
     }
 
+    private void updateGuards(Room room) {
+        Iterator<Entity> iterator = room.guardEntities.iterator();
+        while (iterator.hasNext()) {
+            Entity entity = iterator.next();
+            if (!(entity instanceof Mob mob) || !entity.isValid()) {
+                if (entity != null) entity.remove();
+                iterator.remove();
+                continue;
+            }
+            Team guardTeam = guardTeam(entity);
+            if (guardTeam == null || mob.getWorld() == null) continue;
+            Player nearest = null;
+            double best = 18.0D * 18.0D;
+            for (Player player : room.onlinePlayers()) {
+                if (!room.canFight(player) || room.team(player.getUniqueId()) == guardTeam || player.getWorld() != mob.getWorld()) continue;
+                double distance = player.getLocation().distanceSquared(mob.getLocation());
+                if (distance < best) {
+                    best = distance;
+                    nearest = player;
+                }
+            }
+            if (nearest == null) {
+                mob.setTarget(null);
+            } else if (mob.getTarget() == null || !mob.getTarget().getUniqueId().equals(nearest.getUniqueId())) {
+                mob.setTarget(nearest);
+            }
+        }
+    }
+
     private void placeMines(Room room, MapData data) {
         data.brickMines.forEach(p -> {
             Location loc = roomLoc(room, p, MapSide.BRICK);
@@ -1352,10 +1492,14 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     }
 
     private void openShop(Player player) {
-        openShop(player, "quick");
+        openShop(player, "quick", true);
     }
 
     private void openShop(Player player, String category) {
+        openShop(player, category, true);
+    }
+
+    private void openShop(Player player, String category, boolean playOpenSound) {
         Optional<Room> optional = activeRoom(player);
         if (optional.isEmpty() || optional.get().status != Room.Status.RUNNING || !optional.get().canFight(player)) {
             msg(player, "§x§F§F§8§8§5§5商店只会在开局后打开。");
@@ -1364,129 +1508,303 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         Room room = optional.get();
         Team team = room.team(player.getUniqueId());
         category = normalizeShopCategory(category);
-        Inventory inv = Bukkit.createInventory(player, 54, Text.c("§0" + (team == Team.BRICK ? "板砖商店" : "下界砖商店")));
+        Inventory inv = Bukkit.createInventory(player, 54, Text.c("§8Item Shop"));
         ShopCategory[] categories = shopCategories(team);
+        int[] categorySlots = {0, 1, 2, 3, 4, 5, 6, 7};
+        ItemStack topBlank = items.item(Material.BLACK_STAINED_GLASS_PANE, " ", List.of());
+        ItemStack sidePane = items.item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
+        ItemStack separator = items.item(Material.GRAY_STAINED_GLASS_PANE, "§7分类", List.of("§8点击上方图标切换"));
+        ItemStack selected = items.item(Material.LIME_STAINED_GLASS_PANE, "§a当前分类", List.of("§8" + shopCategoryName(category)));
+        inv.setItem(8, topBlank);
+        for (int slot = 9; slot <= 17; slot++) inv.setItem(slot, separator);
+        for (int slot : new int[]{18, 26, 27, 35, 36, 44, 45, 53}) inv.setItem(slot, sidePane);
         for (int i = 0; i < categories.length; i++) {
-            putShopCategory(inv, i, categories[i], category);
+            putShopCategory(inv, categorySlots[i], categories[i], category);
+            inv.setItem(9 + i, categories[i].id().equalsIgnoreCase(category) ? selected : separator);
         }
-        ItemStack line = items.item(Material.GRAY_STAINED_GLASS_PANE, "§8", List.of());
-        for (int slot = 9; slot <= 17; slot++) inv.setItem(slot, line);
-        inv.setItem(13, items.item(team.icon, team.color + "[ " + shopCategoryName(category) + " ]", List.of("§f- §a点击上方分类切换", "§f- §7下方背包可以正常整理物品")));
         List<Product> products = shopProducts(team, category);
         int[] slots = bedwarsShopSlots(products.size());
         for (int i = 0; i < Math.min(slots.length, products.size()); i++) {
             Product p = products.get(i);
             inv.setItem(slots[i], productButton(player, team, p, category, i));
         }
-        if (products.isEmpty()) inv.setItem(31, items.item(Material.PAPER, "§x§B§B§B§B§B§B[ 这个分类没有商品 ]", List.of("§f- §7换个分类看看")));
+        if ("quick".equalsIgnoreCase(category)) {
+            int[] quickSlots = bedwarsShopSlots(28);
+            ItemStack emptyQuick = items.item(Material.RED_STAINED_GLASS_PANE, "§c空的快捷购买槽位", List.of("§7更多物品在上方分类里。", "§8去分类里找更多物资"));
+            for (int i = products.size(); i < quickSlots.length; i++) {
+                inv.setItem(quickSlots[i], emptyQuick);
+            }
+        }
         player.openInventory(inv);
 
         openMenus.put(player.getUniqueId(), new OpenMenu(MenuType.SHOP, team.id + ":" + category));
-        menuSound(player, team == Team.BRICK ? Sound.ENTITY_VILLAGER_TRADE : Sound.ENTITY_PIGLIN_AMBIENT, 0.9F, 1.2F);
+        if (playOpenSound) playSound(player, "shop.open", Sound.ENTITY_VILLAGER_TRADE, 0.75F, 1.05F);
     }
 
     private String normalizeShopCategory(String category) {
         return switch ((category == null ? "quick" : category).toLowerCase(Locale.ROOT)) {
-            case "blocks", "weapons", "armor", "tools", "food", "special" -> category.toLowerCase(Locale.ROOT);
+            case "blocks", "melee", "weapons", "armor", "tools", "ranged", "potions", "utility", "food", "special" -> switch (category.toLowerCase(Locale.ROOT)) {
+                case "weapons" -> "melee";
+                case "food", "special" -> "utility";
+                default -> category.toLowerCase(Locale.ROOT);
+            };
             default -> "quick";
         };
     }
 
     private ShopCategory[] shopCategories(Team team) {
         Material blocks = team == Team.BRICK ? Material.BRICKS : Material.NETHER_BRICKS;
-        Material food = team == Team.BRICK ? Material.COOKED_BEEF : Material.ROTTEN_FLESH;
         return new ShopCategory[]{
-                new ShopCategory("quick", Material.NETHER_STAR, "快捷购买", "常用物资"),
-                new ShopCategory("blocks", blocks, "方块", "推进防守"),
-                new ShopCategory("weapons", Material.IRON_SWORD, "武器", "近战远程"),
-                new ShopCategory("armor", Material.IRON_CHESTPLATE, "护甲", "直接升级"),
-                new ShopCategory("tools", Material.IRON_PICKAXE, "工具", "稿子功能"),
-                new ShopCategory("food", food, "补给", "食物恢复"),
-                new ShopCategory("special", Material.BEACON, "特殊", "战术道具")
+                new ShopCategory("quick", Material.NETHER_STAR, "Quick Buy", "常用物资"),
+                new ShopCategory("blocks", blocks, "Blocks", "推进防守"),
+                new ShopCategory("melee", Material.IRON_SWORD, "Melee", "剑与斧"),
+                new ShopCategory("armor", Material.IRON_CHESTPLATE, "Armor", "直接升级"),
+                new ShopCategory("tools", Material.IRON_PICKAXE, "Tools", "稿子功能"),
+                new ShopCategory("ranged", Material.CROSSBOW, "Ranged", "弩与弹药"),
+                new ShopCategory("potions", Material.POTION, "Potions", "战术药水"),
+                new ShopCategory("utility", Material.BEACON, "Utility", "补给道具")
         };
     }
 
     private String shopCategoryName(String category) {
         return switch (normalizeShopCategory(category)) {
-            case "blocks" -> "方块";
-            case "weapons" -> "武器";
-            case "armor" -> "护甲";
-            case "tools" -> "工具";
-            case "food" -> "补给";
-            case "special" -> "特殊";
-            default -> "快捷购买";
+            case "blocks" -> "Blocks";
+            case "melee" -> "Melee";
+            case "armor" -> "Armor";
+            case "tools" -> "Tools";
+            case "ranged" -> "Ranged";
+            case "potions" -> "Potions";
+            case "utility" -> "Utility";
+            default -> "Quick Buy";
         };
     }
 
-    private int[] bedwarsShopSlots(int count) {
-        int capped = Math.max(1, Math.min(21, count));
-        List<Integer> slots = new ArrayList<>();
-        int rows = Math.max(1, (int) Math.ceil(capped / 7.0D));
-        int startRow = 2;
-        int left = capped;
-        for (int row = 0; row < rows && left > 0; row++) {
-            int rowCount = Math.min(7, left);
-            int startCol = 4 - rowCount / 2;
-            if (rowCount % 2 == 0) startCol++;
-            for (int col = startCol; col < startCol + rowCount; col++) {
-                slots.add((startRow + row) * 9 + col);
+    private int[] centeredRowSlots(int row, int count) {
+        int capped = Math.max(0, Math.min(9, count));
+        int start = Math.max(0, (9 - capped) / 2);
+        int[] slots = new int[capped];
+        for (int i = 0; i < capped; i++) slots[i] = row * 9 + start + i;
+        return slots;
+    }
+
+    private void fillShopFrame(Inventory inv, Material fill) {
+        ItemStack glass = items.item(fill, " ", List.of());
+        for (int slot = 0; slot < inv.getSize(); slot++) {
+            int row = slot / 9;
+            int col = slot % 9;
+            if (row == 0) {
+                if (col <= 8) inv.setItem(slot, glass);
+            } else if (row >= 1 && row <= 4) {
+                if (col == 0 || col == 8) inv.setItem(slot, glass);
+            } else {
+                inv.setItem(slot, glass);
             }
-            left -= rowCount;
         }
-        return slots.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    private List<Integer> centerShopSlots() {
+        return List.of(10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34,
+                37, 38, 39, 40, 41, 42, 43);
+    }
+
+    private int[] bedwarsShopSlots(int count) {
+        int capped = Math.max(0, Math.min(28, count));
+        int[] all = {
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34,
+                37, 38, 39, 40, 41, 42, 43,
+                46, 47, 48, 49, 50, 51, 52
+        };
+        return Arrays.copyOf(all, capped);
+    }
+
+    private ItemStack countBadge(Player player, Material material, String name, Material icon) {
+        int amount = countItem(player, material);
+        int shown = Math.max(1, Math.min(64, amount));
+        return items.item(icon, shown, name, List.of("§7当前持有", "§f" + amount));
     }
 
     private void putShopCategory(Inventory inv, int slot, ShopCategory category, String selected) {
         boolean active = category.id().equalsIgnoreCase(selected);
         List<String> lore = new ArrayList<>();
-        lore.add("§f- §a" + category.desc());
-        lore.add(active ? "§8[ 当前分类 ]" : "§8[ 点击切换 ]");
-        inv.setItem(slot, items.action(category.icon(),
-                (active ? "§x§7§D§F§F§C§8" : "§f") + "[ " + category.name() + " ]",
+        lore.add("§7" + category.desc());
+        lore.add("");
+        lore.add(active ? "§a当前分类" : "§e点击查看！");
+        ItemStack item = items.action(category.icon(),
+                (active ? "§a" : "§f") + category.name(),
                 lore,
-                "shopcat_" + category.id()));
+                "shopcat_" + category.id());
+        if (active) {
+            item.editMeta(meta -> {
+                meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+                meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+            });
+        }
+        inv.setItem(slot, item);
     }
 
     private ItemStack productButton(Player player, Team team, Product p, String category, int index) {
-        List<String> lore = new ArrayList<>(p.lore);
+        List<String> lore = new ArrayList<>();
+        for (String line : p.lore) {
+            String clean = strip(line).replaceFirst("^-\\s*", "").trim();
+            if (!clean.isEmpty()) lore.add("§7" + clean);
+        }
         Cost cost = costFor(player, team, p);
         boolean enough = countItem(player, cost.currency) >= cost.price;
         boolean killsEnough = activeRoom(player).map(room -> room.kills.getOrDefault(player.getUniqueId(), 0)).orElse(0) >= cost.killPrice;
+        boolean maxUpgrade = (p.icon == Material.IRON_PICKAXE && currentPickaxeLevel(player) >= 5)
+                || (isSword(p.icon) && currentSwordRank(player) >= swordRank(p.icon))
+                || (isArmorPiece(p.icon) && currentArmorRank(player, p.icon) >= armorRank(p.icon));
+        if (!lore.isEmpty()) lore.add("");
         if (p.icon == Material.IRON_PICKAXE) {
             int current = currentPickaxeLevel(player);
             int next = Math.min(5, Math.max(1, current + 1));
-            lore.add("§8[ 品质 ] §f" + current + " §7→ §f" + next);
+            lore.add("§7等级: §f" + current + " §8→ §f" + next);
         } else if (isSword(p.icon)) {
-            lore.add("§8[ 升级 ] §f当前 " + currentSwordRank(player) + " §7→ §f" + swordRank(p.icon));
+            lore.add("§7升级: §f" + currentSwordRank(player) + " §8→ §f" + swordRank(p.icon));
         } else if (isArmorPiece(p.icon)) {
-            lore.add("§8[ 升级 ] §f当前 " + currentArmorRank(player, p.icon) + " §7→ §f" + armorRank(p.icon));
+            lore.add("§7升级: §f" + currentArmorRank(player, p.icon) + " §8→ §f" + armorRank(p.icon));
         }
-        lore.add((enough ? "§8[ 价格 ] §f" : "§8[ 价格 ] §x§F§F§8§8§5§5") + cost.price + " §7" + cost.currencyName);
-        if (cost.killPrice > 0) lore.add((killsEnough ? "§8[ 条件 ] §f" : "§8[ 条件 ] §x§F§F§8§8§5§5") + cost.killPrice + " §7击杀数");
-        lore.add(enough && killsEnough ? "§f- §a点击购买" : "§f- §x§F§F§8§8§5§5材料不足");
-        return items.action(p.icon, p.name, lore, "buy_" + category + "_" + index);
+        lore.add("§7价格: " + (enough ? "§f" : "§c") + cost.price + " §7" + cost.currencyName);
+        if (cost.killPrice > 0) lore.add("§7需要: " + (killsEnough ? "§f" : "§c") + cost.killPrice + " §7击杀");
+        lore.add("");
+        if (maxUpgrade) {
+            lore.add("§a已经是这个品质或更高。");
+        } else {
+            lore.add(enough && killsEnough ? "§e点击购买！" : "§c你没有足够的材料！");
+        }
+        String display = (maxUpgrade || (enough && killsEnough) ? "§a" : "§c") + strip(bedwarsShopName(p, team));
+        return items.action(p.icon, p.amount, display, lore, "buy_" + category + "_" + index);
+    }
+
+    private String bedwarsShopName(Product p, Team team) {
+        return switch (p.icon) {
+            case BRICKS -> team == Team.BRICK ? "§fBricks" : "§fBricks";
+            case BRICK_STAIRS -> "§fBrick Stairs";
+            case BRICK_SLAB -> "§fBrick Slab";
+            case NETHER_BRICKS -> "§fNether Bricks";
+            case BLACKSTONE, BASALT -> "§fBlackstone";
+            case CRIMSON_PLANKS -> "§fPlanks";
+            case GLASS -> "§fGlass";
+            case END_STONE -> "§fEnd Stone";
+            case OBSIDIAN -> "§fObsidian";
+            case LADDER -> "§fLadder";
+            case COBWEB -> "§fCobweb";
+            case STONE_SWORD -> "§fStone Sword";
+            case IRON_SWORD -> "§fIron Sword";
+            case DIAMOND_SWORD -> "§fDiamond Sword";
+            case NETHERITE_SWORD -> "§fNetherite Sword";
+            case IRON_AXE -> "§fIron Axe";
+            case DIAMOND_AXE -> "§fDiamond Axe";
+            case IRON_PICKAXE -> "§fPickaxe";
+            case GOLDEN_PICKAXE -> "§fGolden Pickaxe";
+            case DIAMOND_PICKAXE -> "§fDiamond Pickaxe";
+            case NETHERITE_PICKAXE -> "§fNetherite Pickaxe";
+            case SHEARS -> "§fShears";
+            case BOW -> "§fBow";
+            case CROSSBOW -> "§fCrossbow";
+            case ARROW -> "§fArrows";
+            case WIND_CHARGE -> "§fWind Charge";
+            case SHIELD -> "§fShield";
+            case CHAINMAIL_BOOTS -> "§fChain Boots";
+            case IRON_BOOTS -> "§fIron Boots";
+            case IRON_CHESTPLATE -> "§fIron Chestplate";
+            case DIAMOND_CHESTPLATE -> "§fDiamond Chestplate";
+            case DIAMOND_LEGGINGS -> "§fDiamond Leggings";
+            case NETHERITE_CHESTPLATE -> "§fNetherite Chestplate";
+            case NETHERITE_BOOTS -> "§fNetherite Boots";
+            case POTION -> p.name.contains("跳跃") ? "§fJump Potion" : p.name.contains("迅捷") ? "§fSpeed Potion" : "§fInvisibility Potion";
+            case COOKED_BEEF -> "§fCooked Beef";
+            case ROTTEN_FLESH -> "§fRotten Flesh";
+            case GOLDEN_APPLE -> "§fGolden Apple";
+            case FIRE_CHARGE -> "§fFireball";
+            case TNT -> "§fTNT";
+            case ENDER_PEARL -> "§fEnder Pearl";
+            case WATER_BUCKET -> "§fWater Bucket";
+            case LAVA_BUCKET -> "§fLava Bucket";
+            case BEACON -> "§fBeacon";
+            default -> "§f" + strip(p.name);
+        };
     }
 
     private List<Product> shopProducts(Team team, String category) {
         List<Product> all = products(team);
         if ("quick".equalsIgnoreCase(category)) {
-            return all.stream().filter(p -> switch (p.icon) {
-                case BRICKS, NETHER_BRICKS, IRON_SWORD, STONE_SWORD, IRON_PICKAXE, MACE, COOKED_BEEF, ROTTEN_FLESH, GOLDEN_APPLE, ARROW, POTION -> true;
-                default -> false;
-            }).limit(12).toList();
+            return quickProducts(team, all);
         }
         return all.stream().filter(p -> shopCategory(p).equalsIgnoreCase(category)).toList();
     }
 
+    private List<Product> quickProducts(Team team, List<Product> all) {
+        List<Product> quick = new ArrayList<>();
+        if (team == Team.BRICK) {
+            addQuick(quick, all, Material.BRICKS);
+            addQuick(quick, all, Material.GLASS);
+            addQuick(quick, all, Material.END_STONE);
+            addQuick(quick, all, Material.OBSIDIAN);
+            addQuick(quick, all, Material.IRON_SWORD);
+            addQuick(quick, all, Material.IRON_AXE);
+            addQuick(quick, all, Material.IRON_PICKAXE);
+            addQuick(quick, all, Material.SHEARS);
+            addQuick(quick, all, Material.IRON_CHESTPLATE);
+            addQuick(quick, all, Material.DIAMOND_CHESTPLATE);
+            addQuick(quick, all, Material.CROSSBOW);
+            addQuick(quick, all, Material.ARROW);
+            addQuick(quick, all, Material.BOW);
+            addQuick(quick, all, Material.WIND_CHARGE);
+            addQuick(quick, all, Material.COOKED_BEEF);
+            addQuick(quick, all, Material.GOLDEN_APPLE);
+            addQuick(quick, all, Material.FIRE_CHARGE);
+            addQuick(quick, all, Material.TNT);
+            addQuick(quick, all, Material.ENDER_PEARL);
+            addQuick(quick, all, Material.MACE);
+            addQuick(quick, all, Material.BEACON);
+        } else {
+            addQuick(quick, all, Material.NETHER_BRICKS);
+            addQuick(quick, all, Material.BLACKSTONE);
+            addQuick(quick, all, Material.CRIMSON_PLANKS);
+            addQuick(quick, all, Material.OBSIDIAN);
+            addQuick(quick, all, Material.STONE_SWORD);
+            addQuick(quick, all, Material.IRON_AXE);
+            addQuick(quick, all, Material.IRON_PICKAXE);
+            addQuick(quick, all, Material.SHEARS);
+            addQuick(quick, all, Material.IRON_CHESTPLATE);
+            addQuick(quick, all, Material.DIAMOND_LEGGINGS);
+            addQuick(quick, all, Material.CROSSBOW);
+            addQuick(quick, all, Material.ARROW);
+            addQuick(quick, all, Material.BOW);
+            addQuick(quick, all, Material.WIND_CHARGE);
+            addQuick(quick, all, Material.ROTTEN_FLESH);
+            addQuick(quick, all, Material.GOLDEN_APPLE);
+            addQuick(quick, all, Material.FIRE_CHARGE);
+            addQuick(quick, all, Material.TNT);
+            addQuick(quick, all, Material.ENDER_PEARL);
+            addQuick(quick, all, Material.MACE);
+            addQuick(quick, all, Material.POTION);
+        }
+        return quick.stream().limit(21).toList();
+    }
+
+    private void addQuick(List<Product> quick, List<Product> all, Material material) {
+        all.stream()
+                .filter(product -> product.icon == material)
+                .filter(product -> quick.stream().noneMatch(existing -> existing == product))
+                .findFirst()
+                .ifPresent(quick::add);
+    }
+
     private String shopCategory(Product p) {
         return switch (p.icon) {
-            case BRICKS, BRICK_STAIRS, BRICK_SLAB, NETHER_BRICKS, BLACKSTONE, OBSIDIAN -> "blocks";
-            case IRON_SWORD, STONE_SWORD, NETHERITE_SWORD, IRON_AXE, CROSSBOW, ARROW, IRON_SPEAR, GOLDEN_SPEAR, MACE, WIND_CHARGE -> "weapons";
-            case IRON_CHESTPLATE, DIAMOND_CHESTPLATE, DIAMOND_LEGGINGS, SHIELD -> "armor";
-            case IRON_PICKAXE, STONE_PICKAXE, DIAMOND_PICKAXE -> "tools";
-            case COOKED_BEEF, ROTTEN_FLESH, GOLDEN_APPLE -> "food";
-            case POTION -> "special";
-            default -> "special";
+            case BRICKS, BRICK_STAIRS, BRICK_SLAB, NETHER_BRICKS, BLACKSTONE, BASALT, CRIMSON_PLANKS, GLASS, END_STONE, OBSIDIAN, LADDER, COBWEB -> "blocks";
+            case IRON_SWORD, STONE_SWORD, DIAMOND_SWORD, NETHERITE_SWORD, IRON_AXE, DIAMOND_AXE, IRON_SPEAR, GOLDEN_SPEAR, MACE -> "melee";
+            case CHAINMAIL_BOOTS, IRON_BOOTS, IRON_CHESTPLATE, DIAMOND_CHESTPLATE, DIAMOND_LEGGINGS, NETHERITE_CHESTPLATE, NETHERITE_BOOTS, SHIELD -> "armor";
+            case IRON_PICKAXE, STONE_PICKAXE, DIAMOND_PICKAXE, SHEARS -> "tools";
+            case BOW, CROSSBOW, ARROW, WIND_CHARGE -> "ranged";
+            case POTION, SPLASH_POTION -> "potions";
+            case COOKED_BEEF, ROTTEN_FLESH, GOLDEN_APPLE, ENDER_PEARL, FIRE_CHARGE, TNT, WATER_BUCKET, LAVA_BUCKET, BEACON -> "utility";
+            default -> "utility";
         };
     }
 
@@ -1507,7 +1825,26 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
                 new Product(Material.COOKED_BEEF, 8, "§x§F§F§B§B§6§6热饭", List.of("§f- §a快速补给"), 10, Material.BRICK, "板砖"),
                 new Product(Material.GOLDEN_APPLE, 1, "§x§F§F§B§B§6§6应急苹果", List.of("§f- §a关键时刻吃"), 2, Material.DIAMOND, "钻石"),
                 new Product(Material.BEACON, 1, "§x§7§D§F§F§C§8战场信标", List.of("§f- §a放置后给附近队友发光提示"), 8, Material.DIAMOND, "钻石"),
-                new Product(Material.IRON_PICKAXE, 1, "§x§e§f§4§d§0§0狐稿升级券", List.of("§f- §a升级手上的狐稿", "§f- §7最高可升到下界合金稿"), 3, Material.DIAMOND, "钻石", 1)
+                new Product(Material.IRON_PICKAXE, 1, "§x§e§f§4§d§0§0狐稿升级券", List.of("§f- §a升级手上的狐稿", "§f- §7最高可升到下界合金稿"), 3, Material.DIAMOND, "钻石", 1),
+                new Product(Material.GLASS, 16, "§x§f§f§7§c§0§0防爆玻璃", List.of("§f- §a补充视野防线"), 10, Material.BRICK, "板砖"),
+                new Product(Material.END_STONE, 16, "§x§F§F§B§B§6§6硬化底石", List.of("§f- §a更适合堵口"), 4, Material.IRON_INGOT, "铁矿"),
+                new Product(Material.LADDER, 16, "§x§F§F§B§B§6§6脚手梯", List.of("§f- §a快速爬上防线"), 8, Material.BRICK, "板砖"),
+                new Product(Material.COBWEB, 2, "§x§F§F§B§B§6§6束缚网", List.of("§f- §a拖慢突进节奏"), 2, Material.EMERALD, "绿宝石"),
+                new Product(Material.OBSIDIAN, 4, "§x§6§6§4§4§9§9黑曜石防线", List.of("§f- §a最硬防守材料"), 5, Material.DIAMOND, "钻石"),
+                new Product(Material.DIAMOND_SWORD, 1, "§x§7§D§F§F§C§8钻石切砖剑", List.of("§f- §a直接升级当前剑"), 3, Material.DIAMOND, "钻石", 1),
+                new Product(Material.NETHERITE_SWORD, 1, "§x§8§8§8§8§8§8合金守卫剑", List.of("§f- §a顶级近战升级"), 2, Material.NETHERITE_SCRAP, "合金碎片", 3),
+                new Product(Material.DIAMOND_AXE, 1, "§x§7§D§F§F§C§8破盾钻斧", List.of("§f- §a压制持盾目标"), 4, Material.DIAMOND, "钻石", 1),
+                new Product(Material.BOW, 1, "§x§f§f§7§c§0§0稳弦弓", List.of("§f- §a中距离防守"), 18, Material.BRICK, "板砖"),
+                new Product(Material.WIND_CHARGE, 4, "§x§7§D§F§F§C§8闪光风弹", List.of("§f- §a打开距离或救命"), 2, Material.EMERALD, "绿宝石"),
+                new Product(Material.CHAINMAIL_BOOTS, 1, "§x§C§0§C§0§C§0锁链靴", List.of("§f- §a直接升级靴子"), 18, Material.BRICK, "板砖"),
+                new Product(Material.NETHERITE_CHESTPLATE, 1, "§x§8§8§8§8§8§8合金核心甲", List.of("§f- §a顶级护甲升级"), 3, Material.NETHERITE_SCRAP, "合金碎片", 3),
+                new Product(Material.SHEARS, 1, "§x§F§F§B§B§6§6拆网剪", List.of("§f- §a处理蛛网"), 12, Material.BRICK, "板砖"),
+                new Product(Material.POTION, 1, "§x§7§D§F§F§C§8迅捷药水", List.of("§f- §a快速支援"), 3, Material.EMERALD, "绿宝石"),
+                new Product(Material.POTION, 1, "§x§B§B§F§F§B§B跳跃药水", List.of("§f- §a越过防线"), 3, Material.EMERALD, "绿宝石"),
+                new Product(Material.FIRE_CHARGE, 2, "§x§F§F§8§8§5§5火焰弹", List.of("§f- §a逼退进攻路线"), 2, Material.GOLD_INGOT, "金锭"),
+                new Product(Material.TNT, 1, "§x§F§F§6§6§6§6TNT 突击包", List.of("§f- §a拆开局部防线"), 3, Material.GOLD_INGOT, "金锭"),
+                new Product(Material.ENDER_PEARL, 1, "§x§B§B§8§8§F§F缓存珍珠", List.of("§f- §a快速回防或反打"), 4, Material.EMERALD, "绿宝石", 1),
+                new Product(Material.WATER_BUCKET, 1, "§x§7§D§F§F§C§8救援水桶", List.of("§f- §a防摔与灭火"), 2, Material.EMERALD, "绿宝石")
         );
         return List.of(
                 new Product(Material.NETHER_BRICKS, 32, "§x§6§6§1§9§0§0下界砖包", List.of("§f- §a搭建突袭路线"), 16, Material.NETHER_BRICK, "下界砖"),
@@ -1527,7 +1864,23 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
                 new Product(Material.GOLDEN_APPLE, 1, "§x§F§F§B§B§6§6缓存苹果", List.of("§f- §a突围前吃"), 3, Material.GOLD_NUGGET, "金粒矿"),
                 new Product(Material.POTION, 1, "§x§6§6§1§9§0§0雾隐药水", List.of("§f- §a短时间隐藏进攻痕迹", "§f- §7隐身或蹲下时挖核心不会显示名字"), 4, Material.GOLD_NUGGET, "金粒矿"),
                 new Product(Material.BEACON, 1, "§x§7§D§F§F§C§8天气狐信标", List.of("§f- §a标记战线"), 6, Material.GOLD_NUGGET, "金粒矿"),
-                new Product(Material.NETHERITE_SWORD, 1, "§x§6§6§1§9§0§0核心保护协议", List.of("§f- §a守护核心玩家"), 9, Material.GOLD_NUGGET, "金粒矿", 3)
+                new Product(Material.NETHERITE_SWORD, 1, "§x§6§6§1§9§0§0核心保护协议", List.of("§f- §a守护核心玩家"), 9, Material.GOLD_NUGGET, "金粒矿", 3),
+                new Product(Material.BASALT, 24, "§x§6§6§1§9§0§0玄武岩柱", List.of("§f- §a垫高路线"), 8, Material.QUARTZ, "石英"),
+                new Product(Material.CRIMSON_PLANKS, 24, "§x§9§9§2§2§2§2绯红桥板", List.of("§f- §a快速铺桥"), 10, Material.NETHER_BRICK, "下界砖"),
+                new Product(Material.GLASS, 16, "§x§6§6§1§9§0§0暗纹玻璃", List.of("§f- §a观察板砖防守"), 8, Material.NETHER_BRICK, "下界砖"),
+                new Product(Material.LADDER, 16, "§x§F§F§B§B§6§6攀岩梯", List.of("§f- §a绕上板砖核心"), 8, Material.NETHER_BRICK, "下界砖"),
+                new Product(Material.COBWEB, 2, "§x§F§F§B§B§6§6灵魂网", List.of("§f- §a卡住追击者"), 2, Material.QUARTZ, "石英"),
+                new Product(Material.IRON_SWORD, 1, "§x§6§6§1§9§0§0熔铁剑", List.of("§f- §a直接升级当前剑"), 22, Material.NETHER_BRICK, "下界砖"),
+                new Product(Material.BOW, 1, "§x§6§6§1§9§0§0裂弦弓", List.of("§f- §a远程补伤害"), 16, Material.NETHER_BRICK, "下界砖"),
+                new Product(Material.NETHERITE_BOOTS, 1, "§x§8§8§8§8§8§8合金突袭靴", List.of("§f- §a直接升级靴子"), 2, Material.NETHERITE_SCRAP, "远古残骸", 2),
+                new Product(Material.SHIELD, 1, "§x§6§6§1§9§0§0玄武盾", List.of("§f- §a保护核心玩家"), 18, Material.NETHER_BRICK, "下界砖"),
+                new Product(Material.SHEARS, 1, "§x§F§F§B§B§6§6裂网剪", List.of("§f- §a处理蛛网"), 10, Material.NETHER_BRICK, "下界砖"),
+                new Product(Material.POTION, 1, "§x§7§D§F§F§C§8迅捷药水", List.of("§f- §a快速冲门"), 3, Material.QUARTZ, "石英"),
+                new Product(Material.POTION, 1, "§x§B§B§F§F§B§B跳跃药水", List.of("§f- §a翻过核心防线"), 3, Material.QUARTZ, "石英"),
+                new Product(Material.FIRE_CHARGE, 2, "§x§F§F§8§8§5§5烈焰弹", List.of("§f- §a逼退防守点"), 2, Material.GOLD_NUGGET, "金粒矿"),
+                new Product(Material.TNT, 1, "§x§F§F§6§6§6§6TNT 矿车灵感", List.of("§f- §a参考闪光打法的爆破物资"), 3, Material.GOLD_NUGGET, "金粒矿"),
+                new Product(Material.ENDER_PEARL, 1, "§x§B§B§8§8§F§F盐霜珍珠", List.of("§f- §a突入或脱离战场"), 4, Material.QUARTZ, "石英", 1),
+                new Product(Material.LAVA_BUCKET, 1, "§x§F§F§8§8§5§5熔岩桶", List.of("§f- §a切断追击路线"), 3, Material.GOLD_NUGGET, "金粒矿")
         );
     }
 
@@ -1578,7 +1931,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         }
         msg(player, "§x§7§D§F§F§C§8已购买 §f" + strip(p.name) + "§x§7§D§F§F§C§8。");
         playSound(player, p.icon == Material.IRON_PICKAXE || isSword(p.icon) || isArmorPiece(p.icon) ? "buy.upgrade" : "buy.success", Sound.ENTITY_ITEM_PICKUP, 0.9F, 1.35F);
-        openShop(player, category);
+        openShop(player, category, false);
     }
 
     private Cost costFor(Player player, Team team, Product product) {
@@ -1612,9 +1965,20 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             armor.setTrim(new ArmorTrim(team == Team.BRICK ? TrimMaterial.DIAMOND : TrimMaterial.GOLD, TrimPattern.BOLT));
             stack.setItemMeta(armor);
         }
-        if (p.icon == Material.POTION && stack.getItemMeta() instanceof PotionMeta potion) {
-            potion.setBasePotionType(PotionType.INVISIBILITY);
-            potion.setColor(Color.fromRGB(0x2d1738));
+        if ((p.icon == Material.POTION || p.icon == Material.SPLASH_POTION) && stack.getItemMeta() instanceof PotionMeta potion) {
+            if (p.name.contains("迅捷")) {
+                potion.setBasePotionType(PotionType.SWIFTNESS);
+                potion.setColor(Color.fromRGB(0x66ccff));
+                potion.addCustomEffect(new PotionEffect(PotionEffectType.SPEED, 20 * 35, 1), true);
+            } else if (p.name.contains("跳跃")) {
+                potion.setBasePotionType(PotionType.LEAPING);
+                potion.setColor(Color.fromRGB(0x99ff99));
+                potion.addCustomEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, 20 * 35, 1), true);
+            } else {
+                potion.setBasePotionType(PotionType.INVISIBILITY);
+                potion.setColor(Color.fromRGB(0x2d1738));
+                potion.addCustomEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 20 * 30, 0), true);
+            }
             stack.setItemMeta(potion);
         }
         return stack;
@@ -1762,6 +2126,9 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     private record Cost(int price, Material currency, String currencyName, int killPrice) {
     }
 
+    private record PortalLayout(Location base, List<Location> frame, List<Location> interior, Axis axis) {
+    }
+
     private void enterEdit(Player player, MapSide side) {
         if (!editSessions.containsKey(player.getUniqueId())) editSessions.put(player.getUniqueId(), new EditSession(side, new InventorySnapshot(player)));
         else editSessions.put(player.getUniqueId(), new EditSession(side, editSessions.get(player.getUniqueId()).snapshot()));
@@ -1815,7 +2182,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         player.getInventory().clear();
         player.getInventory().setItem(1, items.tool(Material.PAPER, "§x§7§D§F§F§C§8[ 出生点 ]", List.of("§f- §a设置玩家进入位置"), "toolkit_page_spawn", Material.RESPAWN_ANCHOR));
         player.getInventory().setItem(3, items.tool(Material.PAPER, "§x§7§D§F§F§C§8[ 商人 ]", List.of("§f- §a放置交易实体"), "toolkit_page_trader", session.side() == MapSide.NETHER ? Material.PIGLIN_SPAWN_EGG : Material.VILLAGER_SPAWN_EGG));
-        player.getInventory().setItem(5, items.tool(Material.PAPER, "§x§7§D§F§F§C§8[ 目标点 ]", List.of("§f- §a设置核心与门位置", "§f- §7矿物与黑曜石池由地图方块自动识别"), "toolkit_page_object", session.side() == MapSide.NETHER ? Material.CRYING_OBSIDIAN : Material.BRICKS));
+        player.getInventory().setItem(5, items.tool(Material.PAPER, "§x§7§D§F§F§C§8[ 目标点 ]", List.of("§f- §a设置核心与门位置", "§f- §7矿物与充能点由地图方块自动识别"), "toolkit_page_object", session.side() == MapSide.NETHER ? Material.CRYING_OBSIDIAN : Material.BRICKS));
         player.getInventory().setItem(7, items.tool(Material.PAPER, "§x§7§D§F§F§C§8[ 检查 ]", List.of("§f- §a检查地图元素"), "toolkit_page_check", Material.SPYGLASS));
         player.getInventory().setItem(8, items.tool(Material.PAPER, "§x§F§F§8§8§5§5[ 关闭 ]", List.of("§f- §7恢复打开前物品栏"), "toolkit_close", Material.BARRIER));
         player.updateInventory();
@@ -1837,21 +2204,25 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             }
         } else if (page.equals("trader")) {
             if (side == MapSide.BRICK) {
-                player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§F§F§8§8§2§2[ 板砖商人 ]", List.of("§f- §a右键添加当前位置"), "add_brick_trader", Material.VILLAGER_SPAWN_EGG));
+                player.getInventory().setItem(3, items.tool(Material.PAPER, "§x§F§F§8§8§2§2[ 板砖商人 ]", List.of("§f- §a右键添加当前位置"), "add_brick_trader", Material.VILLAGER_SPAWN_EGG));
+                player.getInventory().setItem(5, items.tool(Material.PAPER, "§x§F§F§8§8§2§2[ 板砖守卫 ]", List.of("§f- §a右键添加当前位置", "§f- §770% 概率会在开局出现"), "add_brick_guard", Material.IRON_GOLEM_SPAWN_EGG));
             } else if (side == MapSide.NETHER) {
-                player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§6§6§1§9§0§0[ 下界商人 ]", List.of("§f- §a右键添加当前位置"), "add_nether_trader", Material.PIGLIN_SPAWN_EGG));
+                player.getInventory().setItem(3, items.tool(Material.PAPER, "§x§6§6§1§9§0§0[ 下界商人 ]", List.of("§f- §a右键添加当前位置"), "add_nether_trader", Material.PIGLIN_SPAWN_EGG));
+                player.getInventory().setItem(5, items.tool(Material.PAPER, "§x§6§6§1§9§0§0[ 下界守卫 ]", List.of("§f- §a右键添加当前位置", "§f- §770% 概率会在开局出现"), "add_nether_guard", Material.PIGLIN_BRUTE_SPAWN_EGG));
             } else {
                 player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§B§B§B§B§B§B[ 大厅无商人 ]", List.of("§f- §7返回选择其他分类"), "toolkit_back", Material.GRAY_DYE));
             }
         } else if (page.equals("object")) {
             if (side == MapSide.BRICK) {
                 player.getInventory().setItem(2, items.tool(Material.PAPER, "§x§F§F§8§8§2§2[ 板砖核心 ]", List.of("§f- §a右键方块保存"), "set_brick_core", Material.RED_GLAZED_TERRACOTTA));
-                player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§F§F§8§8§2§2[ 板砖门 ]", List.of("§f- §a右键保存门位置"), "set_brick_portal", Material.OBSIDIAN));
+                player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§F§F§8§8§2§2[ 板砖门 ]", List.of("§f- §a右键保存门位置", "§f- §7附近或地图中的紫色混凝土粉末会作为门面"), "set_brick_portal", Material.OBSIDIAN));
                 player.getInventory().setItem(6, items.tool(Material.PAPER, "§x§F§F§8§8§5§5[ 清空商人 ]", List.of("§f- §c清空已添加的商人"), "clear_brick_points", Material.REDSTONE_BLOCK));
+                player.getInventory().setItem(7, items.tool(Material.PAPER, "§x§F§F§8§8§5§5[ 清空守卫 ]", List.of("§f- §c清空已添加的守卫"), "clear_brick_guards", Material.BARRIER));
             } else if (side == MapSide.NETHER) {
                 player.getInventory().setItem(2, items.tool(Material.PAPER, "§x§6§6§1§9§0§0[ 下界门 ]", List.of("§f- §a右键保存门位置"), "set_nether_portal", Material.CRYING_OBSIDIAN));
-                player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§6§6§1§9§0§0[ 黑曜石池提示 ]", List.of("§f- §a直接在地图放哭泣的黑曜石", "§f- §7不需要手动设置"), "map_check", Material.CRYING_OBSIDIAN));
+                player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§6§6§1§9§0§0[ 充能点提示 ]", List.of("§f- §a直接在地图放哭泣的黑曜石", "§f- §7紫色混凝土粉末会识别成门面"), "map_check", Material.CRYING_OBSIDIAN));
                 player.getInventory().setItem(6, items.tool(Material.PAPER, "§x§F§F§8§8§5§5[ 清空商人 ]", List.of("§f- §c清空已添加的商人"), "clear_nether_points", Material.REDSTONE_BLOCK));
+                player.getInventory().setItem(7, items.tool(Material.PAPER, "§x§F§F§8§8§5§5[ 清空守卫 ]", List.of("§f- §c清空已添加的守卫"), "clear_nether_guards", Material.BARRIER));
             } else {
                 player.getInventory().setItem(4, items.tool(Material.PAPER, "§x§B§B§B§B§B§B[ 大厅无目标点 ]", List.of("§f- §7返回选择其他分类"), "toolkit_back", Material.GRAY_DYE));
             }
@@ -1919,19 +2290,33 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             case "set_brick_core" -> writePoint(player, "brick.core", loc, "板砖核心", session.side());
             case "set_brick_portal" -> writePoint(player, "brick.portal", loc, "板砖门位置", session.side());
             case "set_nether_portal" -> writePoint(player, "nether.portal", loc, "下界门位置", session.side());
-            case "set_obsidian_pool" -> writePoint(player, "nether.obsidian_pool", loc, "黑曜石池", session.side());
+            case "set_obsidian_pool" -> writePoint(player, "nether.obsidian_pool", loc, "充能扫描中心", session.side());
             case "add_brick_trader" -> addPoint(player, "brick.traders", player.getLocation(), "板砖商人", session.side());
             case "add_nether_trader" -> addPoint(player, "nether.traders", player.getLocation(), "下界商人", session.side());
+            case "add_brick_guard" -> addPoint(player, "brick.guards", player.getLocation(), "板砖守卫", session.side());
+            case "add_nether_guard" -> addPoint(player, "nether.guards", player.getLocation(), "下界守卫", session.side());
             case "clear_brick_points" -> {
                 maps.clear("brick.traders");
                 maps.refreshPreview(player, session.side());
                 msg(player, "§x§F§F§B§B§6§6已清空板砖商人。");
                 feedback(player, false);
             }
+            case "clear_brick_guards" -> {
+                maps.clear("brick.guards");
+                maps.refreshPreview(player, session.side());
+                msg(player, "§x§F§F§B§B§6§6已清空板砖守卫。");
+                feedback(player, false);
+            }
             case "clear_nether_points" -> {
                 maps.clear("nether.traders");
                 maps.refreshPreview(player, session.side());
                 msg(player, "§x§F§F§B§B§6§6已清空下界商人。");
+                feedback(player, false);
+            }
+            case "clear_nether_guards" -> {
+                maps.clear("nether.guards");
+                maps.refreshPreview(player, session.side());
+                msg(player, "§x§F§F§B§B§6§6已清空下界守卫。");
                 feedback(player, false);
             }
         }
@@ -1995,6 +2380,19 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         long last = clickCooldowns.getOrDefault(player.getUniqueId(), 0L);
         if (now - last < 180L) return;
         clickCooldowns.put(player.getUniqueId(), now);
+        if (action.startsWith("shopcat_")) {
+            playSound(player, "shop.category", Sound.UI_BUTTON_CLICK, 0.55F, 1.45F);
+            openShop(player, action.substring(8), false);
+            return;
+        }
+        if (action.startsWith("buy_")) {
+            String payload = action.substring(4);
+            int split = payload.lastIndexOf('_');
+            if (split > 0) {
+                buy(player, payload.substring(0, split), Integer.parseInt(payload.substring(split + 1)));
+            }
+            return;
+        }
         playSound(player, "menu.click", Sound.UI_BUTTON_CLICK, 0.5F, 1.7F);
         if (action.equals("close")) {
             player.closeInventory();
@@ -2036,17 +2434,6 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         if (action.startsWith("set_") || action.startsWith("add_") || action.startsWith("clear_") || action.equals("give_toolkit")) {
             handleEditAction(player, action);
             return;
-        }
-        if (action.startsWith("buy_")) {
-            String payload = action.substring(4);
-            int split = payload.lastIndexOf('_');
-            if (split > 0) {
-                buy(player, payload.substring(0, split), Integer.parseInt(payload.substring(split + 1)));
-            }
-            return;
-        }
-        if (action.startsWith("shopcat_")) {
-            openShop(player, action.substring(8));
         }
     }
 
@@ -2129,6 +2516,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             event.setCancelled(true);
             return;
         }
+        if (handleObsidianChargeInteract(event, active)) return;
         ItemStack item = event.getItem();
         String action = items.actionOf(item);
         if (action == null) return;
@@ -2156,6 +2544,47 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             event.setCancelled(true);
             handleEditAction(player, action);
         }
+    }
+
+    private boolean handleObsidianChargeInteract(PlayerInteractEvent event, Optional<Room> active) {
+        if (active.isEmpty() || active.get().status != Room.Status.RUNNING) return false;
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return false;
+        Block block = event.getClickedBlock();
+        if (block.getType() != Material.CRYING_OBSIDIAN) return false;
+        Room room = active.get();
+        if (room.netherWorld == null || block.getWorld() != room.netherWorld) return false;
+        event.setCancelled(true);
+        Player player = event.getPlayer();
+        String key = blockKey(block.getLocation());
+        if (!room.obsidianChargePoints.contains(key)) {
+            block.setType(Material.OBSIDIAN, false);
+            player.sendActionBar(Text.c("§x§6§6§1§9§0§0这个点没有被选为充能点"));
+            playSound(player, "pool.protected", Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.55F, 1.2F);
+            return true;
+        }
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand.getType() != Material.OBSIDIAN || hand.getAmount() <= 0) {
+            player.sendActionBar(Text.c("§x§6§6§1§9§0§0拿着黑曜石右键充能点"));
+            playSound(player, "pool.protected", Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.55F, 1.2F);
+            return true;
+        }
+        if (hand.getAmount() <= 1) player.getInventory().setItemInMainHand(null);
+        else hand.setAmount(hand.getAmount() - 1);
+        block.setType(Material.OBSIDIAN, false);
+        room.obsidianChargePoints.remove(key);
+        room.chargedObsidianPoints.add(key);
+        room.obsidianDeposited++;
+        Entity display = room.obsidianPoolDisplays.remove(key);
+        if (display != null) display.remove();
+        Location center = block.getLocation().add(0.5, 1.1, 0.5);
+        block.getWorld().spawnParticle(Particle.PORTAL, center, 54, 0.45, 0.55, 0.45, 0.12);
+        block.getWorld().spawnParticle(Particle.REVERSE_PORTAL, center, 20, 0.3, 0.45, 0.3, 0.06);
+        playWorldSound(center, "pool.deposit", Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.85F, 1.25F);
+        room.broadcast(prefix() + "§x§6§6§1§9§0§0黑曜石门 §f" + room.obsidianDeposited + "§7/§f" + room.obsidianRequired);
+        if (room.obsidianRequired > 0 && room.obsidianDeposited >= room.obsidianRequired && !room.portalOpened) {
+            buildPortal(room);
+        }
+        return true;
     }
 
     @EventHandler
@@ -2247,6 +2676,65 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         }
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPortal(PlayerPortalEvent event) {
+        Player player = event.getPlayer();
+        Optional<Room> optional = activeRoom(player);
+        if (optional.isEmpty()) return;
+        event.setCancelled(true);
+        try {
+            event.setCanCreatePortal(false);
+        } catch (Throwable ignored) {
+        }
+        Room room = optional.get();
+        if (room.status != Room.Status.RUNNING || !room.portalOpened || !room.canFight(player)) return;
+        long now = System.currentTimeMillis();
+        long next = portalCooldowns.getOrDefault(player.getUniqueId(), 0L);
+        if (now < next) return;
+        Location target = portalTarget(room, player.getWorld());
+        if (target == null) {
+            player.sendActionBar(Text.c("§x§F§F§8§8§5§5另一侧传送门还没有准备好"));
+            return;
+        }
+        portalCooldowns.put(player.getUniqueId(), now + 1600L);
+        player.teleport(target, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        player.setFallDistance(0.0F);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 40, 2, false, false, false));
+        player.sendActionBar(Text.c(player.getWorld() == room.brickWorld ? "§x§f§f§7§c§0§0已抵达板砖战场" : "§x§6§6§1§9§0§0已抵达下界战场"));
+        playSound(player, "portal.travel", Sound.BLOCK_PORTAL_TRAVEL, 0.65F, 1.0F);
+    }
+
+    private Location portalTarget(Room room, World fromWorld) {
+        if (fromWorld == null) return null;
+        if (fromWorld == room.brickWorld) return portalExit(room.netherPortalBlocks, room.netherPortalAxis, roomLoc(room, maps.read().netherSpawn, MapSide.NETHER));
+        if (fromWorld == room.netherWorld) return portalExit(room.brickPortalBlocks, room.brickPortalAxis, roomLoc(room, maps.read().brickSpawn, MapSide.BRICK));
+        return null;
+    }
+
+    private Location portalExit(List<Location> blocks, Axis axis, Location fallback) {
+        if (blocks == null || blocks.isEmpty()) return fallback == null ? null : fallback.clone();
+        World world = blocks.getFirst().getWorld();
+        if (world == null) return fallback == null ? null : fallback.clone();
+        double x = blocks.stream().mapToInt(Location::getBlockX).average().orElse(blocks.getFirst().getBlockX()) + 0.5D;
+        double z = blocks.stream().mapToInt(Location::getBlockZ).average().orElse(blocks.getFirst().getBlockZ()) + 0.5D;
+        int y = blocks.stream().mapToInt(Location::getBlockY).min().orElse(blocks.getFirst().getBlockY());
+        Location center = new Location(world, x, y, z);
+        Location first = center.clone().add(axis == Axis.Z ? 2.0D : 0.0D, 0.0D, axis == Axis.X ? 2.0D : 0.0D);
+        first.setYaw(axis == Axis.Z ? 90.0F : 0.0F);
+        if (isSafeStand(first)) return first.add(0.0D, 0.1D, 0.0D);
+        Location second = center.clone().subtract(axis == Axis.Z ? 2.0D : 0.0D, 0.0D, axis == Axis.X ? 2.0D : 0.0D);
+        second.setYaw(axis == Axis.Z ? -90.0F : 180.0F);
+        if (isSafeStand(second)) return second.add(0.0D, 0.1D, 0.0D);
+        return fallback == null ? center.add(0.0D, 0.1D, 0.0D) : fallback.clone();
+    }
+
+    private boolean isSafeStand(Location loc) {
+        if (loc == null || loc.getWorld() == null) return false;
+        Block feet = loc.getBlock();
+        Block head = feet.getRelative(BlockFace.UP);
+        return feet.getType().isAir() && head.getType().isAir();
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player viewer = event.getPlayer();
@@ -2306,6 +2794,13 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         }
         Team team = room.team(player.getUniqueId());
         Block block = event.getBlock();
+        if (isProtectedTerrainBlock(block.getType())) {
+            event.setCancelled(true);
+            event.setDropItems(false);
+            player.sendActionBar(Text.c("§x§F§F§8§8§5§5这个方块不能破坏。"));
+            playSound(player, "block.protected", Sound.BLOCK_NOTE_BLOCK_BASS, 0.38F, 0.78F);
+            return;
+        }
         String blockKey = blockKey(block.getLocation());
         if (room.placedBlocks.remove(blockKey)) {
             event.setCancelled(true);
@@ -2328,7 +2823,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             damageBrickCore(room, player, 35);
             return;
         }
-        if (block.getType() == Material.BRICKS || block.getType() == Material.NETHER_BRICKS || block.getType() == Material.OBSIDIAN) {
+        if (isMineBlock(block.getType())) {
             handleMineBreak(room, player, block);
             event.setCancelled(true);
             event.setDropItems(false);
@@ -2336,7 +2831,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         }
         if (block.getType() == Material.CRYING_OBSIDIAN) {
             event.setCancelled(true);
-            player.sendActionBar(Text.c("§x§6§6§1§9§0§0哭泣的黑曜石会自动接收黑曜石。"));
+            player.sendActionBar(Text.c("§x§6§6§1§9§0§0拿着黑曜石右键它来给传送门充能。"));
             playSound(player, "pool.protected", Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.55F, 1.2F);
             return;
         }
@@ -2350,43 +2845,105 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         restoreBlockLater(block.getLocation(), original, cfg("block_restore_seconds", 20));
     }
 
+    private boolean isProtectedTerrainBlock(Material material) {
+        return material == Material.GRASS_BLOCK || material == Material.DIRT || material == Material.NETHERRACK;
+    }
+
+    private boolean isMineBlock(Material material) {
+        return switch (material) {
+            case BRICKS, NETHER_BRICKS, OBSIDIAN,
+                 DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE, DIAMOND_BLOCK,
+                 IRON_ORE, DEEPSLATE_IRON_ORE, IRON_BLOCK, RAW_IRON_BLOCK,
+                 GOLD_ORE, DEEPSLATE_GOLD_ORE, GOLD_BLOCK,
+                 EMERALD_ORE, DEEPSLATE_EMERALD_ORE, EMERALD_BLOCK,
+                 COAL_ORE, DEEPSLATE_COAL_ORE, COAL_BLOCK,
+                 COPPER_ORE, DEEPSLATE_COPPER_ORE, COPPER_BLOCK, RAW_COPPER_BLOCK,
+                 NETHER_GOLD_ORE, NETHER_QUARTZ_ORE, QUARTZ_BLOCK,
+                 GILDED_BLACKSTONE, ANCIENT_DEBRIS, BLACKSTONE -> true;
+            default -> false;
+        };
+    }
+
     private void handleMineBreak(Room room, Player player, Block block) {
         Material type = block.getType();
         BlockData original = block.getBlockData();
         Location loc = block.getLocation().clone();
         Location center = loc.clone().add(0.5, 0.5, 0.5);
         block.setType(Material.AIR, false);
-        if (type == Material.BRICKS) {
-            giveOrDrop(player, new ItemStack(Material.BRICK, 2));
-            if (ThreadLocalRandom.current().nextInt(100) < 8) giveOrDrop(player, new ItemStack(Material.DIAMOND, 1));
-            loc.getWorld().spawnParticle(Particle.BLOCK, center, 28, 0.38, 0.38, 0.38, original);
-            loc.getWorld().spawnParticle(Particle.CRIT, center, 10, 0.35, 0.35, 0.35, 0.04);
-            playSound(player, "mine.brick", Sound.BLOCK_GRINDSTONE_USE, 0.68F, 1.35F);
-        } else if (type == Material.NETHER_BRICKS) {
-            giveOrDrop(player, new ItemStack(Material.NETHER_BRICK, 2));
-            if (ThreadLocalRandom.current().nextInt(100) < 18) giveOrDrop(player, new ItemStack(Material.GOLD_NUGGET, 1));
-            loc.getWorld().spawnParticle(Particle.BLOCK, center, 28, 0.38, 0.38, 0.38, original);
-            loc.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, center, 8, 0.35, 0.35, 0.35, 0.02);
-            playSound(player, "mine.nether_brick", Sound.BLOCK_NETHER_BRICKS_BREAK, 0.78F, 1.18F);
-        } else {
-            giveOrDrop(player, new ItemStack(Material.OBSIDIAN, 1));
-            loc.getWorld().spawnParticle(Particle.BLOCK, center, 30, 0.35, 0.35, 0.35, original);
+        List<ItemStack> drops = mineDrops(type);
+        for (ItemStack drop : drops) giveOrDrop(player, drop, false);
+        Material primary = drops.isEmpty() ? Material.AIR : drops.getFirst().getType();
+        loc.getWorld().spawnParticle(Particle.BLOCK, center, 28, 0.38, 0.38, 0.38, original);
+        if (type == Material.NETHER_BRICKS || type == Material.NETHER_GOLD_ORE || type == Material.NETHER_QUARTZ_ORE || type == Material.ANCIENT_DEBRIS || type == Material.BLACKSTONE || type == Material.GILDED_BLACKSTONE) {
+            loc.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, center, 9, 0.35, 0.35, 0.35, 0.02);
+            playSound(player, "mine.nether_brick", Sound.BLOCK_NETHER_BRICKS_BREAK, 0.7F, 1.0F);
+        } else if (type == Material.OBSIDIAN) {
             loc.getWorld().spawnParticle(Particle.PORTAL, center, 16, 0.35, 0.35, 0.35, 0.08);
-            playSound(player, "mine.obsidian", Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.72F, 1.45F);
+            playSound(player, "mine.obsidian", Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.7F, 1.0F);
+        } else {
+            loc.getWorld().spawnParticle(Particle.CRIT, center, 10, 0.35, 0.35, 0.35, 0.04);
+            playSound(player, "mine.brick", Sound.BLOCK_GRINDSTONE_USE, 0.62F, 1.0F);
         }
+        playCollectSound(player, primary);
         restoreBlockLater(loc, original, cfg("block_restore_seconds", 20));
     }
 
+    private List<ItemStack> mineDrops(Material type) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        List<ItemStack> drops = new ArrayList<>();
+        switch (type) {
+            case BRICKS -> {
+                drops.add(new ItemStack(Material.BRICK, 2 + random.nextInt(2)));
+                if (random.nextInt(100) < 10) drops.add(new ItemStack(Material.IRON_INGOT, 1));
+                if (random.nextInt(100) < 8) drops.add(new ItemStack(Material.DIAMOND, 1));
+            }
+            case NETHER_BRICKS -> {
+                drops.add(new ItemStack(Material.NETHER_BRICK, 2 + random.nextInt(2)));
+                if (random.nextInt(100) < 20) drops.add(new ItemStack(Material.GOLD_NUGGET, 1 + random.nextInt(2)));
+                if (random.nextInt(100) < 8) drops.add(new ItemStack(Material.QUARTZ, 1));
+            }
+            case OBSIDIAN -> drops.add(new ItemStack(Material.OBSIDIAN, 1));
+            case DIAMOND_BLOCK -> drops.add(new ItemStack(Material.DIAMOND, 3));
+            case DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE -> drops.add(new ItemStack(Material.DIAMOND, 1));
+            case IRON_BLOCK, RAW_IRON_BLOCK -> drops.add(new ItemStack(Material.IRON_INGOT, 3));
+            case IRON_ORE, DEEPSLATE_IRON_ORE -> drops.add(new ItemStack(Material.IRON_INGOT, 1 + random.nextInt(2)));
+            case GOLD_BLOCK -> drops.add(new ItemStack(Material.GOLD_INGOT, 3));
+            case GOLD_ORE, DEEPSLATE_GOLD_ORE -> drops.add(new ItemStack(Material.GOLD_INGOT, 1));
+            case EMERALD_BLOCK -> drops.add(new ItemStack(Material.EMERALD, 3));
+            case EMERALD_ORE, DEEPSLATE_EMERALD_ORE -> drops.add(new ItemStack(Material.EMERALD, 1));
+            case COAL_BLOCK -> drops.add(new ItemStack(Material.COAL, 4));
+            case COAL_ORE, DEEPSLATE_COAL_ORE -> drops.add(new ItemStack(Material.COAL, 2));
+            case COPPER_BLOCK, RAW_COPPER_BLOCK -> drops.add(new ItemStack(Material.COPPER_INGOT, 3));
+            case COPPER_ORE, DEEPSLATE_COPPER_ORE -> drops.add(new ItemStack(Material.COPPER_INGOT, 2));
+            case NETHER_GOLD_ORE -> drops.add(new ItemStack(Material.GOLD_NUGGET, 2 + random.nextInt(3)));
+            case NETHER_QUARTZ_ORE -> drops.add(new ItemStack(Material.QUARTZ, 1 + random.nextInt(2)));
+            case QUARTZ_BLOCK -> drops.add(new ItemStack(Material.QUARTZ, 3));
+            case GILDED_BLACKSTONE -> drops.add(new ItemStack(Material.GOLD_NUGGET, 4));
+            case ANCIENT_DEBRIS -> drops.add(new ItemStack(Material.NETHERITE_SCRAP, 1));
+            case BLACKSTONE -> drops.add(new ItemStack(Material.BLACKSTONE, 1));
+            default -> drops.add(new ItemStack(type, 1));
+        }
+        return drops;
+    }
+
     private void giveOrDrop(Player player, ItemStack stack) {
+        giveOrDrop(player, stack, true);
+    }
+
+    private void giveOrDrop(Player player, ItemStack stack, boolean sound) {
         Map<Integer, ItemStack> left = player.getInventory().addItem(stack);
         left.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
-        playCollectSound(player, stack.getType());
+        if (sound) playCollectSound(player, stack.getType());
     }
 
     private void playCollectSound(Player player, Material material) {
         switch (material) {
             case DIAMOND -> playSound(player, "mine.collect.diamond", Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.72F, 1.62F);
             case GOLD_NUGGET, GOLD_INGOT -> playSound(player, "mine.collect.gold", Sound.BLOCK_NOTE_BLOCK_BELL, 0.58F, 1.48F);
+            case IRON_INGOT, COPPER_INGOT -> playSound(player, "mine.collect.iron", Sound.ENTITY_ITEM_PICKUP, 0.45F, 1.0F);
+            case EMERALD -> playSound(player, "mine.collect.emerald", Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.45F, 1.0F);
+            case QUARTZ -> playSound(player, "mine.collect.quartz", Sound.BLOCK_AMETHYST_BLOCK_HIT, 0.45F, 1.0F);
+            case NETHERITE_SCRAP -> playSound(player, "mine.collect.scrap", Sound.BLOCK_ANVIL_USE, 0.45F, 1.0F);
             case BRICK -> playSound(player, "mine.collect.brick", Sound.BLOCK_DECORATED_POT_HIT, 0.45F, 1.25F);
             case NETHER_BRICK -> playSound(player, "mine.collect.nether_brick", Sound.BLOCK_NETHER_BRICKS_HIT, 0.50F, 0.95F);
             case OBSIDIAN -> playSound(player, "mine.collect.obsidian", Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.55F, 1.38F);
@@ -2419,7 +2976,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         }
         if (event.getBlock().getRelative(BlockFace.DOWN).getType() == Material.CRYING_OBSIDIAN) {
             event.setCancelled(true);
-            player.sendActionBar(Text.c("§x§6§6§1§9§0§0哭泣的黑曜石上方要留给黑曜石掉落物。"));
+            player.sendActionBar(Text.c("§x§6§6§1§9§0§0哭泣的黑曜石上方要留给充能显示。"));
             playSound(player, "pool.protected", Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.55F, 1.2F);
             return;
         }
@@ -2435,14 +2992,59 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         }
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        Room room = roomByWorld(event.getLocation().getWorld());
+        if (room == null || room.status != Room.Status.RUNNING) return;
+        event.blockList().clear();
+        event.setYield(0.0F);
+        event.getLocation().getWorld().spawnParticle(Particle.EXPLOSION, event.getLocation(), 1, 0, 0, 0, 0);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        Room room = roomByWorld(event.getBlock().getWorld());
+        if (room == null || room.status != Room.Status.RUNNING) return;
+        event.blockList().clear();
+        event.setYield(0.0F);
+    }
+
+    private Room roomByWorld(World world) {
+        if (world == null) return null;
+        for (Room room : rooms.values()) {
+            if (room.lobbyWorld == world || room.brickWorld == world || room.netherWorld == world) return room;
+        }
+        return null;
+    }
+
     private String blockKey(Location loc) {
         World world = loc.getWorld();
         return (world == null ? "" : world.getName()) + ":" + loc.getBlockX() + ":" + loc.getBlockY() + ":" + loc.getBlockZ();
     }
 
+    private Block blockFromKey(World fallback, String key) {
+        if (key == null) return null;
+        String[] parts = key.split(":");
+        if (parts.length < 4) return null;
+        try {
+            int x = Integer.parseInt(parts[parts.length - 3]);
+            int y = Integer.parseInt(parts[parts.length - 2]);
+            int z = Integer.parseInt(parts[parts.length - 1]);
+            String worldName = String.join(":", Arrays.copyOf(parts, parts.length - 3));
+            World world = Bukkit.getWorld(worldName);
+            if (world == null) world = fallback;
+            return world == null ? null : world.getBlockAt(x, y, z);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
     private boolean isPlacedAllowed(Material material) {
         return material == Material.BRICKS || material == Material.BRICK_STAIRS || material == Material.BRICK_SLAB
                 || material == Material.NETHER_BRICKS || material == Material.BLACKSTONE || material == Material.OBSIDIAN
+                || material == Material.BASALT || material == Material.CRIMSON_PLANKS || material == Material.GLASS
+                || material == Material.END_STONE || material == Material.LADDER || material == Material.COBWEB
+                || material == Material.TNT || material == Material.WATER_BUCKET || material == Material.LAVA_BUCKET
                 || material == Material.BEACON;
     }
 
@@ -2452,12 +3054,20 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             handleShopDamage(event);
             return;
         }
+        if (isGuardEntity(event.getEntity())) {
+            handleGuardDamage(event);
+            return;
+        }
         if (!(event.getEntity() instanceof Player victim)) return;
         Optional<Room> optional = activeRoom(victim);
         if (optional.isPresent() && optional.get().status == Room.Status.WAITING) {
             event.setCancelled(true);
             victim.setFireTicks(0);
             victim.setFallDistance(0.0F);
+            return;
+        }
+        if (isGuardEntity(event.getDamager())) {
+            handleGuardAttack(event, victim, optional.orElse(null));
             return;
         }
         Player attacker = attacker(event.getDamager());
@@ -2496,6 +3106,68 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     private boolean isShopEntity(Entity entity) {
         String type = entity.getPersistentDataContainer().get(typeKey, PersistentDataType.STRING);
         return "shop_brick".equals(type) || "shop_nether".equals(type);
+    }
+
+    private boolean isGuardEntity(Entity entity) {
+        String type = entity.getPersistentDataContainer().get(typeKey, PersistentDataType.STRING);
+        return "guard_brick".equals(type) || "guard_nether".equals(type);
+    }
+
+    private Team guardTeam(Entity entity) {
+        String type = entity.getPersistentDataContainer().get(typeKey, PersistentDataType.STRING);
+        if ("guard_brick".equals(type)) return Team.BRICK;
+        if ("guard_nether".equals(type)) return Team.NETHER;
+        return null;
+    }
+
+    private void handleGuardDamage(EntityDamageByEntityEvent event) {
+        Player attacker = attacker(event.getDamager());
+        if (attacker == null) return;
+        Optional<Room> optional = activeRoom(attacker);
+        if (optional.isEmpty()) {
+            event.setCancelled(true);
+            return;
+        }
+        Room room = optional.get();
+        String entityRoom = event.getEntity().getPersistentDataContainer().get(roomKey, PersistentDataType.STRING);
+        if (entityRoom != null && !entityRoom.equals(room.id)) {
+            event.setCancelled(true);
+            return;
+        }
+        Team guardTeam = guardTeam(event.getEntity());
+        Team attackerTeam = room.team(attacker.getUniqueId());
+        if (room.status != Room.Status.RUNNING || guardTeam == null || attackerTeam == guardTeam || !room.canFight(attacker)) {
+            event.setCancelled(true);
+            attacker.sendActionBar(Text.c("§x§F§F§B§B§6§6这是自己家的守卫。"));
+            playSound(attacker, "guard.own_hit", Sound.ENTITY_VILLAGER_NO, 0.58F, 1.0F);
+            return;
+        }
+        event.setDamage(Math.max(1.0D, event.getDamage()));
+        if (event.getEntity() instanceof LivingEntity living) {
+            int left = Math.max(0, (int) Math.ceil(living.getHealth() - event.getFinalDamage()));
+            attacker.sendActionBar(Text.c((guardTeam == Team.BRICK ? "§x§f§f§7§c§0§0板砖守卫" : "§x§6§6§1§9§0§0下界守卫") + " §f" + left + " 血"));
+            living.getWorld().spawnParticle(Particle.DAMAGE_INDICATOR, living.getLocation().add(0, 1.1, 0), 5, 0.25, 0.25, 0.25, 0.02);
+            playSound(attacker, "guard.enemy_hit", Sound.ENTITY_PLAYER_ATTACK_STRONG, 0.52F, 1.0F);
+        }
+    }
+
+    private void handleGuardAttack(EntityDamageByEntityEvent event, Player victim, Room room) {
+        if (room == null || room.status != Room.Status.RUNNING || !room.canFight(victim)) {
+            event.setCancelled(true);
+            return;
+        }
+        String entityRoom = event.getDamager().getPersistentDataContainer().get(roomKey, PersistentDataType.STRING);
+        if (entityRoom != null && !entityRoom.equals(room.id)) {
+            event.setCancelled(true);
+            return;
+        }
+        Team guardTeam = guardTeam(event.getDamager());
+        if (guardTeam == null || room.team(victim.getUniqueId()) == guardTeam) {
+            event.setCancelled(true);
+            return;
+        }
+        event.setDamage(Math.max(event.getDamage(), guardTeam == Team.BRICK ? 5.0D : 6.0D));
+        victim.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 20, 0, false, false, false));
     }
 
     private void handleShopDamage(EntityDamageByEntityEvent event) {
@@ -2575,6 +3247,10 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         if ("shop_brick".equals(type) || "shop_nether".equals(type)) {
             event.getDrops().clear();
             event.setDroppedExp(0);
+        } else if ("guard_brick".equals(type) || "guard_nether".equals(type)) {
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            for (Room room : rooms.values()) room.guardEntities.remove(event.getEntity());
         }
     }
 
@@ -2601,8 +3277,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         if (room.status != Room.Status.RUNNING) return;
         ItemStack stack = event.getItemDrop().getItemStack();
         if (stack.getType() != Material.OBSIDIAN) return;
-        Bukkit.getScheduler().runTaskLater(this, () -> consumeObsidianDrops(room), 8L);
-        Bukkit.getScheduler().runTaskLater(this, () -> consumeObsidianDrops(room), 20L);
+        player.sendActionBar(Text.c("§x§6§6§1§9§0§0现在需要手持黑曜石右键哭泣的黑曜石。"));
     }
 
     private void damageBrickCore(Room room, Player attacker, int amount) {
@@ -2622,39 +3297,228 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     }
 
     private void buildPortal(Room room) {
-        room.portalOpened = true;
+        if (room.status != Room.Status.RUNNING) return;
+        cancelPortalTasks(room);
         MapData data = maps.read();
-        Location brickPortal = roomLoc(room, data.brickPortal, MapSide.BRICK);
-        Location netherPortal = roomLoc(room, data.netherPortal, MapSide.NETHER);
-        if (brickPortal == null && netherPortal == null) return;
-        room.broadcast(prefix() + "§x§6§6§1§9§0§0黑曜石门正在搭建。");
-        int seconds = cfg("portal_build_seconds", 8);
-        for (int i = 0; i <= seconds; i++) {
-            int step = i;
-            if (brickPortal != null) Bukkit.getScheduler().runTaskLater(this, () -> animatePortalStep(room, brickPortal, step, seconds), i * 20L);
-            if (netherPortal != null) Bukkit.getScheduler().runTaskLater(this, () -> animatePortalStep(room, netherPortal, step, seconds), i * 20L);
+        if (room.brickPortalBlocks.isEmpty() || room.netherPortalBlocks.isEmpty()) preparePortalMarkers(room, data);
+        boolean brickOpened = activatePortalBlocks(room.brickPortalBlocks, room.brickPortalAxis);
+        boolean netherOpened = activatePortalBlocks(room.netherPortalBlocks, room.netherPortalAxis);
+        if (!brickOpened && !netherOpened) {
+            room.portalOpened = false;
+            return;
+        }
+        room.portalOpened = true;
+        room.broadcast(prefix() + "§x§6§6§1§9§0§0黑曜石门已经点燃。");
+        playRoomSound(room, "portal.open", Sound.BLOCK_END_PORTAL_SPAWN, 1.0F, 1.0F);
+    }
+
+    private void preparePortalMarkers(Room room, MapData data) {
+        room.brickPortalBlocks.clear();
+        room.netherPortalBlocks.clear();
+        room.brickPortalAxis = Axis.X;
+        room.netherPortalAxis = Axis.X;
+        cachePortalSide(room, roomLoc(room, data.brickPortal, MapSide.BRICK), true);
+        cachePortalSide(room, roomLoc(room, data.netherPortal, MapSide.NETHER), false);
+    }
+
+    private void cachePortalSide(Room room, Location base, boolean brickSide) {
+        if (base == null || base.getWorld() == null) return;
+        PortalLayout layout = safePortalLayout(room, base);
+        if (layout == null) return;
+        List<Location> blocks = brickSide ? room.brickPortalBlocks : room.netherPortalBlocks;
+        blocks.clear();
+        for (Location loc : layout.interior()) blocks.add(loc.clone());
+        if (brickSide) room.brickPortalAxis = layout.axis();
+        else room.netherPortalAxis = layout.axis();
+        hidePortalPowder(base, layout);
+    }
+
+    private void hidePortalPowder(Location base, PortalLayout layout) {
+        if (base == null || base.getWorld() == null) return;
+        Set<String> keys = new LinkedHashSet<>();
+        for (Location loc : layout.interior()) keys.add(blockKey(loc));
+        int radius = Math.max(cfg("portal_marker_scan_radius", 8), cfg("portal_marker_auto_scan_radius", 128));
+        for (Block block : findBlocksAround(base.getWorld(), List.of(base), radius, Material.PURPLE_CONCRETE_POWDER, true)) {
+            keys.add(blockKey(block.getLocation()));
+        }
+        for (String key : keys) {
+            Block block = blockFromKey(base.getWorld(), key);
+            if (block != null && block.getType() == Material.PURPLE_CONCRETE_POWDER) block.setType(Material.AIR, false);
         }
     }
 
-    private void animatePortalStep(Room room, Location base, int step, int total) {
+    private boolean activatePortalBlocks(List<Location> blocks, Axis axis) {
+        if (blocks == null || blocks.isEmpty()) return false;
+        BlockData portalData = Material.NETHER_PORTAL.createBlockData();
+        if (portalData instanceof Orientable orientable) orientable.setAxis(axis == null ? Axis.X : axis);
+        int changed = 0;
+        for (Location loc : blocks) {
+            if (!isLocationWorldLoaded(loc)) continue;
+            loc.getBlock().setBlockData(portalData, false);
+            loc.getWorld().spawnParticle(Particle.PORTAL, loc.clone().add(0.5, 0.5, 0.5), 12, 0.28, 0.45, 0.28, 0.12);
+            changed++;
+        }
+        return changed > 0;
+    }
+
+    private PortalLayout safePortalLayout(Room room, Location base) {
+        if (base == null || base.getWorld() == null || room.status != Room.Status.RUNNING) return null;
+        try {
+            return portalLayout(base);
+        } catch (IllegalStateException exception) {
+            getLogger().warning("传送门门面识别失败，已跳过这个门: " + exception.getMessage());
+            return null;
+        }
+    }
+
+    private boolean isLocationWorldLoaded(Location location) {
+        if (location == null || location.getWorld() == null) return false;
+        World world = location.getWorld();
+        return Bukkit.getWorld(world.getName()) == world;
+    }
+
+    private void cancelPortalTasks(Room room) {
+        for (BukkitTask task : new ArrayList<>(room.portalTasks)) {
+            if (task != null) task.cancel();
+        }
+        room.portalTasks.clear();
+    }
+
+    private PortalLayout portalLayout(Location base) {
         World world = base.getWorld();
-        if (world == null) return;
+        if (world == null) return new PortalLayout(base.clone(), List.of(), List.of(), Axis.X);
+        List<Location> marked = findPortalMarkers(base);
+        if (!marked.isEmpty()) {
+            marked = nearestPortalMarkerGroup(marked, base);
+            Axis axis = portalAxis(marked);
+            List<Location> frame = portalFrameFromMarkers(marked, axis);
+            return new PortalLayout(base.clone(), frame, marked, axis);
+        }
         int x = base.getBlockX();
         int y = base.getBlockY();
         int z = base.getBlockZ();
-        List<Location> blocks = new ArrayList<>();
-        for (int dx = -1; dx <= 2; dx++) for (int dy = 0; dy <= 4; dy++) if (dx == -1 || dx == 2 || dy == 0 || dy == 4) blocks.add(new Location(world, x + dx, y + dy, z));
-        int count = Math.min(blocks.size(), Math.max(1, blocks.size() * step / Math.max(1, total)));
-        for (int i = 0; i < count; i++) blocks.get(i).getBlock().setType(Material.OBSIDIAN, false);
-        world.spawnParticle(Particle.PORTAL, base.clone().add(0.5, 2, 0.5), 55, 1.2, 1.8, 0.4, 0.18);
-        playWorldSound(base, "portal.build_step", Sound.BLOCK_PORTAL_TRIGGER, 0.8F, 0.8F + step * 0.06F);
-        if (step >= total) {
-            BlockData portalData = Material.NETHER_PORTAL.createBlockData();
-            if (portalData instanceof Orientable orientable) orientable.setAxis(Axis.X);
-            for (int dx = 0; dx <= 1; dx++) for (int dy = 1; dy <= 3; dy++) new Location(world, x + dx, y + dy, z).getBlock().setBlockData(portalData, false);
-            room.broadcast(prefix() + "§x§6§6§1§9§0§0黑曜石门已经点燃。");
-            playRoomSound(room, "portal.open", Sound.BLOCK_END_PORTAL_SPAWN, 1.0F, 1.0F);
+        List<Location> frame = new ArrayList<>();
+        for (int dx = -1; dx <= 2; dx++) {
+            for (int dy = 0; dy <= 4; dy++) {
+                if (dx == -1 || dx == 2 || dy == 0 || dy == 4) frame.add(new Location(world, x + dx, y + dy, z));
+            }
         }
+        List<Location> interior = new ArrayList<>();
+        for (int dx = 0; dx <= 1; dx++) {
+            for (int dy = 1; dy <= 3; dy++) interior.add(new Location(world, x + dx, y + dy, z));
+        }
+        return new PortalLayout(base.clone(), frame, interior, Axis.X);
+    }
+
+    private List<Location> findPortalMarkers(Location base) {
+        World world = base.getWorld();
+        if (world == null) return List.of();
+        int radius = Math.max(3, cfg("portal_marker_scan_radius", 8));
+        List<Location> out = portalMarkersInBox(base, radius, 3, 8);
+        if (out.isEmpty()) {
+            int autoRadius = Math.max(radius, cfg("portal_marker_auto_scan_radius", 128));
+            out = findBlocksAround(world, List.of(base), autoRadius, Material.PURPLE_CONCRETE_POWDER, false)
+                    .stream()
+                    .map(block -> block.getLocation().clone())
+                    .toList();
+        }
+        out = new ArrayList<>(out);
+        out.sort(Comparator.comparingInt((Location loc) -> loc.getBlockY()).thenComparingInt(Location::getBlockX).thenComparingInt(Location::getBlockZ));
+        return out;
+    }
+
+    private List<Location> portalMarkersInBox(Location base, int radius, int down, int up) {
+        World world = base.getWorld();
+        if (world == null) return List.of();
+        List<Location> out = new ArrayList<>();
+        for (int x = base.getBlockX() - radius; x <= base.getBlockX() + radius; x++) {
+            for (int y = base.getBlockY() - down; y <= base.getBlockY() + up; y++) {
+                for (int z = base.getBlockZ() - radius; z <= base.getBlockZ() + radius; z++) {
+                    Block block = world.getBlockAt(x, y, z);
+                    if (block.getType() == Material.PURPLE_CONCRETE_POWDER) out.add(block.getLocation());
+                }
+            }
+        }
+        return out;
+    }
+
+    private List<Location> nearestPortalMarkerGroup(List<Location> markers, Location base) {
+        if (markers.size() <= 1) return markers;
+        Map<String, Location> byKey = new HashMap<>();
+        for (Location marker : markers) byKey.put(simpleBlockKey(marker), marker);
+        Set<String> visited = new HashSet<>();
+        List<Location> best = new ArrayList<>();
+        double bestDistance = Double.MAX_VALUE;
+        int[][] directions = {{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+        for (Location start : markers) {
+            String startKey = simpleBlockKey(start);
+            if (!visited.add(startKey)) continue;
+            List<Location> group = new ArrayList<>();
+            ArrayDeque<Location> queue = new ArrayDeque<>();
+            queue.add(start);
+            while (!queue.isEmpty()) {
+                Location current = queue.poll();
+                group.add(current);
+                for (int[] direction : directions) {
+                    String nextKey = (current.getBlockX() + direction[0]) + ":" + (current.getBlockY() + direction[1]) + ":" + (current.getBlockZ() + direction[2]);
+                    Location next = byKey.get(nextKey);
+                    if (next != null && visited.add(nextKey)) queue.add(next);
+                }
+            }
+            double distance = group.stream().mapToDouble(loc -> loc.distanceSquared(base)).min().orElse(Double.MAX_VALUE);
+            if (best.isEmpty() || distance < bestDistance || (distance == bestDistance && group.size() > best.size())) {
+                best = group;
+                bestDistance = distance;
+            }
+        }
+        best.sort(Comparator.comparingInt((Location loc) -> loc.getBlockY()).thenComparingInt(Location::getBlockX).thenComparingInt(Location::getBlockZ));
+        return best;
+    }
+
+    private String simpleBlockKey(Location loc) {
+        return loc.getBlockX() + ":" + loc.getBlockY() + ":" + loc.getBlockZ();
+    }
+
+    private Axis portalAxis(List<Location> markers) {
+        int minX = markers.stream().mapToInt(Location::getBlockX).min().orElse(0);
+        int maxX = markers.stream().mapToInt(Location::getBlockX).max().orElse(0);
+        int minZ = markers.stream().mapToInt(Location::getBlockZ).min().orElse(0);
+        int maxZ = markers.stream().mapToInt(Location::getBlockZ).max().orElse(0);
+        return (maxX - minX) >= (maxZ - minZ) ? Axis.X : Axis.Z;
+    }
+
+    private List<Location> portalFrameFromMarkers(List<Location> markers, Axis axis) {
+        World world = markers.getFirst().getWorld();
+        int minY = markers.stream().mapToInt(Location::getBlockY).min().orElse(markers.getFirst().getBlockY());
+        int maxY = markers.stream().mapToInt(Location::getBlockY).max().orElse(markers.getFirst().getBlockY());
+        List<Location> frame = new ArrayList<>();
+        if (axis == Axis.X) {
+            int minX = markers.stream().mapToInt(Location::getBlockX).min().orElse(markers.getFirst().getBlockX());
+            int maxX = markers.stream().mapToInt(Location::getBlockX).max().orElse(markers.getFirst().getBlockX());
+            int z = mostCommonCoordinate(markers, false);
+            for (int x = minX - 1; x <= maxX + 1; x++) {
+                for (int y = minY - 1; y <= maxY + 1; y++) {
+                    if (x == minX - 1 || x == maxX + 1 || y == minY - 1 || y == maxY + 1) frame.add(new Location(world, x, y, z));
+                }
+            }
+        } else {
+            int minZ = markers.stream().mapToInt(Location::getBlockZ).min().orElse(markers.getFirst().getBlockZ());
+            int maxZ = markers.stream().mapToInt(Location::getBlockZ).max().orElse(markers.getFirst().getBlockZ());
+            int x = mostCommonCoordinate(markers, true);
+            for (int z = minZ - 1; z <= maxZ + 1; z++) {
+                for (int y = minY - 1; y <= maxY + 1; y++) {
+                    if (z == minZ - 1 || z == maxZ + 1 || y == minY - 1 || y == maxY + 1) frame.add(new Location(world, x, y, z));
+                }
+            }
+        }
+        frame.sort(Comparator.comparingInt((Location loc) -> loc.getBlockY()).thenComparingInt(Location::getBlockX).thenComparingInt(Location::getBlockZ));
+        return frame;
+    }
+
+    private int mostCommonCoordinate(List<Location> locations, boolean xAxis) {
+        Map<Integer, Long> counts = locations.stream().collect(Collectors.groupingBy(loc -> xAxis ? loc.getBlockX() : loc.getBlockZ(), Collectors.counting()));
+        return counts.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey)
+                .orElse(xAxis ? locations.getFirst().getBlockX() : locations.getFirst().getBlockZ());
     }
 
     private void handlePlayerDownOnce(Room room, Player player, Player killer) {
@@ -3060,6 +3924,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
     private void endRoom(Room room, Team winner, boolean announce) {
         if (room.status == Room.Status.ENDED) return;
         room.status = Room.Status.ENDED;
+        cancelPortalTasks(room);
         removeBossBars(room);
         if (announce) {
             if (winner == Team.BRICK) room.title("§x§f§f§7§c§0§0板砖队胜利", "§f下界核心已经破碎");
@@ -3103,6 +3968,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             room.task.cancel();
             room.task = null;
         }
+        cancelPortalTasks(room);
         removeBossBars(room);
         for (Player player : room.onlinePlayers()) {
             resetPlayer(player, room);
@@ -3111,13 +3977,22 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
             else sendLobbyFallback(player);
             clearName(player);
             playerRoom.remove(player.getUniqueId());
+            portalCooldowns.remove(player.getUniqueId());
         }
         room.shopEntities.forEach(Entity::remove);
         room.shopEntities.clear();
+        room.guardEntities.forEach(Entity::remove);
+        room.guardEntities.clear();
         room.shopHealth.clear();
         room.placedBlockItems.clear();
         room.obsidianPoolDisplays.values().forEach(Entity::remove);
         room.obsidianPoolDisplays.clear();
+        room.obsidianChargePoints.clear();
+        room.chargedObsidianPoints.clear();
+        room.obsidianDeposited = 0;
+        room.obsidianRequired = 0;
+        room.brickPortalBlocks.clear();
+        room.netherPortalBlocks.clear();
         rooms.remove(room.id);
         unloadRuntimeWorld(room.lobbyWorld);
         unloadRuntimeWorld(room.brickWorld);
@@ -3287,7 +4162,7 @@ public final class YuYunBrickGuardPlugin extends JavaPlugin implements Listener,
         lines.add("§f队伍 " + (team == null ? "§7未选择" : team.color + team.display));
         lines.add("§r§r");
         lines.add("§x§f§f§7§c§0§0板砖核心 §c" + room.brickCoreHealth + "§7/§c" + room.brickCoreMax);
-        lines.add("§x§6§6§1§9§0§0黑曜石池 §f" + room.obsidianDeposited + "§7/§f" + cfg("obsidian_required", 10));
+        lines.add("§x§6§6§1§9§0§0黑曜石门 §f" + room.obsidianDeposited + "§7/§f" + Math.max(0, room.obsidianRequired));
         if (Objects.equals(room.corePlayer, player.getUniqueId())) lines.add("§x§6§6§1§9§0§0核心: §f你");
         else if (room.corePlayer != null) {
             Player core = Bukkit.getPlayer(room.corePlayer);

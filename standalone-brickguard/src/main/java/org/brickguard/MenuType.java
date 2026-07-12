@@ -1,4 +1,4 @@
-package org.yuyun.brickguard;
+package org.brickguard;
 
 enum MenuType {
     MAIN,

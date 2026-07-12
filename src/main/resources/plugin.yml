@@ -52,6 +52,7 @@ permissions:
       gamefunxiao.use.command.rooms: true
       gamefunxiao.use.command.quick: true
       gamefunxiao.use.command.join: true
+      gamefunxiao.flashuse: true
       gamefunxiao.flashmusic: true
   gamefunxiao.use.menu:
     description: 打开 GameFun 菜单
@@ -266,7 +267,7 @@ permissions:
     default: op
   gamefunxiao.flashuse:
     description: 离开房间后试用闪光模式物品
-    default: op
+    default: true
   gamefunxiao.flashmusic:
     description: 播放闪光音符盒音乐
     default: true

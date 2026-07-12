@@ -50,12 +50,12 @@ hunter_game:
     # 玩家创建/加入房间时要送去的代理服 server 名
     game_server_name: "gameing"
     # 游戏结束或退出后返回的大厅服 server 名
-    lobby_server_name: "gamefun"
+    lobby_server_name: "lobby"
     # 跨服创建房间的临时请求目录（大厅服和游戏服都要能访问到）
     request_path: "D:/plus/GameFunShared/cross-create-requests"
     # gamefun 与 gameing 共用的玩家数据根目录（留空时会自动取 request_path 的上级目录）
     shared_playerdata_root: "D:/plus/GameFunShared"
-    # 在 gameing 小游戏服宣传房间时，是否把宣传消息转发到 gamefun 大厅服
+    # 在 gameing 小游戏服宣传房间时，是否把宣传消息转发到 lobby 大厅服
     forward_advertise_to_lobby: true
   performance:
     # 选择世界阶段预热区块半径（按区块计算，越大越顺滑，但创建世界瞬时压力越高）
@@ -220,7 +220,7 @@ child_server:
   # 当前服务器角色：standalone=单服原模式，lobby=大厅控制服，node=对子服节点
   role: "standalone"
   # 子服结束后返回的大厅服名（代理服里的 server 名）
-  lobby_server_name: "gamefun"
+  lobby_server_name: "lobby"
 
   shared_storage:
     # 房间注册信息目录（大厅服和子服都要能访问到）

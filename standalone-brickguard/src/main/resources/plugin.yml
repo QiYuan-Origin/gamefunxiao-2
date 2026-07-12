@@ -1,6 +1,6 @@
 name: BrickGuard
 version: 1.0.0
-main: org.yuyun.brickguard.YuYunBrickGuardPlugin
+main: org.brickguard.BrickGuardPlugin
 api-version: '1.21.11'
 authors: [qiyuan]
 description: 板砖守卫战
@@ -13,8 +13,4 @@ permissions:
   brickguard.use:
     default: true
   brickguard.admin:
-    default: op
-  yuyunbrickguard.use:
-    default: true
-  yuyunbrickguard.admin:
     default: op

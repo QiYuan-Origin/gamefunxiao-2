@@ -235,7 +235,7 @@ public final class GameFunXiao extends JavaPlugin {
                         case "canUse" -> {
                             CommandSender sender = args != null && args.length > 0 && args[0] instanceof CommandSender commandSender
                                     ? commandSender : null;
-                            yield permission == null || permission.isBlank() || sender == null || sender.hasPermission(permission);
+                            yield canUseRegisteredCommand(sender, permission);
                         }
                         case "permission" -> permission;
                         default -> Collections.emptyList();
@@ -243,6 +243,19 @@ public final class GameFunXiao extends JavaPlugin {
                 }
         );
         registerMethod.invoke(this, name, description, aliases, command);
+    }
+
+    private boolean canUseRegisteredCommand(CommandSender sender, String permission) {
+        if (permission == null || permission.isBlank() || sender == null) {
+            return true;
+        }
+        if (permission.equals("gamefunxiao.use")
+                || permission.startsWith("gamefunxiao.use.")
+                || permission.equals("gamefunxiao.flashuse")
+                || permission.equals("gamefunxiao.flashmusic")) {
+            return true;
+        }
+        return sender.hasPermission(permission);
     }
 
     private CommandSender extractPaperCommandSender(Object commandSourceStack) throws ReflectiveOperationException {

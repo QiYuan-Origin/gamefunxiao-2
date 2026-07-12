@@ -1,4 +1,4 @@
-package org.yuyun.brickguard;
+package org.brickguard;
 
 import org.bukkit.*;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -15,12 +15,12 @@ import java.util.*;
 
 @SuppressWarnings({"deprecation", "removal"})
 final class MapManager {
-    private final YuYunBrickGuardPlugin plugin;
+    private final BrickGuardPlugin plugin;
     private final File file;
     private final FileConfiguration config;
     private final Map<UUID, List<Entity>> previews = new HashMap<>();
 
-    MapManager(YuYunBrickGuardPlugin plugin) {
+    MapManager(BrickGuardPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "maps.yml");
         if (!file.exists()) {
@@ -53,17 +53,17 @@ final class MapManager {
 
     void createEditWorld(MapSide side) {
         createVoidWorld(switch (side) {
-            case LOBBY -> plugin.getConfig().getString("lobby_world", "yuyun_brickguard_lobby");
-            case BRICK -> plugin.getConfig().getString("brick_world", "yuyun_brickguard_brick");
-            case NETHER -> plugin.getConfig().getString("nether_world", "yuyun_brickguard_nether");
+            case LOBBY -> plugin.getConfig().getString("lobby_world", "brickguard_lobby");
+            case BRICK -> plugin.getConfig().getString("brick_world", "brickguard_brick");
+            case NETHER -> plugin.getConfig().getString("nether_world", "brickguard_nether");
         }, Material.STONE);
     }
 
     World world(MapSide side) {
         return switch (side) {
-            case LOBBY -> Bukkit.getWorld(plugin.getConfig().getString("lobby_world", "yuyun_brickguard_lobby"));
-            case BRICK -> Bukkit.getWorld(plugin.getConfig().getString("brick_world", "yuyun_brickguard_brick"));
-            case NETHER -> Bukkit.getWorld(plugin.getConfig().getString("nether_world", "yuyun_brickguard_nether"));
+            case LOBBY -> Bukkit.getWorld(plugin.getConfig().getString("lobby_world", "brickguard_lobby"));
+            case BRICK -> Bukkit.getWorld(plugin.getConfig().getString("brick_world", "brickguard_brick"));
+            case NETHER -> Bukkit.getWorld(plugin.getConfig().getString("nether_world", "brickguard_nether"));
         };
     }
 
@@ -101,6 +101,8 @@ final class MapManager {
         data.obsidianPool = loc("nether.obsidian_pool");
         data.brickTraders.addAll(locList("brick.traders"));
         data.netherTraders.addAll(locList("nether.traders"));
+        data.brickGuards.addAll(locList("brick.guards"));
+        data.netherGuards.addAll(locList("nether.guards"));
         data.brickMines.addAll(locList("brick.mines"));
         data.netherMines.addAll(locList("nether.mines"));
         return data;
@@ -193,11 +195,13 @@ final class MapManager {
             addBlock(entities, world, data.brickCore, Material.RED_GLAZED_TERRACOTTA);
             addPortal(entities, world, data.brickPortal);
             data.brickTraders.forEach(point -> addBlock(entities, world, point, Material.EMERALD_BLOCK));
+            data.brickGuards.forEach(point -> addBlock(entities, world, point, Material.IRON_BLOCK));
         } else {
             addBlock(entities, world, data.netherSpawn, Material.RESPAWN_ANCHOR);
             addPortal(entities, world, data.netherPortal);
             addPool(entities, world, data.obsidianPool);
             data.netherTraders.forEach(point -> addBlock(entities, world, point, Material.GOLD_BLOCK));
+            data.netherGuards.forEach(point -> addBlock(entities, world, point, Material.NETHERITE_BLOCK));
         }
         previews.put(player.getUniqueId(), entities);
     }

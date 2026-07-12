@@ -1,4 +1,4 @@
-package org.yuyun.brickguard;
+package org.brickguard;
 
 import org.bukkit.Location;
 import org.bukkit.World;

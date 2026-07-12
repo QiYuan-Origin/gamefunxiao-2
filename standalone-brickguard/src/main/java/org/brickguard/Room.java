@@ -1,4 +1,4 @@
-package org.yuyun.brickguard;
+package org.brickguard;
 
 import org.bukkit.*;
 import org.bukkit.boss.BossBar;
@@ -21,6 +21,7 @@ final class Room {
     final Set<UUID> finalDead = new HashSet<>();
     final Map<UUID, InventorySnapshot> snapshots = new HashMap<>();
     final List<Entity> shopEntities = new ArrayList<>();
+    final List<Entity> guardEntities = new ArrayList<>();
     final Map<UUID, Double> shopHealth = new HashMap<>();
     final Map<UUID, Integer> respawnSeconds = new HashMap<>();
     final Map<UUID, Integer> dyingSeconds = new HashMap<>();
@@ -31,6 +32,13 @@ final class Room {
     final Set<String> placedBlocks = new HashSet<>();
     final Map<String, ItemStack> placedBlockItems = new HashMap<>();
     final Map<String, Entity> obsidianPoolDisplays = new HashMap<>();
+    final Set<String> obsidianChargePoints = new LinkedHashSet<>();
+    final Set<String> chargedObsidianPoints = new HashSet<>();
+    final List<BukkitTask> portalTasks = new ArrayList<>();
+    final List<Location> brickPortalBlocks = new ArrayList<>();
+    final List<Location> netherPortalBlocks = new ArrayList<>();
+    Axis brickPortalAxis = Axis.X;
+    Axis netherPortalAxis = Axis.X;
     BossBar brickBossBar;
     BossBar netherBossBar;
     int brickBossNoticeTicks;
@@ -48,6 +56,7 @@ final class Room {
     int brickCoreHealth;
     int brickCoreMax;
     int obsidianDeposited;
+    int obsidianRequired;
     boolean portalOpened;
     UUID corePlayer;
     Location coreStartLocation;

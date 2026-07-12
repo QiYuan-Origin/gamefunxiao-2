@@ -1,0 +1,178 @@
+prefix: ""
+min_players: 2
+max_players: 128
+waiting_seconds: 30
+game_seconds: 3600
+brick_core_health: 500
+obsidian_required: 10
+obsidian_charge_min: 3
+obsidian_charge_max: 10
+obsidian_auto_scan_radius: 128
+portal_marker_scan_radius: 8
+portal_marker_auto_scan_radius: 128
+guard_spawn_chance_percent: 70
+pseudo_boundary_radius: 1500
+block_restore_seconds: 20
+obsidian_pool_scan_radius: 16
+void_return_y: -16
+lobby_world: "brickguard_lobby"
+brick_world: "brickguard_brick"
+nether_world: "brickguard_nether"
+
+sounds:
+  menu.open:
+    - { sound: "block.beacon.power_select", volume: 0.55, pitch: 1.00, delay: 0 }
+    - { sound: "block.amethyst_block.chime", volume: 0.30, pitch: 1.00, delay: 2 }
+  menu.click:
+    - { sound: "ui.button.click", volume: 0.45, pitch: 1.00, delay: 0 }
+    - { sound: "entity.experience_orb.pickup", volume: 0.25, pitch: 1.00, delay: 1 }
+  shop.open:
+    - { sound: "entity.villager.yes", volume: 0.70, pitch: 1.00, delay: 0 }
+  shop.category:
+    - { sound: "ui.button.click", volume: 0.55, pitch: 1.00, delay: 0 }
+  countdown:
+    - { sound: "block.note_block.pling", volume: 0.55, pitch: 1.00, delay: 0 }
+    - { sound: "entity.experience_orb.pickup", volume: 0.25, pitch: 1.00, delay: 3 }
+  room.join:
+    - { sound: "block.beacon.power_select", volume: 0.75, pitch: 1.00, delay: 0 }
+    - { sound: "entity.experience_orb.pickup", volume: 0.45, pitch: 1.00, delay: 2 }
+  team.shout:
+    - { sound: "item.goat_horn.sound.0", volume: 0.70, pitch: 1.10, delay: 0 }
+    - { sound: "block.note_block.bell", volume: 0.40, pitch: 1.35, delay: 4 }
+  boundary:
+    - { sound: "block.anvil.use", volume: 0.45, pitch: 1.00, delay: 0 }
+  void.return:
+    - { sound: "entity.enderman.teleport", volume: 0.65, pitch: 1.00, delay: 0 }
+    - { sound: "block.amethyst_block.chime", volume: 0.30, pitch: 1.00, delay: 2 }
+  buy.success:
+    - { sound: "entity.experience_orb.pickup", volume: 0.75, pitch: 1.00, delay: 0 }
+  buy.fail:
+    - { sound: "entity.villager.no", volume: 0.70, pitch: 1.00, delay: 0 }
+  buy.upgrade:
+    - { sound: "block.anvil.use", volume: 0.50, pitch: 1.00, delay: 0 }
+    - { sound: "entity.player.levelup", volume: 0.45, pitch: 1.00, delay: 3 }
+  message.success:
+    - { sound: "entity.experience_orb.pickup", volume: 0.45, pitch: 1.00, delay: 0 }
+    - { sound: "entity.experience_orb.pickup", volume: 0.30, pitch: 1.00, delay: 2 }
+  message.fail:
+    - { sound: "entity.villager.no", volume: 0.45, pitch: 1.00, delay: 0 }
+    - { sound: "block.note_block.bass", volume: 0.28, pitch: 1.00, delay: 2 }
+  message.info:
+    - { sound: "entity.experience_orb.pickup", volume: 0.32, pitch: 1.00, delay: 0 }
+  mine.brick:
+    - { sound: "block.grindstone.use", volume: 0.52, pitch: 1.00, delay: 0 }
+    - { sound: "@mine.collect.brick", delay: 2 }
+  mine.nether_brick:
+    - { sound: "block.nether_bricks.break", volume: 0.68, pitch: 1.00, delay: 0 }
+    - { sound: "@mine.collect.nether_brick", delay: 2 }
+  mine.obsidian:
+    - { sound: "block.respawn_anchor.charge", volume: 0.60, pitch: 1.00, delay: 0 }
+    - { sound: "block.amethyst_block.resonate", volume: 0.32, pitch: 1.00, delay: 4 }
+  mine.collect.brick:
+    - { sound: "entity.item.pickup", volume: 0.45, pitch: 1.00, delay: 0 }
+  mine.collect.nether_brick:
+    - { sound: "entity.item.pickup", volume: 0.42, pitch: 1.00, delay: 0 }
+  mine.collect.diamond:
+    - { sound: "entity.experience_orb.pickup", volume: 0.62, pitch: 1.00, delay: 0 }
+    - { sound: "entity.experience_orb.pickup", volume: 0.36, pitch: 1.00, delay: 3 }
+  mine.collect.gold:
+    - { sound: "entity.experience_orb.pickup", volume: 0.50, pitch: 1.00, delay: 0 }
+    - { sound: "entity.item.pickup", volume: 0.34, pitch: 1.00, delay: 2 }
+  mine.collect.obsidian:
+    - { sound: "block.respawn_anchor.charge", volume: 0.45, pitch: 1.00, delay: 0 }
+    - { sound: "block.amethyst_block.resonate", volume: 0.25, pitch: 1.00, delay: 4 }
+  mine.collect.default:
+    - { sound: "entity.item.pickup", volume: 0.35, pitch: 1.00, delay: 0 }
+  pickaxe.refill:
+    - { sound: "entity.item.pickup", volume: 0.55, pitch: 1.00, delay: 0 }
+    - { sound: "entity.experience_orb.pickup", volume: 0.25, pitch: 1.00, delay: 2 }
+  block.normal_break:
+    - { sound: "block.stone.break", volume: 0.52, pitch: 1.00, delay: 0 }
+  block.custom_break:
+    - { sound: "block.amethyst_block.break", volume: 0.45, pitch: 1.00, delay: 0 }
+    - { sound: "entity.item.pickup", volume: 0.30, pitch: 1.00, delay: 3 }
+  block.place:
+    - { sound: "block.wood.place", volume: 0.45, pitch: 1.00, delay: 0 }
+  pool.deposit:
+    - { sound: "block.respawn_anchor.charge", volume: 0.70, pitch: 1.00, delay: 0 }
+    - { sound: "block.portal.ambient", volume: 0.35, pitch: 1.00, delay: 5 }
+  pool.protected:
+    - { sound: "block.respawn_anchor.deplete", volume: 0.48, pitch: 1.00, delay: 0 }
+  portal.open:
+    - { sound: "block.end_portal.spawn", volume: 0.90, pitch: 1.00, delay: 0 }
+    - { sound: "block.portal.ambient", volume: 0.42, pitch: 1.00, delay: 6 }
+  shop.own_hit:
+    - { sound: "entity.villager.no", volume: 0.60, pitch: 1.00, delay: 0 }
+  shop.enemy_hit:
+    - { sound: "entity.player.attack.strong", volume: 0.52, pitch: 1.00, delay: 0 }
+    - { sound: "entity.villager.hurt", volume: 0.30, pitch: 1.05, delay: 1 }
+  shop.death.brick:
+    - { sound: "entity.villager.death", volume: 0.72, pitch: 1.00, delay: 0 }
+    - { sound: "block.note_block.bass", volume: 0.30, pitch: 1.00, delay: 3 }
+  shop.death.nether:
+    - { sound: "entity.piglin.death", volume: 0.72, pitch: 1.00, delay: 0 }
+    - { sound: "block.note_block.bass", volume: 0.30, pitch: 1.00, delay: 3 }
+  core.damage:
+    - { sound: "block.anvil.use", volume: 0.62, pitch: 1.00, delay: 0 }
+    - { sound: "block.respawn_anchor.deplete", volume: 0.28, pitch: 1.00, delay: 2 }
+  core.transfer:
+    - { sound: "entity.evoker.cast_spell", volume: 0.75, pitch: 1.00, delay: 0 }
+    - { sound: "block.beacon.activate", volume: 0.40, pitch: 1.00, delay: 4 }
+  food.consume:
+    - { sound: "item.totem.use", volume: 0.70, pitch: 1.00, delay: 0 }
+  totem.use:
+    - { sound: "item.totem.use", volume: 0.90, pitch: 1.00, delay: 0 }
+  respawn:
+    - { sound: "block.respawn_anchor.charge", volume: 0.70, pitch: 1.00, delay: 0 }
+    - { sound: "entity.player.levelup", volume: 0.45, pitch: 1.00, delay: 4 }
+  game.win:
+    - { sound: "entity.player.levelup", volume: 0.90, pitch: 1.00, delay: 0 }
+    - { sound: "ui.toast.challenge_complete", volume: 0.55, pitch: 1.00, delay: 8 }
+  game.draw:
+    - { sound: "block.amethyst_block.chime", volume: 0.70, pitch: 1.00, delay: 0 }
+  game.return_countdown:
+    - { sound: "block.note_block.pling", volume: 0.50, pitch: 1.00, delay: 0 }
+  edit.enter:
+    - { sound: "block.amethyst_block.chime", volume: 0.60, pitch: 1.00, delay: 0 }
+  edit.success:
+    - { sound: "entity.experience_orb.pickup", volume: 0.50, pitch: 1.00, delay: 0 }
+  edit.fail:
+    - { sound: "block.anvil.land", volume: 0.50, pitch: 1.00, delay: 0 }
+  toolkit.open:
+    - { sound: "item.book.page_turn", volume: 0.55, pitch: 1.00, delay: 0 }
+    - { sound: "block.amethyst_block.chime", volume: 0.28, pitch: 1.55, delay: 3 }
+  toolkit.page:
+    - { sound: "item.book.page_turn", volume: 0.58, pitch: 1.00, delay: 0 }
+  final.kill.crit:
+    - { sound: "entity.player.attack.crit", volume: 0.85, pitch: 1.00, delay: 0 }
+    - { sound: "entity.experience_orb.pickup", volume: 0.32, pitch: 1.85, delay: 3 }
+  final.kill.mace:
+    - { sound: "entity.player.attack.crit", volume: 0.80, pitch: 1.00, delay: 0 }
+    - { sound: "entity.generic.explode", volume: 0.42, pitch: 1.00, delay: 2 }
+  final.kill.spear:
+    - { sound: "entity.player.attack.sweep", volume: 0.82, pitch: 1.00, delay: 0 }
+    - { sound: "item.trident.throw", volume: 0.36, pitch: 1.00, delay: 2 }
+  final.kill.pickaxe:
+    - { sound: "block.grindstone.use", volume: 0.65, pitch: 1.00, delay: 0 }
+    - { sound: "entity.player.attack.crit", volume: 0.42, pitch: 1.00, delay: 2 }
+  game.end_dragon:
+    - { sound: "entity.ender_dragon.death", volume: 0.98, pitch: 1.00, delay: 0 }
+    - { sound: "entity.ender_dragon.growl", volume: 0.48, pitch: 1.00, delay: 10 }
+
+  mine.collect.iron:
+    - { sound: "entity.item.pickup", volume: 0.42, pitch: 1.00, delay: 0 }
+  mine.collect.emerald:
+    - { sound: "entity.experience_orb.pickup", volume: 0.55, pitch: 1.00, delay: 0 }
+  mine.collect.quartz:
+    - { sound: "entity.item.pickup", volume: 0.38, pitch: 1.00, delay: 0 }
+  mine.collect.scrap:
+    - { sound: "block.anvil.use", volume: 0.45, pitch: 1.00, delay: 0 }
+  portal.travel:
+    - { sound: "block.portal.travel", volume: 0.45, pitch: 1.00, delay: 0 }
+    - { sound: "entity.enderman.teleport", volume: 0.35, pitch: 1.00, delay: 2 }
+  guard.spawn:
+    - { sound: "entity.villager.yes", volume: 0.42, pitch: 1.00, delay: 0 }
+  guard.own_hit:
+    - { sound: "entity.villager.no", volume: 0.50, pitch: 1.00, delay: 0 }
+  guard.enemy_hit:
+    - { sound: "entity.player.attack.strong", volume: 0.48, pitch: 1.00, delay: 0 }

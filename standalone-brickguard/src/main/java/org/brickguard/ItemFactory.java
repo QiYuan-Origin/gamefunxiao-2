@@ -1,4 +1,4 @@
-package org.yuyun.brickguard;
+package org.brickguard;
 
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -47,6 +47,12 @@ final class ItemFactory {
 
     ItemStack action(Material material, String name, List<String> lore, String action) {
         ItemStack item = item(material, name, lore);
+        item.editMeta(meta -> meta.getPersistentDataContainer().set(actionKey, PersistentDataType.STRING, action));
+        return item;
+    }
+
+    ItemStack action(Material material, int amount, String name, List<String> lore, String action) {
+        ItemStack item = item(material, amount, name, lore);
         item.editMeta(meta -> meta.getPersistentDataContainer().set(actionKey, PersistentDataType.STRING, action));
         return item;
     }

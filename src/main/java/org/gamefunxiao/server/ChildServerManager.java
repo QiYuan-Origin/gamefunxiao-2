@@ -550,7 +550,8 @@ public class ChildServerManager implements PluginMessageListener {
         if (!plugin.getConfigManager().isCrossServerAdvertiseEnabled()) {
             return;
         }
-        if (crossLobbyServerName == null || crossLobbyServerName.isBlank()) {
+        String lobbyTarget = currentCrossLobbyServerName();
+        if (lobbyTarget == null || lobbyTarget.isBlank()) {
             return;
         }
 
@@ -571,7 +572,7 @@ public class ChildServerManager implements PluginMessageListener {
 
         ByteArrayDataOutput output = ByteStreams.newDataOutput();
         output.writeUTF("Forward");
-        output.writeUTF(crossLobbyServerName);
+        output.writeUTF(lobbyTarget);
         output.writeUTF("GameFunAdvertise");
         output.writeShort(payloadBytes.length);
         output.write(payloadBytes);
@@ -579,7 +580,7 @@ public class ChildServerManager implements PluginMessageListener {
         try {
             carrier.sendPluginMessage(plugin, BUNGEE_CHANNEL, output.toByteArray());
         } catch (RuntimeException exception) {
-            plugin.getLogger().warning("转发房间宣传到 " + crossLobbyServerName + " 失败: " + exception.getMessage());
+            plugin.getLogger().warning("转发房间宣传到 " + lobbyTarget + " 失败: " + exception.getMessage());
         }
     }
 
@@ -1043,7 +1044,7 @@ public class ChildServerManager implements PluginMessageListener {
         player.getInventory().clear();
         plugin.getRoomManager().resetPlayerForServerReturn(null, player);
         player.sendMessage(plugin.getMessageManager().getMessage("room.cross_server_returning_lobby"));
-        connectPlayer(player, crossLobbyServerName);
+        connectPlayer(player, currentCrossLobbyServerName());
     }
 
     public void returnCrossServerRoomPlayersToLobby(GameRoom room) {
@@ -1172,7 +1173,7 @@ public class ChildServerManager implements PluginMessageListener {
         if (activeManagedRoomId == null) {
             if (!player.getUniqueId().equals(pendingBootstrap.getOwnerUuid())) {
                 player.sendMessage(plugin.getMessageManager().getModeMessageWithPrefix(pendingBootstrap.getMode(), "room.child_server_wait_owner"));
-                connectPlayer(player, lobbyServerName);
+                connectPlayer(player, currentChildLobbyServerName());
                 return;
             }
 
@@ -1187,7 +1188,7 @@ public class ChildServerManager implements PluginMessageListener {
 
         GameRoom room = plugin.getRoomManager().getRoom(activeManagedRoomId);
         if (room == null) {
-            connectPlayer(player, lobbyServerName);
+            connectPlayer(player, currentChildLobbyServerName());
             return;
         }
 
@@ -1238,7 +1239,17 @@ public class ChildServerManager implements PluginMessageListener {
         player.getInventory().clear();
         plugin.getRoomManager().resetPlayerForServerReturn(null, player);
         player.sendMessage(plugin.getMessageManager().getMessage("room.child_server_returning_lobby"));
-        connectPlayer(player, lobbyServerName);
+        connectPlayer(player, currentChildLobbyServerName());
+    }
+
+    private String currentCrossLobbyServerName() {
+        String value = plugin.getConfigManager().getCrossServerLobbyServerName();
+        return value == null || value.isBlank() ? crossLobbyServerName : value;
+    }
+
+    private String currentChildLobbyServerName() {
+        String value = plugin.getConfigManager().getConfig().getString("child_server.lobby_server_name", lobbyServerName);
+        return value == null || value.isBlank() ? lobbyServerName : value;
     }
 
     public void returnManagedRoomPlayersToLobby(GameRoom room) {
