@@ -21752,6 +21752,7 @@ public class FlashModeManager {
     private boolean isUsableFlashSpyglass(ItemStack item) {
         return item != null
                 && item.getType() == Material.SPYGLASS
+                && isUpgradeApplied(item)
                 && item.getEnchantmentLevel(Enchantment.FIRE_ASPECT) > 0;
     }
 
