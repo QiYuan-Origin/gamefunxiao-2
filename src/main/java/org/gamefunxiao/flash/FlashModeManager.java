@@ -6,6 +6,7 @@ import io.papermc.paper.datacomponent.item.FoodProperties;
 import io.papermc.paper.datacomponent.item.KineticWeapon;
 import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation;
 import io.papermc.paper.event.entity.EntityLoadCrossbowEvent;
+import io.papermc.paper.event.player.PlayerStopUsingItemEvent;
 import io.papermc.paper.event.player.PlayerShieldDisableEvent;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
@@ -65,6 +66,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Skeleton;
+import org.bukkit.entity.SmallFireball;
 import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.Tameable;
 import org.bukkit.entity.Trident;
@@ -88,6 +90,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityTargetEvent;
 import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.entity.TrialSpawnerSpawnEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
@@ -264,6 +267,21 @@ public class FlashModeManager {
     private static final double FIREWORK_TNT_CROSSBOW_SPEED_MULTIPLIER = 1.70D;
     private static final double FLASH_WIND_CHARGE_CROSSBOW_SPEED_MULTIPLIER = 5.00D;
     private static final double FLASH_WIND_CHARGE_MANUAL_SPEED_CAP = 4.60D;
+    private static final int DISPENSER_LAUNCHER_MAX_CHARGE_TICKS = 50;
+    private static final int DISPENSER_LAUNCHER_COOLDOWN_TICKS = 24;
+    private static final long DISPENSER_LAUNCHER_COOLDOWN_MILLIS = 1200L;
+    private static final double DISPENSER_FIREBALL_BASE_DAMAGE = 4.0D;
+    private static final double DISPENSER_FIREBALL_MAX_BONUS_DAMAGE = 4.5D;
+    private static final double DISPENSER_FIREBALL_BASE_SPEED = 1.18D;
+    private static final double DISPENSER_FIREBALL_MAX_BONUS_SPEED = 1.28D;
+    private static final double DISPENSER_FIREBALL_BASE_RADIUS = 1.45D;
+    private static final double DISPENSER_FIREBALL_MAX_BONUS_RADIUS = 0.55D;
+    private static final double DISPENSER_SONIC_BASE_DAMAGE = 4.5D;
+    private static final double DISPENSER_SONIC_MAX_BONUS_DAMAGE = 4.5D;
+    private static final double DISPENSER_SONIC_BASE_RANGE = 10.0D;
+    private static final double DISPENSER_SONIC_MAX_BONUS_RANGE = 16.0D;
+    private static final double DISPENSER_SONIC_BASE_SPEED = 0.82D;
+    private static final double DISPENSER_SONIC_MAX_BONUS_SPEED = 0.88D;
     private static final double SHIELD_WIND_CHARGE_DASH_SPEED_MULTIPLIER = 1.65D;
     private static final float FLASH_BOW_DOWN_WIND_CHARGE_PITCH_DEGREES = 70.0F;
     private static final double FLASH_BOW_DOWN_WIND_CHARGE_SHIELD_Y_MULTIPLIER = 0.40D;
@@ -488,6 +506,9 @@ public class FlashModeManager {
     private final Map<UUID, Long> materialAxeCooldowns = new HashMap<>();
     private final Map<UUID, Long> recentCrossbowLoadOffhandCancels = new HashMap<>();
     private final Map<UUID, Long> recentCrossbowPayloadShots = new HashMap<>();
+    private final Map<UUID, DispenserChargeSession> dispenserChargeSessions = new HashMap<>();
+    private final Map<UUID, Long> dispenserLauncherCooldowns = new HashMap<>();
+    private final Map<UUID, DispenserFireballData> dispenserFireballs = new HashMap<>();
     private final Map<UUID, Integer> unstableMaceSmashCounts = new HashMap<>();
     private final Map<UUID, Double> unstableMaceNextReboundChances = new HashMap<>();
     private final Map<UUID, Long> unstableMaceDisplacementLocks = new HashMap<>();
@@ -7295,6 +7316,521 @@ public class FlashModeManager {
         return true;
     }
 
+    public boolean handleDispenserLauncherCharge(PlayerInteractEvent event) {
+        if (event == null || (event.getHand() != EquipmentSlot.HAND && event.getHand() != EquipmentSlot.OFF_HAND)
+                || (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
+            return false;
+        }
+        Player player = event.getPlayer();
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (!isFlashCombatAvailable(player, room)) {
+            return false;
+        }
+        PlayerInventory inventory = player.getInventory();
+        ItemStack main = inventory.getItemInMainHand();
+        ItemStack offhand = inventory.getItemInOffHand();
+        if (main == null || main.getType() != Material.DISPENSER || offhand == null || !isDispenserLauncherPayload(offhand.getType())) {
+            return false;
+        }
+
+        event.setCancelled(true);
+        event.setUseInteractedBlock(Event.Result.DENY);
+        event.setUseItemInHand(Event.Result.DENY);
+
+        UUID playerId = player.getUniqueId();
+        if (dispenserChargeSessions.containsKey(playerId)) {
+            return true;
+        }
+        long now = System.currentTimeMillis();
+        long cooldownUntil = dispenserLauncherCooldowns.getOrDefault(playerId, 0L);
+        if (now < cooldownUntil || player.hasCooldown(Material.DISPENSER)) {
+            long remaining = Math.max(1L, ((Math.max(cooldownUntil, now + player.getCooldown(Material.DISPENSER) * 50L) - now) + 999L) / 1000L);
+            player.swingHand(EquipmentSlot.HAND);
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
+            player.sendActionBar("§x§F§F§A§A§5§5✦ §e发射器冷却中 §8| §7还需 §c" + remaining + "秒");
+            return true;
+        }
+
+        startDispenserLauncherCharge(player, room, offhand.getType());
+        return true;
+    }
+
+    private boolean isDispenserLauncherPayload(Material type) {
+        return type == Material.FIRE_CHARGE || type == Material.ECHO_SHARD;
+    }
+
+    private void startDispenserLauncherCharge(Player player, GameRoom room, Material payloadType) {
+        UUID playerId = player.getUniqueId();
+        ItemStack dispenser = player.getInventory().getItemInMainHand();
+        boolean hadConsumable = dispenser != null && dispenser.hasData(DataComponentTypes.CONSUMABLE);
+        Consumable previousConsumable = hadConsumable ? dispenser.getData(DataComponentTypes.CONSUMABLE) : null;
+        applyDispenserLauncherUseComponent(dispenser);
+        player.getInventory().setItemInMainHand(dispenser);
+        player.updateInventory();
+
+        String roomId = getFlashContextId(player, room);
+        BukkitTask task = new BukkitRunnable() {
+            @Override
+            public void run() {
+                DispenserChargeSession current = dispenserChargeSessions.get(playerId);
+                Player online = Bukkit.getPlayer(playerId);
+                if (current == null || online == null || !online.isOnline()) {
+                    cancel();
+                    return;
+                }
+                GameRoom activeRoom = plugin.getRoomManager().getPlayerRoom(playerId);
+                if (!current.roomId().equals(getFlashContextId(online, activeRoom))
+                        || !isFlashCombatAvailable(online, activeRoom)
+                        || !isDispenserLauncherStillHeld(online, current.payloadType())) {
+                    cancelDispenserLauncherCharge(online, true);
+                    cancel();
+                    return;
+                }
+                int ticks = getDispenserChargeTicks(current);
+                if (ticks > 4 && !isDispenserLauncherActivelyUsing(online)) {
+                    finishDispenserLauncherCharge(online, ticks, true);
+                    cancel();
+                    return;
+                }
+                if (ticks > 20 * 10) {
+                    cancelDispenserLauncherCharge(online, true);
+                    cancel();
+                    return;
+                }
+
+                double ratio = getDispenserChargeRatio(ticks);
+                int percent = (int) Math.round(ratio * 100.0D);
+                if (current.payloadType() == Material.FIRE_CHARGE) {
+                    online.sendActionBar("§x§F§F§8§4§4§4✦ §c火球发射器蓄力 §6" + percent + "% §8| §7松开右键发射");
+                    if (ticks % 6 == 0) {
+                        Location effect = online.getEyeLocation().add(online.getEyeLocation().getDirection().normalize().multiply(0.72D));
+                        online.getWorld().spawnParticle(Particle.FLAME, effect, 5, 0.08D, 0.06D, 0.08D, 0.015D);
+                        online.getWorld().spawnParticle(Particle.SMOKE, effect, 3, 0.07D, 0.05D, 0.07D, 0.008D);
+                    }
+                } else {
+                    online.sendActionBar("§x§8§8§D§D§F§F✦ §b回响发射器蓄力 §3" + percent + "% §8| §7松开右键释放声波");
+                    if (ticks % 6 == 0) {
+                        Location effect = online.getEyeLocation().add(online.getEyeLocation().getDirection().normalize().multiply(0.72D));
+                        online.getWorld().spawnParticle(Particle.SCULK_SOUL, effect, 4, 0.08D, 0.06D, 0.08D, 0.02D);
+                        online.getWorld().spawnParticle(Particle.SONIC_BOOM, effect, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+                    }
+                }
+            }
+        }.runTaskTimer(plugin, 1L, 2L);
+
+        dispenserChargeSessions.put(playerId, new DispenserChargeSession(payloadType, roomId, System.currentTimeMillis(), task,
+                hadConsumable, previousConsumable));
+        player.swingHand(EquipmentSlot.HAND);
+        player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_DISPENSE, 0.62f, 1.0f);
+        player.playSound(player.getLocation(), payloadType == Material.FIRE_CHARGE
+                ? Sound.ITEM_CROSSBOW_LOADING_START : Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.48f, 1.0f);
+        try {
+            player.startUsingItem(EquipmentSlot.HAND);
+        } catch (IllegalArgumentException | IllegalStateException ignored) {
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && dispenserChargeSessions.containsKey(playerId)) {
+                try {
+                    player.startUsingItem(EquipmentSlot.HAND);
+                } catch (IllegalArgumentException | IllegalStateException ignored) {
+                }
+            }
+        }, 1L);
+    }
+
+    private void applyDispenserLauncherUseComponent(ItemStack dispenser) {
+        if (dispenser == null || dispenser.getType() != Material.DISPENSER) {
+            return;
+        }
+        dispenser.setData(DataComponentTypes.CONSUMABLE, Consumable.consumable()
+                .consumeSeconds(72000.0F)
+                .animation(ItemUseAnimation.CROSSBOW)
+                .sound(Key.key("minecraft:block.dispenser.dispense"))
+                .hasConsumeParticles(false));
+    }
+
+    private boolean isDispenserLauncherStillHeld(Player player, Material payloadType) {
+        if (player == null) {
+            return false;
+        }
+        ItemStack main = player.getInventory().getItemInMainHand();
+        ItemStack offhand = player.getInventory().getItemInOffHand();
+        return main != null && main.getType() == Material.DISPENSER
+                && offhand != null && offhand.getType() == payloadType && offhand.getAmount() > 0;
+    }
+
+    private boolean isDispenserLauncherActivelyUsing(Player player) {
+        if (player == null) {
+            return false;
+        }
+        if (player.hasActiveItem()) {
+            ItemStack active = player.getActiveItem();
+            if (active != null && active.getType() == Material.DISPENSER) {
+                return true;
+            }
+        }
+        return player.isHandRaised() && player.getHandRaised() == EquipmentSlot.HAND
+                && player.getInventory().getItemInMainHand().getType() == Material.DISPENSER;
+    }
+
+    public void handleDispenserLauncherStopUsing(PlayerStopUsingItemEvent event) {
+        if (event == null) {
+            return;
+        }
+        Player player = event.getPlayer();
+        DispenserChargeSession session = dispenserChargeSessions.get(player.getUniqueId());
+        if (session == null) {
+            return;
+        }
+        int ticks = Math.max(event.getTicksHeldFor(), getDispenserChargeTicks(session));
+        finishDispenserLauncherCharge(player, ticks, true);
+    }
+
+    public void cancelDispenserLauncherCharge(Player player, boolean feedback) {
+        if (player == null) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        DispenserChargeSession session = dispenserChargeSessions.remove(playerId);
+        if (session == null) {
+            return;
+        }
+        if (session.task() != null) {
+            session.task().cancel();
+        }
+        restoreDispenserLauncherUseComponent(player, session);
+        if (player.hasActiveItem() && player.getActiveItem() != null && player.getActiveItem().getType() == Material.DISPENSER) {
+            player.clearActiveItem();
+        }
+        if (feedback && player.isOnline()) {
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
+            player.sendActionBar("§x§9§9§9§9§9§9✦ §7发射器蓄力已中断");
+        }
+    }
+
+    private void finishDispenserLauncherCharge(Player player, int chargeTicks, boolean consumePayload) {
+        if (player == null) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        DispenserChargeSession session = dispenserChargeSessions.remove(playerId);
+        if (session == null) {
+            return;
+        }
+        if (session.task() != null) {
+            session.task().cancel();
+        }
+        restoreDispenserLauncherUseComponent(player, session);
+        if (!player.isOnline()) {
+            return;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(playerId);
+        if (!session.roomId().equals(getFlashContextId(player, room)) || !isFlashCombatAvailable(player, room)
+                || !isDispenserLauncherStillHeld(player, session.payloadType())) {
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
+            player.sendActionBar("§x§9§9§9§9§9§9✦ §7发射器蓄力已中断");
+            return;
+        }
+        if (consumePayload && !consumeHandItemIfType(player, EquipmentSlot.OFF_HAND, session.payloadType(), 1)) {
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
+            player.sendActionBar("§x§F§F§8§8§8§8✦ §c副手弹药不足，发射取消");
+            return;
+        }
+
+        double ratio = Math.max(0.15D, getDispenserChargeRatio(chargeTicks));
+        dispenserLauncherCooldowns.put(playerId, System.currentTimeMillis() + DISPENSER_LAUNCHER_COOLDOWN_MILLIS);
+        player.setCooldown(Material.DISPENSER, DISPENSER_LAUNCHER_COOLDOWN_TICKS);
+        player.swingHand(EquipmentSlot.HAND);
+        if (player.hasActiveItem() && player.getActiveItem() != null && player.getActiveItem().getType() == Material.DISPENSER) {
+            player.clearActiveItem();
+        }
+
+        int percent = (int) Math.round(Math.min(1.0D, ratio) * 100.0D);
+        if (session.payloadType() == Material.FIRE_CHARGE) {
+            launchDispenserFireball(player, room, ratio, session.roomId());
+            player.sendActionBar("§x§F§F§6§6§3§3✦ §c火球发射 §8| §7蓄力 §e" + percent + "%");
+        } else {
+            launchDispenserSonicWave(player, room, ratio, session.roomId());
+            player.sendActionBar("§x§8§8§D§D§F§F✦ §b回响波发射 §8| §7蓄力 §e" + percent + "%");
+        }
+        player.updateInventory();
+    }
+
+    private int getDispenserChargeTicks(DispenserChargeSession session) {
+        if (session == null) {
+            return 0;
+        }
+        return (int) Math.max(0L, (System.currentTimeMillis() - session.startMillis()) / 50L);
+    }
+
+    private double getDispenserChargeRatio(int chargeTicks) {
+        return Math.max(0.0D, Math.min(1.0D, chargeTicks / (double) DISPENSER_LAUNCHER_MAX_CHARGE_TICKS));
+    }
+
+    private void restoreDispenserLauncherUseComponent(Player player, DispenserChargeSession session) {
+        if (player == null || session == null) {
+            return;
+        }
+        ItemStack current = player.getInventory().getItemInMainHand();
+        if (current == null || current.getType() != Material.DISPENSER) {
+            return;
+        }
+        if (session.hadConsumable() && session.previousConsumable() != null) {
+            current.setData(DataComponentTypes.CONSUMABLE, session.previousConsumable());
+        } else {
+            current.unsetData(DataComponentTypes.CONSUMABLE);
+        }
+        player.getInventory().setItemInMainHand(current);
+    }
+
+    private void launchDispenserFireball(Player player, GameRoom room, double ratio, String roomId) {
+        World world = player.getWorld();
+        Vector direction = player.getEyeLocation().getDirection();
+        if (direction.lengthSquared() < 0.0001D) {
+            direction = player.getLocation().getDirection();
+        }
+        if (direction.lengthSquared() < 0.0001D) {
+            direction = new Vector(0.0D, 0.0D, 1.0D);
+        }
+        direction.normalize();
+        Vector launchDirection = direction.clone();
+        double speed = DISPENSER_FIREBALL_BASE_SPEED + DISPENSER_FIREBALL_MAX_BONUS_SPEED * ratio;
+        double damage = DISPENSER_FIREBALL_BASE_DAMAGE + DISPENSER_FIREBALL_MAX_BONUS_DAMAGE * ratio;
+        double radius = DISPENSER_FIREBALL_BASE_RADIUS + DISPENSER_FIREBALL_MAX_BONUS_RADIUS * ratio;
+        Location start = player.getEyeLocation().clone().add(launchDirection.clone().multiply(0.92D));
+        SmallFireball fireball = world.spawn(start, SmallFireball.class, entity -> {
+            entity.setShooter(player);
+            entity.setYield(0.0F);
+            entity.setIsIncendiary(false);
+            entity.setDirection(launchDirection.clone());
+            entity.setPower(launchDirection.clone().multiply(0.08D));
+            entity.setVelocity(launchDirection.clone().multiply(speed));
+            entity.setDisplayItem(new ItemStack(Material.FIRE_CHARGE));
+        });
+        dispenserFireballs.put(fireball.getUniqueId(), new DispenserFireballData(player.getUniqueId(), roomId, damage, radius,
+                System.currentTimeMillis() + 5000L));
+        monitorDispenserFireball(player.getUniqueId(), fireball.getUniqueId());
+        world.spawnParticle(Particle.FLAME, start, 18, 0.16D, 0.10D, 0.16D, 0.04D);
+        world.spawnParticle(Particle.SMOKE, start, 9, 0.12D, 0.08D, 0.12D, 0.02D);
+        world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.82f, 1.0f);
+        world.playSound(start, Sound.ITEM_FIRECHARGE_USE, 0.72f, 1.0f);
+        world.playSound(start, Sound.ENTITY_BLAZE_SHOOT, 0.50f, 1.0f);
+    }
+
+    private void monitorDispenserFireball(UUID ownerId, UUID fireballId) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                DispenserFireballData data = dispenserFireballs.get(fireballId);
+                Entity entity = Bukkit.getEntity(fireballId);
+                Player owner = Bukkit.getPlayer(ownerId);
+                if (data == null || !(entity instanceof SmallFireball fireball) || !fireball.isValid() || fireball.isDead()) {
+                    dispenserFireballs.remove(fireballId);
+                    cancel();
+                    return;
+                }
+                GameRoom room = owner == null ? null : plugin.getRoomManager().getPlayerRoom(ownerId);
+                if (owner == null || !owner.isOnline() || !data.roomId().equals(getFlashContextId(owner, room))
+                        || !isFlashCombatAvailable(owner, room) || System.currentTimeMillis() > data.expireAtMillis()) {
+                    fireball.remove();
+                    dispenserFireballs.remove(fireballId);
+                    cancel();
+                    return;
+                }
+                Location loc = fireball.getLocation();
+                World world = loc.getWorld();
+                if (world != null) {
+                    world.spawnParticle(Particle.FLAME, loc, 3, 0.08D, 0.05D, 0.08D, 0.01D);
+                    world.spawnParticle(Particle.SMOKE, loc, 1, 0.06D, 0.04D, 0.06D, 0.004D);
+                }
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    public boolean handleDispenserLauncherFireballDamage(EntityDamageByEntityEvent event) {
+        if (event == null || !(event.getDamager() instanceof Projectile projectile)) {
+            return false;
+        }
+        DispenserFireballData data = dispenserFireballs.remove(projectile.getUniqueId());
+        if (data == null) {
+            return false;
+        }
+        event.setCancelled(true);
+        Player shooter = Bukkit.getPlayer(data.ownerId());
+        Location hit = event.getEntity().getLocation().add(0.0D, Math.min(1.0D, Math.max(0.35D, event.getEntity().getHeight() * 0.50D)), 0.0D);
+        LivingEntity direct = event.getEntity() instanceof LivingEntity living ? living : null;
+        projectile.remove();
+        applyDispenserFireballImpact(shooter, data, hit, direct);
+        return true;
+    }
+
+    public boolean handleDispenserLauncherFireballHit(ProjectileHitEvent event) {
+        if (event == null) {
+            return false;
+        }
+        Projectile projectile = event.getEntity();
+        DispenserFireballData data = dispenserFireballs.remove(projectile.getUniqueId());
+        if (data == null) {
+            return false;
+        }
+        event.setCancelled(true);
+        Player shooter = Bukkit.getPlayer(data.ownerId());
+        Location hit = projectile.getLocation();
+        LivingEntity direct = null;
+        if (event.getHitEntity() instanceof LivingEntity living) {
+            direct = living;
+            hit = living.getLocation().add(0.0D, Math.min(1.0D, Math.max(0.35D, living.getHeight() * 0.50D)), 0.0D);
+        } else if (event.getHitBlock() != null) {
+            hit = event.getHitBlock().getLocation().add(0.5D, 0.5D, 0.5D);
+        }
+        projectile.remove();
+        applyDispenserFireballImpact(shooter, data, hit, direct);
+        return true;
+    }
+
+    private void applyDispenserFireballImpact(Player shooter, DispenserFireballData data, Location hit, LivingEntity directHit) {
+        if (hit == null || hit.getWorld() == null || data == null) {
+            return;
+        }
+        World world = hit.getWorld();
+        world.spawnParticle(Particle.EXPLOSION, hit, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        world.spawnParticle(Particle.FLAME, hit, 26, data.radius() * 0.20D, 0.20D, data.radius() * 0.20D, 0.045D);
+        world.spawnParticle(Particle.SMOKE, hit, 18, data.radius() * 0.25D, 0.18D, data.radius() * 0.25D, 0.026D);
+        world.playSound(hit, Sound.ENTITY_GENERIC_EXPLODE, 0.58f, 1.0f);
+        world.playSound(hit, Sound.ITEM_FIRECHARGE_USE, 0.62f, 1.0f);
+
+        if (shooter == null || !shooter.isOnline()) {
+            return;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(shooter.getUniqueId());
+        if (!data.roomId().equals(getFlashContextId(shooter, room)) || !isFlashCombatAvailable(shooter, room)) {
+            return;
+        }
+
+        Set<UUID> damaged = new HashSet<>();
+        if (directHit != null && canFlashNoteHitLiving(shooter, room, directHit)) {
+            damageDispenserFireballTarget(shooter, directHit, data.damage(), hit, true);
+            damaged.add(directHit.getUniqueId());
+        }
+        for (Entity entity : world.getNearbyEntities(hit, data.radius(), data.radius(), data.radius())) {
+            if (!(entity instanceof LivingEntity living) || damaged.contains(entity.getUniqueId()) || !canFlashNoteHitLiving(shooter, room, living)) {
+                continue;
+            }
+            double distance = Math.max(0.0D, living.getLocation().add(0.0D, living.getHeight() * 0.5D, 0.0D).distance(hit));
+            if (distance > data.radius() + 0.25D) {
+                continue;
+            }
+            double falloff = Math.max(0.45D, 1.0D - distance / Math.max(1.0D, data.radius()) * 0.45D);
+            damageDispenserFireballTarget(shooter, living, data.damage() * falloff, hit, false);
+        }
+    }
+
+    private void damageDispenserFireballTarget(Player shooter, LivingEntity living, double damage, Location hit, boolean direct) {
+        if (living == null || living.isDead()) {
+            return;
+        }
+        living.damage(Math.max(1.0D, damage), shooter);
+        living.setFireTicks(Math.max(living.getFireTicks(), direct ? 70 : 42));
+        Vector push = living.getLocation().toVector().subtract(hit.toVector());
+        if (push.lengthSquared() < 0.0001D) {
+            push = shooter.getEyeLocation().getDirection().clone();
+        }
+        if (push.lengthSquared() > 0.0001D) {
+            push.normalize().multiply(direct ? 0.36D : 0.24D);
+            push.setY(Math.max(0.12D, push.getY() + 0.12D));
+            living.setVelocity(living.getVelocity().add(push));
+        }
+    }
+
+    private void launchDispenserSonicWave(Player player, GameRoom room, double ratio, String roomId) {
+        World world = player.getWorld();
+        Vector direction = player.getEyeLocation().getDirection();
+        if (direction.lengthSquared() < 0.0001D) {
+            direction = player.getLocation().getDirection();
+        }
+        if (direction.lengthSquared() < 0.0001D) {
+            direction = new Vector(0.0D, 0.0D, 1.0D);
+        }
+        direction.normalize();
+        Vector sonicDirection = direction.clone();
+        Location start = player.getEyeLocation().clone().add(sonicDirection.clone().multiply(0.80D));
+        double damage = DISPENSER_SONIC_BASE_DAMAGE + DISPENSER_SONIC_MAX_BONUS_DAMAGE * ratio;
+        double range = DISPENSER_SONIC_BASE_RANGE + DISPENSER_SONIC_MAX_BONUS_RANGE * ratio;
+        double speed = DISPENSER_SONIC_BASE_SPEED + DISPENSER_SONIC_MAX_BONUS_SPEED * ratio;
+        UUID ownerId = player.getUniqueId();
+        world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.72f, 1.0f);
+        world.playSound(start, Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.78f, 1.0f);
+        world.spawnParticle(Particle.SCULK_SOUL, start, 18, 0.18D, 0.12D, 0.18D, 0.05D);
+
+        new BukkitRunnable() {
+            private double travelled;
+            private final Set<UUID> checked = new HashSet<>();
+
+            @Override
+            public void run() {
+                Player owner = Bukkit.getPlayer(ownerId);
+                GameRoom activeRoom = owner == null ? null : plugin.getRoomManager().getPlayerRoom(ownerId);
+                if (owner == null || !owner.isOnline() || !roomId.equals(getFlashContextId(owner, activeRoom))
+                        || !isFlashCombatAvailable(owner, activeRoom) || travelled > range) {
+                    cancel();
+                    return;
+                }
+                int samples = Math.max(1, (int) Math.ceil(speed / 0.32D));
+                double step = speed / samples;
+                for (int i = 0; i < samples; i++) {
+                    travelled += step;
+                    Location point = start.clone().add(sonicDirection.clone().multiply(travelled));
+                    world.spawnParticle(Particle.SONIC_BOOM, point, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+                    world.spawnParticle(Particle.SCULK_SOUL, point, 2, 0.08D, 0.06D, 0.08D, 0.012D);
+                    LivingEntity target = findDispenserSonicTarget(owner, activeRoom, point, checked);
+                    if (target != null) {
+                        applyDispenserSonicHit(owner, target, point, sonicDirection, damage);
+                        cancel();
+                        return;
+                    }
+                    if (travelled > range) {
+                        cancel();
+                        return;
+                    }
+                }
+            }
+        }.runTaskTimer(plugin, 0L, 1L);
+    }
+
+    private LivingEntity findDispenserSonicTarget(Player shooter, GameRoom room, Location point, Set<UUID> checked) {
+        if (point == null || point.getWorld() == null) {
+            return null;
+        }
+        LivingEntity best = null;
+        double bestDistance = 1.05D * 1.05D;
+        for (Entity entity : point.getWorld().getNearbyEntities(point, 1.05D, 1.05D, 1.05D)) {
+            if (!(entity instanceof LivingEntity living) || checked.contains(entity.getUniqueId()) || !canFlashNoteHitLiving(shooter, room, living)) {
+                continue;
+            }
+            checked.add(entity.getUniqueId());
+            double distance = living.getBoundingBox().getCenter().distanceSquared(point.toVector());
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = living;
+            }
+        }
+        return best;
+    }
+
+    private void applyDispenserSonicHit(Player shooter, LivingEntity target, Location point, Vector direction, double damage) {
+        target.damage(Math.max(1.0D, damage), shooter);
+        target.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 45, 0, false, true, true));
+        target.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 35, 0, false, true, true));
+        target.setVelocity(target.getVelocity().add(direction.clone().normalize().multiply(0.48D).setY(0.10D)));
+        World world = point.getWorld();
+        if (world != null) {
+            Location center = target.getLocation().add(0.0D, Math.min(1.1D, Math.max(0.45D, target.getHeight() * 0.55D)), 0.0D);
+            world.spawnParticle(Particle.SONIC_BOOM, center, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+            world.spawnParticle(Particle.SCULK_SOUL, center, 24, 0.22D, 0.20D, 0.22D, 0.04D);
+            world.playSound(center, Sound.ENTITY_WARDEN_SONIC_BOOM, 0.82f, 1.0f);
+        }
+    }
+
     public boolean handleFlashCrossbowLoad(PlayerInteractEvent event) {
         if (handleExtendedFishingRodReel(event)) {
             return true;
@@ -8226,6 +8762,9 @@ public class FlashModeManager {
         materialAxeCooldowns.remove(uuid);
         recentCrossbowLoadOffhandCancels.remove(uuid);
         recentCrossbowPayloadShots.remove(uuid);
+        cancelDispenserLauncherCharge(player, false);
+        dispenserLauncherCooldowns.remove(uuid);
+        dispenserFireballs.entrySet().removeIf(entry -> entry.getValue() == null || uuid.equals(entry.getValue().ownerId()));
         unstableMaceSmashCounts.remove(uuid);
         unstableMaceNextReboundChances.remove(uuid);
         unstableMaceDisplacementLocks.remove(uuid);
@@ -21855,6 +22394,13 @@ public class FlashModeManager {
         CIRCLE,
         VERTICAL,
         HORIZONTAL
+    }
+
+    private record DispenserChargeSession(Material payloadType, String roomId, long startMillis, BukkitTask task,
+                                          boolean hadConsumable, Consumable previousConsumable) {
+    }
+
+    private record DispenserFireballData(UUID ownerId, String roomId, double damage, double radius, long expireAtMillis) {
     }
 
     private record RedstoneStabilizerMatch(String kind, ItemStack result) {

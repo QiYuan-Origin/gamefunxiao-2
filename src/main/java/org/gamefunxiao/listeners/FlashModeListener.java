@@ -19,6 +19,8 @@ import org.bukkit.event.entity.EntityTargetEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.entity.TrialSpawnerSpawnEvent;
@@ -38,6 +40,7 @@ import org.bukkit.event.player.PlayerInputEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleUpdateEvent;
@@ -47,6 +50,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.gamefunxiao.GameFunXiao;
 import io.papermc.paper.event.entity.EntityLoadCrossbowEvent;
+import io.papermc.paper.event.player.PlayerStopUsingItemEvent;
 import io.papermc.paper.event.player.PlayerShieldDisableEvent;
 
 public class FlashModeListener implements Listener {
@@ -118,14 +122,31 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
+        plugin.getFlashModeManager().cancelDispenserLauncherCharge(event.getPlayer(), false);
         org.bukkit.Bukkit.getScheduler().runTask(plugin,
                 () -> plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(event.getPlayer()));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onPlayerItemHeld(PlayerItemHeldEvent event) {
+        plugin.getFlashModeManager().cancelDispenserLauncherCharge(event.getPlayer(), false);
         org.bukkit.Bukkit.getScheduler().runTask(plugin,
                 () -> plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(event.getPlayer()));
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onPlayerStopUsingItem(PlayerStopUsingItemEvent event) {
+        plugin.getFlashModeManager().handleDispenserLauncherStopUsing(event);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        plugin.getFlashModeManager().cancelDispenserLauncherCharge(event.getPlayer(), false);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        plugin.getFlashModeManager().cancelDispenserLauncherCharge(event.getEntity(), false);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -155,6 +176,9 @@ public class FlashModeListener implements Listener {
             return;
         }
         if (plugin.getFlashModeManager().handleFlashCoarseDirtInteract(event)) {
+            return;
+        }
+        if (plugin.getFlashModeManager().handleDispenserLauncherCharge(event)) {
             return;
         }
         if (plugin.getFlashModeManager().handleFlashCrossbowLoad(event)) {
@@ -255,6 +279,11 @@ public class FlashModeListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onProjectileHit(ProjectileHitEvent event) {
+        plugin.getFlashModeManager().handleDispenserLauncherFireballHit(event);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onCondensedSlimeBlockBreak(BlockBreakEvent event) {
         plugin.getFlashModeManager().handleCondensedSlimeBlockBreak(event);
     }
@@ -326,6 +355,9 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        if (plugin.getFlashModeManager().handleDispenserLauncherFireballDamage(event)) {
+            return;
+        }
         if (plugin.getFlashModeManager().handleTntMinecartHoeHit(event)) {
             return;
         }
