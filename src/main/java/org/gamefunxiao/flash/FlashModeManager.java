@@ -49,9 +49,7 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.AbstractSkeleton;
 import org.bukkit.entity.AreaEffectCloud;
-import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.ComplexEntityPart;
-import org.bukkit.entity.Display;
 import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Enderman;
@@ -143,7 +141,6 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
-import org.bukkit.util.Transformation;
 import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.game.GameMode;
 import org.gamefunxiao.game.GameRoom;
@@ -451,7 +448,7 @@ public class FlashModeManager {
     private static final int ENHANCED_WIND_CHARGE_MAX_STACK = 8;
     private static final String ENHANCED_WIND_CHARGE_NAME = "§x§B§B§F§F§F§F强§x§A§8§F§4§F§F化§x§9§5§E§9§F§F风§x§8§2§D§E§F§F弹";
     private static final int RAILGUN_CHARGE_SECONDS = 10;
-    private static final int RAILGUN_ANIMATION_STEPS = 40;
+    private static final int RAILGUN_ANIMATION_STEPS = 24;
     private static final int RAILGUN_FINAL_HOLD_STEPS = 2;
     private static final double RAILGUN_RING_SPACING = 4.8D;
     private static final int[] RAILGUN_TNT_COUNTS = {0, 96, 240, 480};
@@ -526,6 +523,7 @@ public class FlashModeManager {
     private final NamespacedKey railgunChargeSecondsKey;
     private final NamespacedKey railgunChargedKey;
     private final NamespacedKey railgunIdKey;
+    private final NamespacedKey railgunVisualTntKey;
     private final NamespacedKey happyGhastOriginalFlyingSpeedKey;
     private final NamespacedKey happyGhastOriginalMovementSpeedKey;
     private final NamespacedKey happyGhastGoldenAppleHealthUsesKey;
@@ -717,6 +715,7 @@ public class FlashModeManager {
         this.railgunChargeSecondsKey = new NamespacedKey(plugin, "flash_railgun_charge_seconds");
         this.railgunChargedKey = new NamespacedKey(plugin, "flash_railgun_charged");
         this.railgunIdKey = new NamespacedKey(plugin, "flash_railgun_id");
+        this.railgunVisualTntKey = new NamespacedKey(plugin, "flash_railgun_visual_tnt");
         this.happyGhastOriginalFlyingSpeedKey = new NamespacedKey(plugin, "flash_happy_ghast_original_flying_speed");
         this.happyGhastOriginalMovementSpeedKey = new NamespacedKey(plugin, "flash_happy_ghast_original_movement_speed");
         this.happyGhastGoldenAppleHealthUsesKey = new NamespacedKey(plugin, "flash_happy_ghast_golden_apple_health_uses");
@@ -5413,7 +5412,8 @@ public class FlashModeManager {
 
         String railgunId = getRailgunId(railgun);
         org.bukkit.Chunk center = player.getLocation().getChunk();
-        new RailgunTargetMenu(plugin, player, level, railgunId, player.getWorld().getUID(), center.getX(), center.getZ()).open();
+        new RailgunTargetMenu(plugin, player, level, railgunId, player.getWorld().getUID(),
+                center.getX(), center.getZ(), player.getFacing()).open();
         return true;
     }
 
@@ -5448,6 +5448,7 @@ public class FlashModeManager {
 
         player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
                 "§x§F§F§3§3§3§3轨道炮已发射 §8| §7目标区块 §f" + chunkX + "§8, §f" + chunkZ));
+        player.playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 0.95F, 0.62F);
         player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.85F, 0.55F);
         player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.72F, 0.72F);
         return true;
@@ -5462,7 +5463,7 @@ public class FlashModeManager {
             railgunAnimationTask.cancel();
             railgunAnimationTask = null;
         }
-        activeRailgunStrikes.values().forEach(this::removeRailgunDisplays);
+        activeRailgunStrikes.values().forEach(this::removeRailgunTnts);
         activeRailgunStrikes.clear();
     }
 
@@ -5499,7 +5500,7 @@ public class FlashModeManager {
         }
         refreshRailgunMeta(result, meta);
         result.setItemMeta(meta);
-        result.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.fromString("flashsmp:railgun"));
+        result.unsetData(DataComponentTypes.ITEM_MODEL);
         return result;
     }
 
@@ -5516,10 +5517,11 @@ public class FlashModeManager {
         }
         refreshRailgunMeta(railgun, meta);
         railgun.setItemMeta(meta);
-        railgun.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.fromString("flashsmp:railgun"));
+        railgun.unsetData(DataComponentTypes.ITEM_MODEL);
     }
 
     private void refreshRailgunMeta(ItemStack railgun, ItemMeta meta) {
+        railgun.unsetData(DataComponentTypes.ITEM_MODEL);
         int level = Math.max(1, Math.min(3, getRailgunLevelFromMeta(meta)));
         int seconds = Math.max(0, Math.min(RAILGUN_CHARGE_SECONDS,
                 getPersistentInteger(meta, railgunChargeSecondsKey, 0)));
@@ -5628,7 +5630,7 @@ public class FlashModeManager {
 
     private void startRailgunTasks() {
         railgunChargeTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeldRailguns, 20L, 20L);
-        railgunAnimationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickRailgunStrikes, 4L, 4L);
+        railgunAnimationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickRailgunStrikes, 2L, 2L);
     }
 
     private void tickHeldRailguns() {
@@ -5671,15 +5673,19 @@ public class FlashModeManager {
         double startY = Math.min(world.getMaxHeight() - 4.0D,
                 Math.max(impact.getY() + 50.0D, owner.getLocation().getY() + 30.0D));
         Location origin = new Location(world, impact.getX(), startY, impact.getZ());
-        List<RailgunDisplayPoint> points = new ArrayList<>(RAILGUN_TNT_COUNTS[safeLevel]);
+        List<RailgunTntPoint> points = new ArrayList<>(RAILGUN_TNT_COUNTS[safeLevel]);
         int ringCount = RAILGUN_RING_COUNTS[safeLevel];
         int totalWeight = ringCount * (ringCount + 1) / 2;
-        int remaining = RAILGUN_TNT_COUNTS[safeLevel];
+        int ringTntCount = RAILGUN_TNT_COUNTS[safeLevel] - 1;
+        int remaining = ringTntCount;
+
+        TNTPrimed centerTnt = spawnRailgunVisualTnt(world, origin);
+        points.add(new RailgunTntPoint(centerTnt, impact.getX(), impact.getY() + 0.55D, impact.getZ()));
 
         for (int ring = 1; ring <= ringCount; ring++) {
             int ringPoints = ring == ringCount
                     ? remaining
-                    : Math.max(8, (int) Math.round((double) RAILGUN_TNT_COUNTS[safeLevel] * ring / totalWeight));
+                    : Math.max(8, (int) Math.round((double) ringTntCount * ring / totalWeight));
             remaining -= ringPoints;
             double radius = ring * RAILGUN_RING_SPACING;
             for (int index = 0; index < ringPoints; index++) {
@@ -5689,22 +5695,8 @@ public class FlashModeManager {
                 int finalY = Math.min(world.getMaxHeight() - 2,
                         Math.max(world.getMinHeight() + 1,
                                 world.getHighestBlockYAt((int) Math.floor(finalX), (int) Math.floor(finalZ)) + 1));
-                BlockDisplay display = world.spawn(origin, BlockDisplay.class, spawned -> {
-                    spawned.setBlock(Bukkit.createBlockData(Material.TNT));
-                    spawned.setPersistent(false);
-                    spawned.setInvulnerable(true);
-                    spawned.setGravity(false);
-                    spawned.setInterpolationDuration(4);
-                    spawned.setTeleportDuration(4);
-                    spawned.setViewRange(4.0F);
-                    spawned.setShadowRadius(0.0F);
-                    spawned.setBrightness(new Display.Brightness(15, 15));
-                    Transformation transformation = spawned.getTransformation();
-                    transformation.getScale().set(1.15F, 1.15F, 1.15F);
-                    transformation.getTranslation().set(-0.575F, -0.575F, -0.575F);
-                    spawned.setTransformation(transformation);
-                });
-                points.add(new RailgunDisplayPoint(display, finalX, finalY + 0.55D, finalZ));
+                TNTPrimed tnt = spawnRailgunVisualTnt(world, origin);
+                points.add(new RailgunTntPoint(tnt, finalX, finalY + 0.55D, finalZ));
             }
         }
 
@@ -5714,6 +5706,19 @@ public class FlashModeManager {
         world.playSound(origin, Sound.ENTITY_TNT_PRIMED, 2.4F, 0.58F);
         world.playSound(origin, Sound.BLOCK_BEACON_ACTIVATE, 1.4F, 0.42F);
         world.spawnParticle(Particle.ELECTRIC_SPARK, origin, 72, 1.2D, 1.0D, 1.2D, 0.16D);
+    }
+
+    private TNTPrimed spawnRailgunVisualTnt(World world, Location origin) {
+        return world.spawn(origin, TNTPrimed.class, tnt -> {
+            tnt.setFuseTicks(72);
+            tnt.setYield(0.0F);
+            tnt.setIsIncendiary(false);
+            tnt.setPersistent(false);
+            tnt.setInvulnerable(true);
+            tnt.setGravity(false);
+            tnt.setVelocity(new Vector());
+            tnt.getPersistentDataContainer().set(railgunVisualTntKey, PersistentDataType.BYTE, (byte) 1);
+        });
     }
 
     private void tickRailgunStrikes() {
@@ -5730,7 +5735,7 @@ public class FlashModeManager {
         Player owner = Bukkit.getPlayer(strike.ownerId());
         World world = strike.origin().getWorld();
         if (owner == null || world == null || !isFlashEffectStillActive(owner, strike.room())) {
-            removeRailgunDisplays(strike);
+            removeRailgunTnts(strike);
             return false;
         }
 
@@ -5741,21 +5746,20 @@ public class FlashModeManager {
         double verticalProgress = progress * progress;
         Location origin = strike.origin();
 
-        for (RailgunDisplayPoint point : strike.points()) {
-            BlockDisplay display = point.display();
-            if (!display.isValid()) {
+        for (RailgunTntPoint point : strike.points()) {
+            TNTPrimed tnt = point.tnt();
+            if (!tnt.isValid()) {
                 continue;
             }
             double x = origin.getX() + (point.finalX() - origin.getX()) * horizontalProgress;
             double y = origin.getY() + (point.finalY() - origin.getY()) * verticalProgress;
             double z = origin.getZ() + (point.finalZ() - origin.getZ()) * horizontalProgress;
-            display.teleport(new Location(world, x, y, z));
-            if (step >= RAILGUN_ANIMATION_STEPS - 2) {
-                display.setBlock(Bukkit.createBlockData(step % 2 == 0 ? Material.WHITE_CONCRETE : Material.TNT));
-            }
+            tnt.teleport(new Location(world, x, y, z));
+            tnt.setVelocity(new Vector());
+            tnt.setFuseTicks(Math.max(20, 72 - step * 2));
         }
 
-        if (step > 0 && step % 10 == 0 && step <= RAILGUN_ANIMATION_STEPS) {
+        if (step > 0 && step % 6 == 0 && step <= RAILGUN_ANIMATION_STEPS) {
             float pitch = 0.58F + (float) progress * 0.82F;
             world.playSound(strike.impact(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1.5F, pitch);
             world.spawnParticle(Particle.ELECTRIC_SPARK,
@@ -5773,30 +5777,30 @@ public class FlashModeManager {
     private void detonateRailgunStrike(Player owner, RailgunStrike strike) {
         World world = strike.impact().getWorld();
         if (world == null) {
-            removeRailgunDisplays(strike);
+            removeRailgunTnts(strike);
             return;
         }
         int particleStride = Math.max(1, strike.points().size() / 96);
         for (int index = 0; index < strike.points().size(); index += particleStride) {
-            RailgunDisplayPoint point = strike.points().get(index);
+            RailgunTntPoint point = strike.points().get(index);
             Location burst = new Location(world, point.finalX(), point.finalY(), point.finalZ());
             world.spawnParticle(Particle.EXPLOSION, burst, 1, 0.1D, 0.1D, 0.1D, 0.0D);
             world.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, burst, 2, 0.28D, 0.35D, 0.28D, 0.035D);
         }
-        removeRailgunDisplays(strike);
+        removeRailgunTnts(strike);
         world.playSound(strike.impact(), Sound.ENTITY_GENERIC_EXPLODE, 4.0F, 0.46F);
         world.playSound(strike.impact(), Sound.ENTITY_DRAGON_FIREBALL_EXPLODE, 2.8F, 0.62F);
         world.playSound(strike.impact(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 2.0F, 0.72F);
         world.spawnParticle(Particle.EXPLOSION_EMITTER, strike.impact(), 3 + strike.level(),
                 1.8D + strike.level(), 1.0D, 1.8D + strike.level(), 0.0D);
-        boolean breakBlocks = canFlashExplosionBreakBlocks(owner, strike.room());
+        boolean breakBlocks = strike.room() != null && canFlashExplosionBreakBlocks(owner, strike.room());
         world.createExplosion(strike.impact(), RAILGUN_EXPLOSION_POWERS[strike.level()], false, breakBlocks, owner);
     }
 
-    private void removeRailgunDisplays(RailgunStrike strike) {
-        for (RailgunDisplayPoint point : strike.points()) {
-            if (point.display().isValid()) {
-                point.display().remove();
+    private void removeRailgunTnts(RailgunStrike strike) {
+        for (RailgunTntPoint point : strike.points()) {
+            if (point.tnt().isValid()) {
+                point.tnt().remove();
             }
         }
     }
@@ -12703,6 +12707,13 @@ public class FlashModeManager {
         if (event == null || !(event.getEntity() instanceof TNTPrimed tnt)) {
             return;
         }
+        if (isRailgunVisualTnt(tnt)) {
+            event.setCancelled(true);
+            event.setRadius(0.0F);
+            event.setFire(false);
+            tnt.remove();
+            return;
+        }
         byte tmtState = getTmtPrimedState(tnt);
         if (tmtState == 0) {
             return;
@@ -12725,10 +12736,25 @@ public class FlashModeManager {
         if (event == null) {
             return;
         }
+        if (event.getEntity() instanceof TNTPrimed tnt && isRailgunVisualTnt(tnt)) {
+            event.setCancelled(true);
+            event.blockList().clear();
+            event.setYield(0.0F);
+            tnt.remove();
+            return;
+        }
         if (event.getEntity() instanceof TNTPrimed tnt && hasTmtPrimed(tnt)) {
             clearNearbyFlashTrapsByExplosion(event.getLocation(), TMT_EXPLOSION_POWER);
         }
         suppressChainedTmtBlocks(event.blockList());
+    }
+
+    private boolean isRailgunVisualTnt(TNTPrimed tnt) {
+        if (tnt == null) {
+            return false;
+        }
+        Byte value = tnt.getPersistentDataContainer().get(railgunVisualTntKey, PersistentDataType.BYTE);
+        return value != null && value == (byte) 1;
     }
 
     public void handleTmtBlockExplode(BlockExplodeEvent event) {
@@ -23005,7 +23031,7 @@ public class FlashModeManager {
     private record RailgunUpgradeRequirement(Material material, int amount, int nextLevel) {
     }
 
-    private record RailgunDisplayPoint(BlockDisplay display, double finalX, double finalY, double finalZ) {
+    private record RailgunTntPoint(TNTPrimed tnt, double finalX, double finalY, double finalZ) {
     }
 
     private static final class RailgunStrike {
@@ -23015,11 +23041,11 @@ public class FlashModeManager {
         private final int level;
         private final Location origin;
         private final Location impact;
-        private final List<RailgunDisplayPoint> points;
+        private final List<RailgunTntPoint> points;
         private int step;
 
         private RailgunStrike(UUID id, UUID ownerId, GameRoom room, int level, Location origin,
-                             Location impact, List<RailgunDisplayPoint> points) {
+                             Location impact, List<RailgunTntPoint> points) {
             this.id = id;
             this.ownerId = ownerId;
             this.room = room;
@@ -23053,7 +23079,7 @@ public class FlashModeManager {
             return impact;
         }
 
-        private List<RailgunDisplayPoint> points() {
+        private List<RailgunTntPoint> points() {
             return points;
         }
 

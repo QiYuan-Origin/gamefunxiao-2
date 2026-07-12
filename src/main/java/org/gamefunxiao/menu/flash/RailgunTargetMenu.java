@@ -2,6 +2,7 @@ package org.gamefunxiao.menu.flash;
 
 import org.bukkit.Material;
 import org.bukkit.Sound;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
@@ -22,16 +23,18 @@ public final class RailgunTargetMenu extends BaseMenu {
     private final UUID worldId;
     private final int centerChunkX;
     private final int centerChunkZ;
+    private final BlockFace facing;
     private final Map<Integer, ChunkTarget> targets = new HashMap<>();
 
     public RailgunTargetMenu(GameFunXiao plugin, Player player, int level, String railgunId,
-                             UUID worldId, int centerChunkX, int centerChunkZ) {
+                             UUID worldId, int centerChunkX, int centerChunkZ, BlockFace facing) {
         super(plugin, player, "§8轨道炮 §7| §c区块锁定", 45);
         this.level = Math.max(1, Math.min(3, level));
         this.railgunId = railgunId;
         this.worldId = worldId;
         this.centerChunkX = centerChunkX;
         this.centerChunkZ = centerChunkZ;
+        this.facing = normalizeFacing(facing);
     }
 
     @Override
@@ -55,14 +58,18 @@ public final class RailgunTargetMenu extends BaseMenu {
 
         for (int row = 0; row < rows; row++) {
             for (int column = 0; column < columns; column++) {
-                int offsetX = column - centerColumn;
-                int offsetZ = row - centerRow;
+                int relativeRight = column - centerColumn;
+                int relativeForward = centerRow - row;
+                int[] worldOffset = rotateOffset(relativeRight, relativeForward);
+                int offsetX = worldOffset[0];
+                int offsetZ = worldOffset[1];
                 int chunkX = centerChunkX + offsetX;
                 int chunkZ = centerChunkZ + offsetZ;
                 int slot = (firstRow + row) * 9 + firstColumn + column;
-                boolean current = offsetX == 0 && offsetZ == 0;
+                boolean current = relativeRight == 0 && relativeForward == 0;
                 targets.put(slot, new ChunkTarget(chunkX, chunkZ));
-                inventory.setItem(slot, createTargetItem(current, offsetX, offsetZ, chunkX, chunkZ));
+                inventory.setItem(slot, createTargetItem(
+                        current, relativeRight, relativeForward, chunkX, chunkZ));
             }
         }
     }
@@ -93,15 +100,18 @@ public final class RailgunTargetMenu extends BaseMenu {
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.34F, 1.45F);
     }
 
-    private ItemStack createTargetItem(boolean current, int offsetX, int offsetZ, int chunkX, int chunkZ) {
-        String direction = current ? "当前位置" : directionName(offsetX, offsetZ);
-        Material material = current ? Material.RECOVERY_COMPASS : Material.TNT;
+    private ItemStack createTargetItem(boolean current, int relativeRight, int relativeForward,
+                                       int chunkX, int chunkZ) {
+        String direction = current ? "当前位置" : directionName(relativeRight, relativeForward);
+        Material material = current ? Material.YELLOW_STAINED_GLASS_PANE : Material.GREEN_STAINED_GLASS_PANE;
         String name = current
-                ? "§x§5§5§F§F§A§A◆ §a当前位置 §8| §f" + chunkX + "§8, §f" + chunkZ
-                : "§x§F§F§5§5§5§5◇ §c" + direction + " §8| §f" + chunkX + "§8, §f" + chunkZ;
+                ? "§x§F§F§E§0§5§5◆ §e当前位置 §8| §f" + chunkX + "§8, §f" + chunkZ
+                : "§x§5§5§F§F§8§8◇ §a" + direction + " §8| §f" + chunkX + "§8, §f" + chunkZ;
         List<String> lore = new ArrayList<>();
+        lore.add("§8菜单上方：§f" + facingName() + " §7(你的正前方)");
         lore.add("§8区块中心：§f" + (chunkX * 16 + 8) + "§8, §f" + (chunkZ * 16 + 8));
-        lore.add("§8相对距离：§f" + Math.abs(offsetX) + "格横向 §8/ §f" + Math.abs(offsetZ) + "格纵向");
+        lore.add("§8相对距离：§f" + Math.abs(relativeRight) + "格左右 §8/ §f"
+                + Math.abs(relativeForward) + "格前后");
         lore.add("");
         lore.add("§x§F§F§8§8§5§5左键或右键 §7确认轨道炮落点");
         return createMenuItem(material, name, lore.toArray(String[]::new));
@@ -118,10 +128,35 @@ public final class RailgunTargetMenu extends BaseMenu {
         return item;
     }
 
-    private String directionName(int offsetX, int offsetZ) {
-        String vertical = offsetZ < 0 ? "北" : offsetZ > 0 ? "南" : "";
-        String horizontal = offsetX < 0 ? "西" : offsetX > 0 ? "东" : "";
-        return vertical + horizontal + " " + Math.max(Math.abs(offsetX), Math.abs(offsetZ)) + "区块";
+    private int[] rotateOffset(int right, int forward) {
+        return switch (facing) {
+            case EAST -> new int[]{forward, right};
+            case SOUTH -> new int[]{-right, forward};
+            case WEST -> new int[]{-forward, -right};
+            default -> new int[]{right, -forward};
+        };
+    }
+
+    private BlockFace normalizeFacing(BlockFace direction) {
+        return switch (direction) {
+            case EAST, SOUTH, WEST -> direction;
+            default -> BlockFace.NORTH;
+        };
+    }
+
+    private String facingName() {
+        return switch (facing) {
+            case EAST -> "东";
+            case SOUTH -> "南";
+            case WEST -> "西";
+            default -> "北";
+        };
+    }
+
+    private String directionName(int right, int forward) {
+        String side = right < 0 ? "左" : right > 0 ? "右" : "";
+        String depth = forward > 0 ? "前方" : forward < 0 ? "后方" : "侧";
+        return side + depth + " " + Math.max(Math.abs(right), Math.abs(forward)) + "区块";
     }
 
     private record ChunkTarget(int chunkX, int chunkZ) {
