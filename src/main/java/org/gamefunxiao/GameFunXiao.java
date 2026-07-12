@@ -124,6 +124,7 @@ public final class GameFunXiao extends JavaPlugin {
         }
 
         if (flashModeManager != null) {
+            flashModeManager.shutdownRailguns();
             flashModeManager.stopAllFlashNoteMusic();
             flashModeManager.clearTurtleShellSpeedModifiers();
         }

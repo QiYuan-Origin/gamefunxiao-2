@@ -91,6 +91,9 @@ public class FlashModeListener implements Listener {
             if (plugin.getFlashModeManager().handleDragonBreathWeaponInfusion(event, player, room)) {
                 return;
             }
+            if (plugin.getFlashModeManager().handleRailgunInfusion(event, player, room)) {
+                return;
+            }
             if (plugin.getFlashModeManager().handleMaterialUpgradeInfusion(event, player, room)) {
                 return;
             }
@@ -154,6 +157,9 @@ public class FlashModeListener implements Listener {
         plugin.getFlashModeManager().normalizeHeldRedstoneStabilizers(event.getPlayer());
         plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(event.getPlayer());
         if (plugin.getFlashModeManager().handleFlashCustomBlockInteract(event)) {
+            return;
+        }
+        if (plugin.getFlashModeManager().handleRailgunUse(event)) {
             return;
         }
         if (event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND
