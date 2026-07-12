@@ -297,16 +297,85 @@ public class FlashModeManager {
     private static final long UNSTABLE_CORE_SHIELD_WIND_CHARGE_WINDOW_TICKS = 60L;
     private static final double UNSTABLE_CORE_SHIELD_WIND_SPEED_MULTIPLIER = 0.65D;
     private static final String[] FLASH_GUIDE_ENTRY_TITLES = {
-            "本书定位", "闪光通关", "龙池判定", "开局发放", "浓缩珍珠合成", "珍珠随机传送", "末影护层", "末影人宠物",
-            "末影回传制作", "回传硬条件", "回传代价", "附魔改装书", "羽笔与画笔", "浓缩粘液块", "铁砧兼容表A", "铁砧兼容表B",
-            "护层与剑刃药水", "剑刃药水判定", "金苹果盔甲", "附魔金苹果盔甲", "同路线削弱", "红石稳定器", "剑材料强化A", "剑材料强化B",
-            "斧材料强化A", "斧材料强化B", "材料护层", "护层材料表", "TNT材料强化", "羊毛羽毛鞋", "粘液鞋底", "三叉戟强化",
-            "弩与旋风棒", "龙息武器", "盾牌+风弹", "空中弹射", "弩副手弹药", "特殊弩弹", "食物弩弹", "弓发射风弹",
-            "Q丢剑剑气", "剑气细节", "Q丢锄头陷阱", "锄头陷阱表A", "锄头陷阱表B", "唱片机光环", "强唱片A", "强唱片B",
-            "黑唱片与战斗", "音符盒旋律", "旋律冷却", "激流钓鱼竿", "海眷桶", "火焰望远镜", "宠物驯服", "宠物强化A",
-            "宠物强化B", "骷髅喂弓", "乐魂速度", "乐魂喂养", "乐魂装备/成长", "末影龙免伤", "爆炸掉落", "细节总表",
-            "伪毒马铃薯", "伪毒苗种植", "闪光特殊食物", "砂土与湿耕地", "沉重盾牌", "沉重破盾", "沉重盾牌风弹", "TMT",
-            "矿车雷陷阱", "煤炭镐", "强化风弹", "风暴剑甲", "潮汐钓鱼物", "水上钓鱼陷阱"
+            "本书速查",
+            "闪光胜利",
+            "龙池结算",
+            "开局发放",
+            "附魔改装书",
+            "浓缩珍珠",
+            "珍珠随机传送",
+            "末影护层",
+            "末影回传剑",
+            "羽笔画笔",
+            "魔法画笔",
+            "浓缩粘液鞋底",
+            "铁砧兼容表",
+            "剑刃药水",
+            "图腾护层",
+            "金苹果护甲",
+            "附魔金苹果甲",
+            "同路线削弱",
+            "红石稳定器",
+            "剑材料强化",
+            "斧材料强化",
+            "材料护层",
+            "TNT护层",
+            "羊毛羽毛鞋",
+            "海晶三叉戟",
+            "旋风棒三叉戟",
+            "紫水晶弩",
+            "旋风棒弩",
+            "龙息武器",
+            "盾牌风弹",
+            "空中盾跃",
+            "弓风弹",
+            "弓下压弹射",
+            "弩副手装填",
+            "风弹弩",
+            "烟花TNT弩",
+            "激流三叉戟弩",
+            "食物弩弹",
+            "剑气弩弹",
+            "发射器火球",
+            "发射器回响波",
+            "Q丢剑气",
+            "Q丢锄头陷阱",
+            "锄头陷阱材料",
+            "矿车雷锄",
+            "唱片机光环",
+            "强唱片",
+            "黑唱片",
+            "音符盒旋律",
+            "音符盒冷却",
+            "激流钓鱼竿",
+            "潮汐鱼饵",
+            "水上钓鱼陷阱",
+            "海眷桶",
+            "火焰望远镜",
+            "宠物驯服",
+            "宠物喂金苹果",
+            "宠物喂武器",
+            "骷髅喂弓",
+            "乐魂速度挽具",
+            "乐魂喂养",
+            "乐魂装备成长",
+            "末影龙免伤",
+            "爆炸掉落",
+            "伪毒马铃薯",
+            "伪毒苗",
+            "伪毒成熟掉落",
+            "砂土扩散",
+            "湿耕地",
+            "沉重盾牌",
+            "沉重破盾",
+            "沉重盾牌风弹",
+            "TMT",
+            "矿车雷陷阱",
+            "煤炭镐",
+            "强化风弹",
+            "风暴剑甲",
+            "权限速查",
+            "其它细节",
     };
     private static final int FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE = 9;
     private static final int NORMAL_SHIELD_BLOCKING_DELAY_TICKS = 5;
@@ -2160,7 +2229,7 @@ public class FlashModeManager {
         ));
 
         List<Component> fullPages = getFlashFullGuidePages();
-        int fullIndex = safeEntry + 5;
+        int fullIndex = safeEntry + getFlashGuideDirectoryPageCount() - 1;
         Component content = fullIndex >= 0 && fullIndex < fullPages.size()
                 ? guideBookEntryContentPage(fullPages.get(fullIndex))
                 : guideBookPageHeader("§c§l" + number + ". " + title + "\n\n§0这个数字目录内容暂时为空。\n\n")
@@ -2188,7 +2257,7 @@ public class FlashModeManager {
         List<Component> pages = new ArrayList<>();
         pages.add(guideBookVolumeDirectory(volume));
         for (int entry = volume.startEntry; entry <= volume.endEntry; entry++) {
-            int fullIndex = entry + 5;
+            int fullIndex = entry + getFlashGuideDirectoryPageCount() - 1;
             if (fullIndex >= 0 && fullIndex < fullPages.size()) {
                 pages.add(guideBookVolumeContentPage(fullPages.get(fullIndex)));
             }
@@ -2289,187 +2358,149 @@ public class FlashModeManager {
     private ItemStack createFlashFullGuideBook() {
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         if (book.getItemMeta() instanceof BookMeta meta) {
-            meta.setTitle("闪光新增百科");
+            meta.setTitle("闪光速查手册");
             meta.setAuthor("起程小游戏");
             meta.setGeneration(BookMeta.Generation.ORIGINAL);
-            meta.setItemName("§x§9§8§D§D§F§F闪§x§A§F§D§6§F§F光§x§C§6§D§0§F§F新§x§D§D§C§9§F§F增§x§F§4§C§3§F§F机§x§F§F§D§7§B§B制§x§F§F§E§E§A§A百§x§E§E§F§F§D§D科");
+            meta.setItemName("§x§9§8§D§D§F§F闪§x§A§F§D§6§F§F光§x§C§6§D§0§F§F速§x§D§D§C§9§F§F查§x§F§4§C§3§F§F手§x§F§F§D§7§B§B册");
             meta.setLore(List.of(
-                    "§8- §7局内新增机制百科，右键即可阅读",
-                    "§8- §f重点记录材料强化、末影护层、回传、乐魂等细节",
-                    "§8- §7目录可点击跳转，本书可直接丢掉"
+                    "§8- §7速查表风格：材料 / 用法 / 消耗 / 冷却 / 注意",
+                    "§8- §f前面是可点击目录，点数字直接跳页",
+                    "§8- §7内容更短，适合局内快速翻"
             ));
             List<Component> pages = new ArrayList<>();
-            pages.add(guideBookContentsPageOne());
-            pages.add(guideBookContentsPageTwo());
-            pages.add(guideBookContentsPageThree());
-            pages.add(guideBookContentsPageFour());
-            pages.add(guideBookContentsPageFive());
-            pages.add(guideBookContentsPageSix());
-            pages.add(guideBookPage("§9§l01. 本书定位\n\n§0这本不是基础猎人玩法说明，而是闪光/终章新增机制百科。\n\n§0它专门写材料强化、浓缩末影、回传、乐魂、宠物、风弹、唱片机、音符盒等隐藏细节。"));
-            pages.add(guideBookPage("§5§l02. 闪光通关\n\n§0普通闪光和终章闪光都不是打死龙就结束。\n\n§8- §0末影龙死亡只解锁龙池传送门。\n§8- §0猎物进入龙池传送门才算通关。\n§8- §0终章猎人进入会被动量弹开。"));
-            pages.add(guideBookPage("§5§l03. 龙池判定\n\n§0只有击败末影龙后的末地龙池传送门会结算。\n\n§8- §0猎物进入：变旁观并触发猎物胜利。\n§8- §0猎人进入：取消结算并推离门口。\n§8- §0打龙后别忘了真正跳门。"));
-            pages.add(guideBookPage("§d§l04. 开局新增发放\n\n§0闪光正式开始后会给玩家本百科。\n\n§0也可用 §9/flashwiki §0或 §9/gamefunxiao wiki §0重新领取。\n\n§0猎物额外获得1个浓缩末影珍珠，背包满会先放末影箱。"));
-            pages.add(guideBookPage("§d§l05. 浓缩珍珠合成\n\n§0合成：9颗末影珍珠压成1个浓缩末影珍珠。\n\n§0它不是普通珍珠：可以作为逃生物、护甲材料、剑的末影回传核心。\n\n§8- §0最大堆叠为1。"));
-            pages.add(guideBookPage("§d§l06. 珍珠随机传送\n\n§0猎物手持浓缩末影珍珠右键，会随机传送50~200格。\n\n§0落点会尽量找地表安全位置，不会故意把你塞到高空最高Y。\n\n§8- §0用于断追踪和脱离包夹。"));
-            pages.add(guideBookPage("§d§l07. 末影护层\n\n§0打开背包，用浓缩末影珍珠右键盔甲可接入护层。\n\n§8- §0每件：宠物伤害 -15%。\n§8- §0每件：末影人伤害 -12.5%。\n§8- §04件：宠物 -60%，末影人 -50%。"));
-            pages.add(guideBookPage("§d§l08. 末影人宠物细节\n\n§0如果攻击你的宠物本身是末影人，两条减伤都会一起计算。\n\n§0也就是：它既是宠物伤害，又是末影人伤害。\n\n§8- §0这是浓缩末影护层最强克制点。"));
-            pages.add(guideBookPage("§5§l09. 末影回传制作\n\n§0浓缩末影珍珠可和剑在铁砧中绑定，生成末影回传剑。\n\n§0绑定时记录铁砧的位置。之后命中玩家，会尝试把目标传回铁砧上方安全点。"));
-            pages.add(guideBookPage("§5§l10. 回传硬条件\n\n§8- §0铁砧必须一直在原位置。\n§8- §0铁砧被挖掉、换方块、离开原坐标都会失效。\n§8- §0附近找不到安全落点不会硬传。\n§8- §0不会回退到XZ最高Y乱传。"));
-            pages.add(guideBookPage("§5§l11. 回传代价\n\n§0末影回传触发成功后：\n\n§8- §0剑会直接爆掉。\n§8- §0绑定铁砧也会坏掉。\n§8- §0这是一次性控制，不是永久传送武器。"));
-            pages.add(guideBookPage("§e§l12. 附魔改装书\n\n§0合成：玻璃围绕恶魂之泪。\n\n§0这是闪光新增改装核心，不是普通附魔书。它能让一些原本不该吃某附魔的物品获得特殊玩法。"));
-            pages.add(guideBookPage("§f§l13. 羽笔与画笔\n\n§0羽笔：3根线 + 纸。\n§0画笔：纸 + 木棍。\n\n§0画笔配合附魔改装可变魔法画笔，用于闪光的绘制/法术类玩法。"));
-            pages.add(guideBookPage("§a§l14. 浓缩粘液块\n\n§0合成：4个粘液块。\n\n§0它不是建筑方块重点，而是鞋底强化材料。拿它右键靴子可制作浓缩粘液鞋底。"));
-            pages.add(guideBookPage("§6§l15. 铁砧兼容表A\n\n§8- §0剑：爆炸保护、穿透、忠诚书。\n§8- §0三叉戟：锋利、忠诚、激流。\n§8- §0海晶强化后三叉戟不再接激流。\n§8- §0钓鱼竿：激流。"));
-            pages.add(guideBookPage("§6§l16. 铁砧兼容表B\n\n§8- §0盾牌：荆棘。\n§8- §0弩：穿透、多重射击。\n§8- §0桶：海之眷顾。\n§8- §0望远镜：火焰附加。\n§8- §0乐魂挽具：迅捷潜行。"));
-            pages.add(guideBookPage("§6§l17. 护层与剑刃药水\n\n§0不死图腾 + 盔甲：护层。近战伤害 -10%，远程伤害 +15%，耐久高于50%时可挡一次濒死并碎一件。\n\n§0药水 + 剑：剑刃药水，最多2槽，每槽3次。"));
-            pages.add(guideBookPage("§6§l18. 剑刃药水判定\n\n§0命中时消耗剑上药水次数。\n\n§8- §0治疗类可对友方触发。\n§8- §0伤害类用于敌方。\n§8- §0其它正面效果可给友方。\n§8- §0最多2槽，所以别乱塞低价值药水。"));
-            pages.add(guideBookPage("§c§l19. 金苹果盔甲\n\n§0普通金苹果可打到盔甲上，最多3级。\n\n§8- §01级：最大生命 +3。\n§8- §02级：最大生命 +8。\n§8- §03级：最大生命 +12。\n§8- §0满级低血量提高近战，远程 +12%/件。"));
-            pages.add(guideBookPage("§6§l20. 附魔金苹果盔甲\n\n§0附魔金苹果路线最多2级。\n\n§8- §01级：最大生命 +5。\n§8- §02级：最大生命 +14。\n§8- §0满级低血量给抗性I。\n§8- §0远程伤害 +25%/件。"));
-            pages.add(guideBookPage("§e§l21. 同路线削弱\n\n§0如果攻击目标身上有同路线金苹果护甲，攻击方的对应增伤会削弱25%。\n\n§0所以4件都打并不是重复显示摆设，路线对抗会影响实际收益。"));
-            pages.add(guideBookPage("§4§l22. 红石稳定器\n\n§0红石稳定器用于剑/斧攻速微调。\n\n§8- §0攻击速度 +10%。\n§8- §0每把武器只吃一次。\n§8- §0不会无限叠到离谱攻速。"));
-            pages.add(guideBookPage("§c§l23. 剑材料强化A\n\n§0剑强化偏攻速，代价是伤害下降。\n\n§8- §0木剑+木类：攻速+30%，伤害-10%。\n§8- §0石剑+圆石：攻速+30%，伤害-15%。\n§8- §0铜剑+铜块：攻速+30%，伤害-10%。"));
-            pages.add(guideBookPage("§c§l24. 剑材料强化B\n\n§8- §0铁剑+铁块：攻速+45%，伤害-20%。\n§8- §0金剑+金块：攻速+55%，伤害-25%。\n§8- §0钻石剑+钻石块：攻速+40%，伤害-25%。\n§8- §0下界合金剑+锭：攻速+35%，伤害-30%。"));
-            pages.add(guideBookPage("§4§l25. 斧材料强化A\n\n§0斧强化偏爆发伤害，代价是额外冷却。\n\n§8- §0木斧+木类：伤害+10%，冷却+30%。\n§8- §0石斧+圆石：伤害+15%，冷却+30%。\n§8- §0铜斧+铜块：伤害+10%，冷却+30%。"));
-            pages.add(guideBookPage("§4§l26. 斧材料强化B\n\n§8- §0铁斧+铁块：伤害+30%，冷却+80%。\n§8- §0金斧+金块：伤害+20%，冷却+40%。\n§8- §0钻石斧+钻石块：伤害+40%，冷却+100%。\n§8- §0合金斧+锭：伤害+100%，冷却+200%。"));
-        pages.add(guideBookPage("§7§l27. 材料护层\n\n§0对应材料可打到对应盔甲，形成材料护层。\n\n§8- §0只抵消强化斧额外增伤，不再一件全免。\n§8- §0铁每件抵消5%，钻石10%，下界合金18%。\n§8- §0其他材料护层每件抵消3%。\n§8- §0通用受伤仍为每件 -2.5%，最多 -10%。"));
-            pages.add(guideBookPage("§7§l28. 护层材料表\n\n§8- §0皮革=皮革，锁链=铁粒。\n§8- §0铜=铜块，铁=铁块，金=金块。\n§8- §0钻石=钻石块，下界合金=锭。\n§8- §0龟壳=鳞甲，鞘翅=幻翼膜。"));
-            pages.add(guideBookPage("§4§l29. TNT材料强化\n\n§0TNT可打到盔甲上。\n\n§8- §0每件最多40层。\n§8- §0每层 +0.5% 爆炸免疫。\n§8- §0全身总效果最高按80%减爆炸伤害。\n§8- §0抗TNT、床爆、爆炸剑都很关键。"));
-            pages.add(guideBookPage("§f§l30. 羊毛羽毛鞋\n\n§0靴子可以分别打一层羊毛和一层羽毛。\n\n§0两种都完成后触发轻步：\n§8- §0摔落伤害 -40%。\n§8- §0幽匿振动静音。"));
-            pages.add(guideBookPage("§a§l31. 粘液鞋底\n\n§0浓缩粘液块右键靴子。\n\n§8- §0钻石/下界合金靴：爬行速度 +40%。\n§8- §0其它靴子：爬行速度 +20%。\n§8- §0适合钻洞、低姿态绕视野。"));
-            pages.add(guideBookPage("§3§l32. 三叉戟强化\n\n§0海晶碎片可强化三叉戟飞行速度 +25%。\n\n§0旋风棒可让三叉戟飞行速度 +50%。\n\n§8- §0注意海晶强化后三叉戟不再接激流改装。"));
-            pages.add(guideBookPage("§b§l33. 弩与旋风棒\n\n§0紫水晶簇强化弩：投射物飞行速度 +12.5%。\n\n§0旋风棒强化弩：投射物飞行速度 +20%。\n\n§0两类强化适合远距离压制。"));
-            pages.add(guideBookPage("§5§l34. 龙息武器\n\n§0龙息可注入弓/弩。\n\n§8- §0箭矢速度 +25%。\n§8- §0箭矢伤害 +25%。\n§8- §0弩龙息箭无重力。\n§8- §0最远约450格仍会监控特效。"));
-            pages.add(guideBookPage("§9§l35. 盾牌+风弹\n\n§0主手盾牌，副手风弹，右键弹射。\n\n§8- §0只从副手触发。\n§8- §0地面/空中都可用。\n§8- §0成功播放盾牌格挡与风弹爆裂。\n§8- §0失败不消耗风弹。\n§8- §0沉重盾牌会改为蓄力释放，详见第71页。"));
-            pages.add(guideBookPage("§9§l36. 空中弹射\n\n§0空中可连续弹射，但每弹一次成功概率会减半。\n\n§0落地后连续空中次数重置。\n\n§8- §0成功会给一段免摔保护，约6.5秒。"));
-            pages.add(guideBookPage("§9§l37. 弩副手弹药\n\n§0主手空弩，副手特殊物品可装填：\n\n§8- §0风弹、TNT、末影珍珠、三叉戟、剑、食物。\n§8- §0不同弹药发射效果完全不同，不只是贴图变化。"));
-            pages.add(guideBookPage("§9§l38. 特殊弩弹\n\n§8- §0风弹弩速度更高，多重射击发3发。\n§8- §0烟花弩+副手TNT会变无重力TNT。\n§8- §0激流三叉戟装填不消耗，发射时推进玩家，约1.85秒冷却。"));
-            pages.add(guideBookPage("§6§l39. 食物弩弹\n\n§0食物装进弩后发射，会直接给自己补饥饿/饱和。\n\n§0金苹果弩弹会额外给再生和吸收。\n\n§8- §0被追时可边移动边补给。"));
-            pages.add(guideBookPage("§b§l40. 弓发射风弹\n\n§0弓配副手风弹可发射风弹。\n\n§0弩装风弹速度更高，多重射击还能分裂。\n\n§8- §0风弹既是位移材料，也是远程干扰弹药。"));
-            pages.add(guideBookPage("§b§l40. 弓发射风弹\n\n§0主手弓配副手风弹可发射风弹。\n\n§8- §0普通发射只消耗1个风弹。\n§8- §0空中低头到70度及以上时，改为下压弹射。\n§8- §0下压弹射消耗2个风弹，给40%盾风弹上抬，并把盾风弹空中概率重置到50%。"));
-            pages.add(guideBookPage("§f§l42. 剑气细节\n\n§0不同剑种轨迹与伤害不同。\n\n§0唱片机光环可以继续提高剑气速度和伤害。\n\n§8- §0所以剑不只是近战武器，也是可构筑的远程路线。"));
-            pages.add(guideBookPage("§2§l43. Q丢锄头陷阱\n\n§0按Q丢锄头，落点方块生成永久陷阱。\n\n§0陷阱会一直在，直到可伤害目标踩中触发并消失。\n\n§8- §0适合封门、封桥、守回传点。"));
-            pages.add(guideBookPage("§2§l44. 锄头陷阱表A\n\n§8- §0木：1.5伤害，弱化/拉拽。\n§8- §0石：2.2伤害，挖掘疲劳/缓慢。\n§8- §0铜：2.8伤害，发光。\n§8- §0铁：3.4伤害，虚弱/拉拽。\n\n§8- §0落到耕地会铺3×3，每格单次触发。"));
-            pages.add(guideBookPage("§2§l45. 锄头陷阱表B\n\n§8- §0金：2.0伤害，失明/强缓。\n§8- §0钻石：4.4伤害，漂浮/强缓。\n§8- §0下界合金：5.6伤害，虚弱/黑暗/强拉。"));
-            pages.add(guideBookPage("§d§l46. 唱片机光环\n\n§0播放唱片会在约80格范围扫描光环。\n\n§0这是阵地增益，不是装饰音乐。不同唱片给不同战斗修正，可影响近战、远程、减伤、修耐久、剑气。"));
-            pages.add(guideBookPage("§d§l47. 强唱片A\n\n§8- §0Pigstep：力量II、再生I、近战+10%、弩伤+50%、弩弹速+50%、剑气伤+25%。\n§8- §0Precipice：速度III、近战+45%。\n§8- §0Otherside：再生I、隐身、减伤20%。"));
-            pages.add(guideBookPage("§d§l48. 强唱片B\n\n§8- §0Creator：抗性I，每3秒修5耐久。\n§8- §0Creator音乐盒：再生I、减伤12%、每3秒修3耐久。\n§8- §0Tears：再生II、减伤16%。"));
-            pages.add(guideBookPage("§d§l49. 黑唱片与战斗\n\n§8- §05：力量I+黑暗，近战+20%。\n§8- §011：速度II+隐身，近战+25%。\n§8- §013：抗性I，减伤18%。\n§8- §0Ward：夜视，近战+18%。"));
-            pages.add(guideBookPage("§b§l50. 音符盒旋律\n\n§0左键音符盒会记录音符。\n\n§8- §08秒不弹会重置。\n§8- §0最多记录220个音符。\n§8- §0匹配内置/配置曲谱后触发法术。"));
-            pages.add(guideBookPage("§b§l51. 旋律冷却\n\n§0音符盒法术分类型冷却：\n\n§8- §0伤害型约2.6秒。\n§8- §0普通型约1.25秒。\n§8- §0终章级法术约45秒。\n\n§0长曲谱通常不是给你乱按的。"));
-            pages.add(guideBookPage("§3§l52. 激流钓鱼竿\n\n§0附魔改装 + 激流钓鱼竿，会抛出超长钩。\n\n§8- §0长度：64 + 每级18格。\n§8- §0速度：1.32 + 等级×0.26。\n§8- §0可用于抓位移、追逃、跨地形干扰。"));
-            pages.add(guideBookPage("§3§l53. 海眷桶\n\n§0附魔改装 + 海之眷顾水桶。\n\n§0倒水时有10%概率掉随机闪光剑。\n\n§8- §0有3秒冷却。\n§8- §0会保留桶元数据。"));
-            pages.add(guideBookPage("§c§l54. 火焰望远镜\n\n§0附魔改装 + 火焰附加望远镜。\n\n§0聚焦方块后可生成火焰区域，用于封路、逼位、点燃区域。\n\n§8- §0它是瞄准型道具，不是普通望远镜。"));
-            pages.add(guideBookPage("§a§l55. 宠物驯服\n\n§8- §0骷髅+箭：25%驯服。\n§8- §0末影人+黑曜石：45%。\n§8- §0僵尸+熟牛排：30%。\n§8- §0面包可切换跟随/等待。\n§8- §0骷髅、末影人、僵尸可骑乘。"));
-            pages.add(guideBookPage("§a§l56. 宠物强化A\n\n§0金苹果强化宠物生命：最多10次。\n\n§8- §0每次最大生命 +5。\n§8- §0同时治疗 +5。\n\n§0浓缩末影护层可以抵抗宠物造成的伤害。"));
-            pages.add(guideBookPage("§a§l57. 宠物强化B\n\n§0非骷髅喂剑增加攻击：\n\n§8- §0木/金+1.5，石+2。\n§8- §0铜/铁+2.5，钻+3。\n§8- §0下界合金+4。\n§8- §0锋利每级额外+0.65。"));
-            pages.add(guideBookPage("§a§l58. 骷髅喂弓\n\n§0骷髅宠物喂弓强化远程：\n\n§8- §0基础+1.4。\n§8- §0力量每级+0.72。\n§8- §0冲击+0.28，火矢+0.35。\n§8- §0无限+0.25。"));
-            pages.add(guideBookPage("§e§l59. 乐魂速度\n\n§0迅捷潜行书可打到乐魂挽具上。\n\n§8- §01级速度×1.25。\n§8- §02级速度×1.50。\n§8- §03级速度×2.00。\n\n§0这是迅捷乐魂核心，不是玩家移速。"));
-            pages.add(guideBookPage("§e§l60. 乐魂喂养\n\n§0蹲下手持金苹果右键乐魂：不会坐上去，而是加血。\n\n§8- §0最多80次。\n§8- §0每次最大生命 +5，并治疗 +5。\n§8- §0手持雪块右键乐魂，可直接回复10点生命。"));
-            pages.add(guideBookPage("§e§l61. 乐魂装备/成长\n\n§8- §0手持胸甲右键乐魂：继承胸甲护甲、附魔和材料强化。\n§8- §0手持雪块右键失水乐魂：加速成长，最多10次。\n§8- §0正常20分钟成长，最多可减到只剩3分钟。"));
-            pages.add(guideBookPage("§5§l62. 末影龙免伤\n\n§0闪光/终章闪光末影龙拥有额外全免伤。\n\n§8- §0当前为50%。\n§8- §0也就是实际受到伤害约减半。\n§8- §0打死龙后还必须让猎物跳龙池传送门。"));
-            pages.add(guideBookPage("§6§l63. 爆炸掉落\n\n§0闪光爆炸破坏方块时，方块掉落被大幅压低。\n\n§8- §0保留率约12%。\n§8- §0爆炸剑/TNT能破坏地形，但别指望靠它刷大量方块。"));
-            pages.add(guideBookPage("§0§l64. 权限节点总表\n\n§8- §0基础入口：§9gamefunxiao.use\n§8- §0菜单/宣传：§9gamefunxiao.use.menu §0/ §9gamefunxiao.use.hh\n§8- §0猎人分支：§9gamefunxiao.use.hg.*\n§8- §0命令入口：§9gamefunxiao.use.command.*\n§8- §0书 Wiki：§9gamefunxiao.use.wiki §0/ §9gamefunxiao.use.wiki.open\n§8- §0末影箱：§9gamefunxiao.use.enderchest\n§8- §0试用闪光：§9gamefunxiao.flashuse\n§8- §0音符盒：§9gamefunxiao.flashmusic"));
-            pages.add(guideBookPage("§0§l65. 管理权限总表\n\n§8- §0总管理：§cgamefunxiao.admin\n§8- §0重载/清房：§cgamefunxiao.admin.reload §0/ §cgamefunxiao.admin.cleanuprooms\n§8- §0大厅模板/交互区：§cgamefunxiao.admin.editlobbytemplate §0/ §cgamefunxiao.admin.lobbyinteract.*\n§8- §0小游戏地图：§cgamefunxiao.admin.minigamemap.*\n§8- §0小游戏币：§cgamefunxiao.admin.currency.*\n§8- §0终章 Kit：§cgamefunxiao.admin.endflashkit.*\n§8- §0音乐管理：§cgamefunxiao.admin.flashmusic.*\n§8- §0开房与调终章：§cgamefunxiao.admin.hg.create §0/ §cgamefunxiao.admin.command.create §0/ §cgamefunxiao.admin.endflashtune"));
-            pages.add(guideBookPage("§0§l66. 其它细节总表\n\n§8- §0手册可丢弃。\n§8- §0可用/flashwiki重领。\n§8- §0背包满的重要发放会尝试进末影箱。\n§8- §0风弹弹射失败不消耗风弹。\n§8- §0雪块可给乐魂回复10点生命。\n§8- §0乐魂胸甲会继承TNT/末影/图腾等护层。"));
-            pages.add(guideBookPage("§2§l65. 伪毒马铃薯\n\n§0合成：马铃薯 + 海带。\n\n§8- §0成品最大堆叠16个。\n§8- §0吃下后反胃60秒。\n§8- §0同时扣除当前生命25%，不会直接吃死。\n§8- §0闪光·赛事正式开始后，每2名玩家一组，有25%概率给组内随机1人发1个。"));
-            pages.add(guideBookPage("§2§l66. 伪毒苗种植\n\n§0手持伪毒马铃薯右键耕地即可种下。\n\n§8- §0成熟时间随机3~12分钟。\n§8- §0右键伪毒苗可查看进度。\n§8- §0未成熟挖掉返还1个伪毒马铃薯。\n§8- §0成熟后挖的人会中毒8秒。"));
-            pages.add(guideBookPage("§d§l67. 成熟伪毒苗掉落\n\n§8- §070%掉1个伪毒马铃薯。\n§8- §010%掉2个伪毒马铃薯。\n§8- §020%不掉种薯。\n§8- §030%额外掉1个闪光特殊食物。\n§8- §070%额外掉矿物：煤、铜、铁、金、钻，越稀有概率越低。\n§8- §0特殊食物只能吃，不能当普通种子种下。"));
-            pages.add(guideBookPage("§6§l68. 砂土与湿耕地\n\n§0玩家亲手放下的原始砂土会记录归属。\n\n§8- §0骨粉只能右键原始母体砂土。\n§8- §0生长只会沿表面扩散，优先向上爬坡。\n§8- §0会按方块硬度降低侵蚀概率，硬块不会被乱吞。\n§8- §0不会腐蚀玩家亲手放置的方块。\n§8- §0最大半径80格，任意砂土都能锄成永久湿耕地。"));
-            pages.add(guideBookPage("§x§6§0§6§0§6§0§l69. 沉重盾牌\n\n§0铁砧内用盾牌承载特殊核心，取出后铁砧会直接爆炸。\n\n§8- §0成品名字：§x§6§0§6§0§6§0沉§x§6§0§6§0§6§0重§x§6§0§6§0§6§0盾§x§6§0§6§0§6§0牌§0。\n§8- §0最大耐久会设为6000。\n§8- §0物品本身不写lore，规则以本书为准。"));
-            pages.add(guideBookPage("§x§7§0§7§0§7§0§l70. 沉重破盾\n\n§0每次举盾周期第一次被斧头破盾时，沉重盾牌会免疫破盾并进入短冷却，不会被强制放下。\n\n§8- §0如果仍然举盾又被破一次，盾牌才会放下并进入20秒冷却。\n§8- §0第二次破盾会让破盾者缓慢III 3秒。\n§8- §0持盾者获得黑暗5秒、缓慢I，并被向后下方震退。"));
-            pages.add(guideBookPage("§9§l71. 沉重盾牌风弹\n\n§0主手沉重盾牌，副手风弹右键不会立刻飞，而是蓄力释放。\n\n§8- §0默认最大3层，50%概率本次最大5层。\n§8- §0每次蓄力后3秒内继续风弹可叠层并重置窗口。\n§8- §03秒结束或满层会释放位移。\n§8- §0速度为普通盾牌风弹65%×层数。\n§8- §0释放后盾牌冷却10秒。"));
-            pages.add(guideBookPage("§4§l72. TMT\n\n§0合成：4个TNT压成TMT，最大堆叠16。\n\n§8- §024小时内每名玩家最多合成1个。\n§8- §0猎人游戏内按每局重置，每局最多1个。\n§8- §0只能作为方块放置，不再兼容弩、烟花弩、铁砧锄等其它物品。\n§8- §0点燃后120秒爆炸，范围约40格，威力1000%。\n§8- §0放下时周围300格内其它TMT会被挤成掉落物，点燃的TMT也会阻止附近继续放置。"));
-            pages.add(guideBookPage("§4§l73. 矿车雷陷阱\n\n§0TMT不再能打到锄头上。\n\n§0矿车雷锄仍是另一条机制：第一格锄头，第二格TNT矿车。\n\n§8- §0放锄头陷阱统一按Q丢出。\n§8- §0矿车雷锄：1.5秒后普通TNT-20%威力爆炸。\n§8- §0TMT请直接放置并手动点燃。"));
-            pages.add(guideBookPage("§6§l74. 煤炭镐\n\n§0主手镐，副手煤炭挖掘。\n\n§8- §0铁/金/铜矿、下界金矿、远古残骸会直接烧制掉落。\n§8- §0其它可附着方块不会被破坏，而是挂煤焰陷阱。\n§8- §0踩踏或挖掘煤焰陷阱会燃烧并造成4点火焰伤害。"));
-            pages.add(guideBookPage("§b§l75. 强化风弹\n\n§0铁砧中风弹+旋风棒打一段后仍是普通风弹外观，再打一段才变强化风弹。\n\n§8- §0强化风弹本体是纸，item_model显示为风弹。\n§8- §0最大堆叠8。\n§8- §0手持右键空气/方块会同时发射3个风弹。\n§8- §0弓、弩、普通盾和沉重盾都能识别它。"));
-            pages.add(guideBookPage("§b§l76. 风暴剑甲\n\n§0强化风弹右键剑：获得风暴I~III，III概率很小。\n\n§8- §0已有风暴剑再次接入强化风弹，会获得风暴矛势。\n§8- §0风暴矛势让剑在原剑伤害外，额外叠加移动冲击伤害。\n§8- §0强化风弹右键胸甲：获得风暴胸甲。\n§8- §0风暴胸甲免疫风暴矛势额外伤害90%。"));
-            pages.add(guideBookPage("§3§l77. 潮汐钓鱼物\n\n§0潮汐鱼饵需要副手持有，并使用激流+附魔改装钓竿抛入水中。\n\n§8- §0水域会积累鱼群热度。\n§8- §0热度越高越容易钓出高编号特殊钓鱼物。\n§8- §0目前共有300种特殊钓鱼物。\n§8- §0每个物品都能作为水上陷阱材料。"));
-            pages.add(guideBookPage("§3§l78. 水上钓鱼陷阱\n\n§0副手放特殊钓鱼物，主手普通钓鱼竿抛到水上。\n\n§8- §0落水点生成3×3，并在上下左右额外突出1格。\n§8- §0敌人踩中后触发伤害、拉拽、缓慢、黑暗、虚弱、漂浮等效果。\n§8- §0陷阱触发后整组消失。\n§8- §0不同编号会决定陷阱偏向。"));
+            pages.addAll(createFlashQuickDirectoryPages());
+            pages.addAll(createFlashQuickGuidePages());
             meta.addPages(pages.toArray(new Component[0]));
             book.setItemMeta(meta);
         }
         return book;
     }
 
-    private Component guideBookContentsPageOne() {
-        return guideBookPageHeader("§9§l闪光新增百科\n§0点击条目可跳转\n§8本书只写新增机制\n\n")
-                .append(guideBookJumpLine("§8- §001. 本书定位", 7))
-                .append(guideBookJumpLine("§8- §002. 闪光通关", 8))
-                .append(guideBookJumpLine("§8- §003. 龙池判定", 9))
-                .append(guideBookJumpLine("§8- §004. 开局发放", 10))
-                .append(guideBookJumpLine("§8- §005. 珍珠合成", 11))
-                .append(guideBookJumpLine("§8- §006. 随机传送", 12))
-                .append(guideBookJumpLine("§8- §007. 末影护层", 13))
-                .append(guideBookJumpLine("§8- §008. 末影人宠物", 14))
-                .append(guideBookJumpLine("§8- §b下一页目录", 2));
+    private int getFlashGuideDirectoryPageCount() {
+        return Math.max(1, (FLASH_GUIDE_ENTRY_TITLES.length + FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE - 1)
+                / FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE);
     }
 
-    private Component guideBookContentsPageTwo() {
-        return guideBookPageHeader("§9§l闪光新增百科\n§0目录 第2页\n\n")
-                .append(guideBookJumpLine("§8- §009. 末影回传制作", 15))
-                .append(guideBookJumpLine("§8- §010. 回传硬条件", 16))
-                .append(guideBookJumpLine("§8- §011. 回传代价", 17))
-                .append(guideBookJumpLine("§8- §012. 改装书", 18))
-                .append(guideBookJumpLine("§8- §013. 羽笔画笔", 19))
-                .append(guideBookJumpLine("§8- §014. 浓缩粘液", 20))
-                .append(guideBookJumpLine("§8- §015. 铁砧A", 21))
-                .append(guideBookJumpLine("§8- §016. 铁砧B", 22))
-                .append(guideBookJumpLine("§8- §b下一页目录", 3));
+    private List<Component> createFlashQuickDirectoryPages() {
+        List<Component> pages = new ArrayList<>();
+        int pageCount = getFlashGuideDirectoryPageCount();
+        for (int page = 0; page < pageCount; page++) {
+            pages.add(guideBookQuickDirectoryPage(page, pageCount));
+        }
+        return pages;
     }
 
-    private Component guideBookContentsPageThree() {
-        return guideBookPageHeader("§9§l闪光新增百科\n§0目录 第3页\n\n")
-                .append(guideBookJumpLine("§8- §017. 护层药水", 23))
-                .append(guideBookJumpLine("§8- §018. 药水判定", 24))
-                .append(guideBookJumpLine("§8- §019. 金苹果甲", 25))
-                .append(guideBookJumpLine("§8- §020. 附魔金苹果", 26))
-                .append(guideBookJumpLine("§8- §021. 同路线削弱", 27))
-                .append(guideBookJumpLine("§8- §022. 红石稳定器", 28))
-                .append(guideBookJumpLine("§8- §023. 剑强化A", 29))
-                .append(guideBookJumpLine("§8- §024. 剑强化B", 30))
-                .append(guideBookJumpLine("§8- §b下一页目录", 4));
+    private Component guideBookQuickDirectoryPage(int pageIndex, int pageCount) {
+        int startEntry = pageIndex * FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE + 1;
+        int endEntry = Math.min(FLASH_GUIDE_ENTRY_TITLES.length, startEntry + FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE - 1);
+        Component component = guideBookPageHeader("§9§l闪光速查目录 §8" + (pageIndex + 1) + "/" + pageCount
+                + "\n§0点数字跳到对应速查卡。\n§8格式：材料/用法/消耗/冷却/注意\n\n");
+        for (int entry = startEntry; entry <= endEntry; entry++) {
+            component = component.append(guideBookJumpLine("§8- §0" + String.format(Locale.ROOT, "%02d", entry)
+                    + ". " + guideEntryTitle(entry), getFlashGuideDirectoryPageCount() + entry));
+        }
+        if (pageIndex + 1 < pageCount) {
+            component = component.append(guideBookJumpLine("§8[§b下一页目录§8]", pageIndex + 2));
+        }
+        if (pageIndex > 0) {
+            component = component.append(guideBookJumpLine("§8[§b上一页目录§8]", pageIndex));
+        }
+        return component;
     }
 
-    private Component guideBookContentsPageFour() {
-        return guideBookPageHeader("§9§l闪光新增百科\n§0目录 第4页\n\n")
-                .append(guideBookJumpLine("§8- §025. 斧强化A", 31))
-                .append(guideBookJumpLine("§8- §026. 斧强化B", 32))
-                .append(guideBookJumpLine("§8- §027. 材料护层", 33))
-                .append(guideBookJumpLine("§8- §028. 护层材料", 34))
-                .append(guideBookJumpLine("§8- §029. TNT强化", 35))
-                .append(guideBookJumpLine("§8- §030. 羊毛羽毛鞋", 36))
-                .append(guideBookJumpLine("§8- §031. 粘液鞋底", 37))
-                .append(guideBookJumpLine("§8- §032. 三叉戟", 38))
-                .append(guideBookJumpLine("§8- §b下一页目录", 5));
+    private List<Component> createFlashQuickGuidePages() {
+        List<Component> pages = new ArrayList<>();
+        pages.add(guideBookQuickPage(1, "本书速查", "闪光书", "打开后点目录数字跳转。", "无", "无", "每页固定写材料、用法、消耗、冷却、注意。"));
+        pages.add(guideBookQuickPage(2, "闪光胜利", "末影龙、龙池传送门", "猎物先击败末影龙，再跳入龙池传送门。", "无", "无", "打死龙不是结束，真正结算在龙池。"));
+        pages.add(guideBookQuickPage(3, "龙池结算", "末地龙池传送门", "猎物进入会变旁观并触发猎物胜利。", "无", "无", "猎人进入不会结算，会被动量弹开。"));
+        pages.add(guideBookQuickPage(4, "开局发放", "闪光书、浓缩珍珠", "闪光正式开始后自动发书。", "无", "无", "猎物额外获得1个浓缩珍珠，背包满优先放末影箱。"));
+        pages.add(guideBookQuickPage(5, "附魔改装书", "玻璃围绕恶魂之泪", "合成后用于铁砧改装特殊物品。", "材料一次", "无", "它不是普通附魔书，是闪光改装核心。"));
+        pages.add(guideBookQuickPage(6, "浓缩珍珠", "9颗末影珍珠", "合成1个浓缩末影珍珠。", "9珍珠", "无", "最大堆叠1，可做逃生、护层、回传材料。"));
+        pages.add(guideBookQuickPage(7, "珍珠随机传送", "浓缩末影珍珠", "猎物手持右键随机传送50~200格。", "消耗1个", "短冷却", "落点会尽量找安全地表，不硬塞高空。"));
+        pages.add(guideBookQuickPage(8, "末影护层", "浓缩末影珍珠+盔甲", "打开背包右键盔甲接入护层。", "消耗1个", "无", "每件减宠物伤15%，减末影人伤12.5%。"));
+        pages.add(guideBookQuickPage(9, "末影回传剑", "浓缩珍珠+剑+铁砧", "铁砧绑定剑，命中玩家尝试传回铁砧附近。", "触发后剑和铁砧损坏", "一次性", "铁砧位置必须仍然安全且未被破坏。"));
+        pages.add(guideBookQuickPage(10, "羽笔画笔", "羽笔:线+纸 画笔:纸+木棍", "画笔再配改装书可做魔法画笔。", "合成材料", "无", "羽笔是前置，画笔是绘制类玩法入口。"));
+        pages.add(guideBookQuickPage(11, "魔法画笔", "画笔+附魔改装", "长按右键绘制，丢出画笔确认法阵。", "按法阵消耗操作", "按法术", "支持直线、月弧、雷纹、星阵等远程/控制效果。"));
+        pages.add(guideBookQuickPage(12, "浓缩粘液鞋底", "浓缩粘液块+靴子", "打开背包右键靴子接入鞋底。", "消耗1块", "无", "钻石/合金靴爬行速度+40%，其它+20%。"));
+        pages.add(guideBookQuickPage(13, "铁砧兼容表", "剑/三叉戟/盾/弩/桶等", "把指定书或材料放入铁砧改装。", "按配方", "无", "剑、弩、盾、钓竿、桶、望远镜都有专属路线。"));
+        pages.add(guideBookQuickPage(14, "剑刃药水", "药水+剑", "铁砧把药水接到剑上，命中触发。", "每槽3次", "无", "最多2槽，治疗类可给友方，伤害类打敌方。"));
+        pages.add(guideBookQuickPage(15, "图腾护层", "不死图腾+盔甲", "铁砧接入盔甲。", "消耗图腾", "濒死触发一次", "近战伤害降低，远程伤害提高，高耐久可挡死并碎甲。"));
+        pages.add(guideBookQuickPage(16, "金苹果护甲", "普通金苹果+盔甲", "铁砧升级，最多3级。", "每级1个", "无", "加最大生命，满级低血提高近战，远程+12%/件。"));
+        pages.add(guideBookQuickPage(17, "附魔金苹果甲", "附魔金苹果+盔甲", "铁砧升级，最多2级。", "每级1个", "无", "生命加成更高，满级低血抗性，远程+25%/件。"));
+        pages.add(guideBookQuickPage(18, "同路线削弱", "金苹果/附魔金苹果护甲", "攻击目标穿同路线护甲时自动计算。", "无", "无", "对应增伤削弱25%，路线对抗会影响收益。"));
+        pages.add(guideBookQuickPage(19, "红石稳定器", "红石相关材料+剑/斧", "给武器做攻速微调。", "每把一次", "无", "攻击速度+10%，不会无限叠。"));
+        pages.add(guideBookQuickPage(20, "剑材料强化", "对应材料块+对应剑", "铁砧强化剑攻速。", "消耗材料", "无", "攻速提高，伤害会按材料路线下降。"));
+        pages.add(guideBookQuickPage(21, "斧材料强化", "对应材料块+对应斧", "铁砧强化斧爆发。", "消耗材料", "攻击冷却变长", "合金斧增伤最高，但冷却代价也最大。"));
+        pages.add(guideBookQuickPage(22, "材料护层", "对应材料+盔甲", "铁砧给盔甲打材料护层。", "消耗材料", "无", "抵消强化斧额外伤害，通用受伤最多-10%。"));
+        pages.add(guideBookQuickPage(23, "TNT护层", "TNT+盔甲", "铁砧叠爆炸免疫层。", "每层1个", "无", "每件最多40层，全身最高按80%减爆。"));
+        pages.add(guideBookQuickPage(24, "羊毛羽毛鞋", "羊毛/羽毛+靴子", "分别打一层，凑齐后触发轻步。", "各1层", "无", "摔落伤害-40%，幽匿振动静音。"));
+        pages.add(guideBookQuickPage(25, "海晶三叉戟", "海晶碎片+三叉戟", "铁砧强化三叉戟飞行。", "消耗材料", "无", "飞行速度+25%，之后不再接激流改装。"));
+        pages.add(guideBookQuickPage(26, "旋风棒三叉戟", "旋风棒+三叉戟", "铁砧强化三叉戟速度。", "消耗旋风棒", "无", "飞行速度+50%，偏远程压制。"));
+        pages.add(guideBookQuickPage(27, "紫水晶弩", "紫水晶簇+弩", "铁砧校准弩。", "消耗材料", "无", "弩投射物飞行速度+12.5%。"));
+        pages.add(guideBookQuickPage(28, "旋风棒弩", "旋风棒+弩", "铁砧强化弩。", "消耗旋风棒", "无", "弩投射物飞行速度+20%。"));
+        pages.add(guideBookQuickPage(29, "龙息武器", "龙息+弓/弩", "铁砧注入弓或弩。", "消耗龙息", "无", "箭矢速度和伤害+25%，弩龙息箭无重力。"));
+        pages.add(guideBookQuickPage(30, "盾牌风弹", "主手盾牌+副手风弹", "右键向视角方向弹射。", "消耗1风弹", "短间隔", "失败不消耗，成功给免摔保护。"));
+        pages.add(guideBookQuickPage(31, "空中盾跃", "盾牌+风弹", "空中继续右键可连跳。", "成功才消耗", "概率递减", "每次空中成功后下一次概率减半，落地重置。"));
+        pages.add(guideBookQuickPage(32, "弓风弹", "主手弓+副手风弹", "拉弓发射风弹。", "消耗1风弹", "跟随弓", "弩装风弹更快，多重射击可分裂。"));
+        pages.add(guideBookQuickPage(33, "弓下压弹射", "弓+副手2风弹", "空中低头到70度及以上拉弓。", "消耗2风弹", "跟随弓", "改为下压弹射，并重置盾风弹空中概率到50%。"));
+        pages.add(guideBookQuickPage(34, "弩副手装填", "主手空弩+副手弹药", "右键把副手特殊物品装入弩。", "多数消耗1个", "弩本身", "支持风弹、末影珍珠、三叉戟、剑、食物等。"));
+        pages.add(guideBookQuickPage(35, "风弹弩", "弩+风弹/强化风弹", "装填后发射风弹。", "消耗弹药", "弩本身", "弩风弹速度更高，多重射击发3发。"));
+        pages.add(guideBookQuickPage(36, "烟花TNT弩", "烟花弩+副手TNT", "发射时把烟花替换为TNT弹。", "消耗TNT", "弩本身", "TMT不再兼容该路线，只能放置。"));
+        pages.add(guideBookQuickPage(37, "激流三叉戟弩", "弩+激流三叉戟", "装填后发射并推进玩家。", "不消耗三叉戟", "约1.85秒", "上次修复后不会卡住闪光物品发射冷却。"));
+        pages.add(guideBookQuickPage(38, "食物弩弹", "弩+食物", "装填食物后发射给自己补给。", "消耗食物", "弩本身", "金苹果会额外给再生和吸收。"));
+        pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "伤害跟随剑材质和锋利等附魔。"));
+        pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手火焰弹", "长按右键蓄力，松开发射火球。", "消耗1火焰弹", "约1.2秒", "最高蓄力2.5秒，越久伤害和速度越高，不破方块。"));
+        pages.add(guideBookQuickPage(41, "发射器回响波", "主手发射器+副手回响碎片", "长按右键蓄力，松开打出坚守者声波。", "消耗1碎片", "约1.2秒", "最高蓄力2.5秒，越久射程和伤害越高。"));
+        pages.add(guideBookQuickPage(42, "Q丢剑气", "任意剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "剑不只是近战，也可构筑远程路线。"));
+        pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "敌人踩中后触发并消失，适合封路。"));
+        pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "不同材质决定伤害和控制。", "同上", "同上", "金偏失明，钻偏漂浮，合金偏黑暗和强拉。"));
+        pages.add(guideBookQuickPage(45, "矿车雷锄", "锄头+TNT矿车", "按Q放雷，踩中延迟爆炸。", "消耗材料", "触发一次", "TMT不再能打到锄头上。"));
+        pages.add(guideBookQuickPage(46, "唱片机光环", "唱片机+唱片", "播放唱片后扫描约80格光环。", "唱片播放", "周期刷新", "不同唱片给近战、远程、减伤、修耐久等修正。"));
+        pages.add(guideBookQuickPage(47, "强唱片", "Pigstep/Precipice/Otherside等", "放入唱片机播放。", "唱片播放", "周期刷新", "Pigstep偏综合爆发，Creator偏抗性和修耐久。"));
+        pages.add(guideBookQuickPage(48, "黑唱片", "5/11/13/Ward", "放入唱片机播放。", "唱片播放", "周期刷新", "5偏力量黑暗，11偏速度隐身，13偏抗性。"));
+        pages.add(guideBookQuickPage(49, "音符盒旋律", "音符盒", "左键音符盒记录音符并匹配曲谱。", "无", "8秒不弹重置", "最多记录220个音符，匹配后触发法术。"));
+        pages.add(guideBookQuickPage(50, "音符盒冷却", "音符盒法术", "不同旋律触发不同冷却。", "无", "普通约1.25秒/伤害约2.6秒/终曲45秒", "长曲谱通常不是乱按用的。"));
+        pages.add(guideBookQuickPage(51, "激流钓鱼竿", "附魔改装+激流钓鱼竿", "抛出超长鱼钩。", "无", "跟随钓竿", "长度64+每级18格，适合追逃和抓位移。"));
+        pages.add(guideBookQuickPage(52, "潮汐鱼饵", "副手潮汐鱼饵+激流钓鱼竿", "抛入水中积累鱼群热度并钓特殊物。", "消耗鱼饵", "钓竿节奏", "热度越高越容易出高编号特殊钓鱼物。"));
+        pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
+        pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
+        pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域。", "无", "聚焦触发", "用于封路、逼位和点燃区域。"));
+        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "骷髅25%，末影人45%，僵尸30%。"));
+        pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
+        pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
+        pages.add(guideBookQuickPage(59, "骷髅喂弓", "弓+骷髅宠物", "右键提高小白远程伤害。", "消耗弓", "无", "力量、冲击、火矢、无限都会影响加成。"));
+        pages.add(guideBookQuickPage(60, "乐魂速度挽具", "迅捷潜行书+乐魂挽具", "铁砧强化挽具。", "消耗附魔书", "无", "1/2/3级速度约×1.25/1.50/2.00。"));
+        pages.add(guideBookQuickPage(61, "乐魂喂养", "金苹果或雪块+乐魂", "蹲下右键乐魂回血或加生命。", "消耗材料", "金苹果最多80次", "雪块可给失水乐魂直接回复10点。"));
+        pages.add(guideBookQuickPage(62, "乐魂装备成长", "胸甲/雪块+乐魂", "胸甲继承护甲路线，雪块加速成长。", "消耗/装备", "成长最多减到约3分钟", "乐魂胸甲会继承TNT、末影、图腾等护层。"));
+        pages.add(guideBookQuickPage(63, "末影龙免伤", "闪光末影龙", "自动生效。", "无", "无", "闪光/终章龙受到额外免伤，击杀后仍要跳龙池。"));
+        pages.add(guideBookQuickPage(64, "爆炸掉落", "闪光爆炸", "爆炸破坏方块时自动计算。", "无", "无", "方块掉落保留率约12%，避免靠爆炸刷方块。"));
+        pages.add(guideBookQuickPage(65, "伪毒马铃薯", "马铃薯+海带", "合成伪毒马铃薯，可吃或种。", "合成材料", "无", "最大堆叠16，吃下反胃并扣当前生命25%。"));
+        pages.add(guideBookQuickPage(66, "伪毒苗", "伪毒马铃薯+耕地", "右键耕地种下。", "消耗1个", "成熟3~12分钟", "未成熟挖掉返还，成熟挖的人中毒。"));
+        pages.add(guideBookQuickPage(67, "伪毒成熟掉落", "成熟伪毒苗", "挖掉后结算掉落。", "作物一次", "无", "可能掉种薯、闪光食物和煤铜铁金钻等矿物。"));
+        pages.add(guideBookQuickPage(68, "砂土扩散", "玩家放置的原始砂土+骨粉", "骨粉母体砂土扩散。", "消耗骨粉", "无", "沿表面爬坡，最大半径80，不吞玩家放置方块。"));
+        pages.add(guideBookQuickPage(69, "湿耕地", "任意砂土+锄头", "锄成永久湿耕地。", "无", "无", "用于稳定农耕路线，不容易被普通干湿逻辑影响。"));
+        pages.add(guideBookQuickPage(70, "沉重盾牌", "盾牌+特殊核心+铁砧", "取出成品时铁砧会爆。", "消耗核心", "无", "最大耐久6000，规则以书为准。"));
+        pages.add(guideBookQuickPage(71, "沉重破盾", "沉重盾牌", "举盾周期第一次被斧破盾会免疫。", "无", "第二次破盾20秒", "第二次会放下盾，并给双方控制/击退效果。"));
+        pages.add(guideBookQuickPage(72, "沉重盾牌风弹", "沉重盾牌+副手风弹", "连续右键叠层，3秒窗口结束释放位移。", "每层1风弹", "盾牌10秒", "默认3层，50%概率本次最高5层，速度为普通65%×层数。"));
+        pages.add(guideBookQuickPage(73, "TMT", "4个TNT", "合成后只能作为方块放置并点燃。", "24小时每人1个", "120秒爆炸", "不再兼容弩、烟花弩、锄头等路线。"));
+        pages.add(guideBookQuickPage(74, "矿车雷陷阱", "锄头+TNT矿车", "第一格锄头，第二格TNT矿车制作。", "消耗材料", "触发一次", "踩中1.5秒后普通TNT-20%威力爆炸。"));
+        pages.add(guideBookQuickPage(75, "煤炭镐", "主手镐+副手煤炭", "挖矿时烧制矿物或挂煤焰陷阱。", "消耗煤炭", "陷阱短冷却", "矿物直接烧制，其它附着方块挂火焰陷阱。"));
+        pages.add(guideBookQuickPage(76, "强化风弹", "风弹+旋风棒两段铁砧", "手持右键同时发射3个风弹。", "消耗1个", "短间隔", "本体是纸，item_model显示风弹，最大堆叠8。"));
+        pages.add(guideBookQuickPage(77, "风暴剑甲", "强化风弹+剑/胸甲", "右键接入风暴路线。", "消耗强化风弹", "无", "剑可获风暴和矛势，胸甲免疫90%矛势额外伤。"));
+        pages.add(guideBookQuickPage(78, "权限速查", "权限节点", "按服务器权限系统配置。", "无", "无", "玩家: gamefunxiao.use / wiki / flashmusic；管理: gamefunxiao.admin。"));
+        pages.add(guideBookQuickPage(79, "其它细节", "闪光书/背包/乐魂", "需要时翻对应页确认。", "无", "无", "手册可丢弃，重要发放会尝试进末影箱。"));
+        return pages;
     }
 
-    private Component guideBookContentsPageFive() {
-        return guideBookPageHeader("§9§l闪光新增百科\n§0目录 第5页\n\n")
-                .append(guideBookJumpLine("§8- §033. 弩强化", 39))
-                .append(guideBookJumpLine("§8- §034. 龙息武器", 40))
-                .append(guideBookJumpLine("§8- §035. 盾风弹", 41))
-                .append(guideBookJumpLine("§8- §036. 空中弹射", 42))
-                .append(guideBookJumpLine("§8- §037. 弩副手弹药", 43))
-                .append(guideBookJumpLine("§8- §038. 特殊弩弹", 44))
-                .append(guideBookJumpLine("§8- §039. 食物弩弹", 45))
-                .append(guideBookJumpLine("§8- §040. 弓发风弹", 46))
-                .append(guideBookJumpLine("§8- §b下一页目录", 6));
-    }
-
-    private Component guideBookContentsPageSix() {
-        return guideBookPageHeader("§9§l闪光新增百科\n§0目录 第6页\n\n")
-                .append(guideBookJumpLine("§8- §041. 剑气/锄头", 47))
-                .append(guideBookJumpLine("§8- §046. 唱片/音符", 52))
-                .append(guideBookJumpLine("§8- §055. 宠物/乐魂", 61))
-                .append(guideBookJumpLine("§8- §065. 伪毒食物", 71))
-                .append(guideBookJumpLine("§8- §068. 砂土农耕", 74))
-                .append(guideBookJumpLine("§8- §069. 沉重盾牌", 75))
-                .append(guideBookJumpLine("§8- §070. 破盾/风弹", 76))
-                .append(guideBookJumpLine("§8- §072. TMT限制", 78))
-                .append(guideBookJumpLine("§8- §074. 煤炭镐", 80))
-                .append(guideBookJumpLine("§8- §075. 强化风弹", 81))
-                .append(guideBookJumpLine("§8- §077. 潮汐钓鱼", 83))
-                .append(guideBookJumpLine("§8- §b返回第1页", 1));
+    private Component guideBookQuickPage(int entry, String title, String material, String usage,
+                                         String cost, String cooldown, String note) {
+        String number = String.format(Locale.ROOT, "%02d", entry);
+        return guideBookPage("§x§9§8§D§D§F§F§l" + number + ". " + title
+                + "\n\n§6材料: §0" + material
+                + "\n§a用法: §0" + usage
+                + "\n§c消耗: §0" + cost
+                + "\n§e冷却: §0" + cooldown
+                + "\n§7注意: §0" + note);
     }
 
     private Component guideBookPage(String legacyText) {
@@ -21969,12 +22000,12 @@ public class FlashModeManager {
         MAIN("main", "主书", 0, 0, "§x§9§8§D§D§F§F§l主 §8§l· §x§F§4§C§3§F§F§l闪光书", "§x§9§8§D§D§F§F主 §8· §x§F§4§C§3§F§F闪光书"),
         BASIC("basic", "基础规则", 1, 12, "§b§l基础规则", "§b基础规则"),
         FORGE("forge", "铁砧强化", 13, 34, "§6§l铁砧强化", "§6铁砧强化"),
-        LOAD("load", "风弹装填", 35, 40, "§9§l风弹装填", "§9风弹装填"),
-        COMBAT("combat", "战斗机关", 41, 54, "§c§l战斗机关", "§c战斗机关"),
-        CREATURE("creature", "宠物乐魂", 55, 61, "§a§l宠物乐魂", "§a宠物乐魂"),
-        FARM("farm", "通关农耕", 62, 68, "§5§l通关农耕", "§5通关农耕"),
-        HEAVY("heavy", "沉重爆破", 69, 78, "§x§6§0§6§0§6§0§l沉重爆破", "§x§6§0§6§0§6§0沉重爆破"),
-        ALL("all", "完整目录", 1, 78, "§f§l完整目录", "§f完整目录");
+        LOAD("load", "风弹装填", 30, 41, "§9§l风弹装填", "§9风弹装填"),
+        COMBAT("combat", "战斗机关", 42, 55, "§c§l战斗机关", "§c战斗机关"),
+        CREATURE("creature", "宠物乐魂", 56, 62, "§a§l宠物乐魂", "§a宠物乐魂"),
+        FARM("farm", "通关农耕", 63, 69, "§5§l通关农耕", "§5通关农耕"),
+        HEAVY("heavy", "沉重爆破", 70, 79, "§x§6§0§6§0§6§0§l沉重爆破", "§x§6§0§6§0§6§0沉重爆破"),
+        ALL("all", "完整目录", 1, 79, "§f§l完整目录", "§f完整目录");
 
         private final String id;
         private final String displayName;
