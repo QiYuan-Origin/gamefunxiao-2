@@ -21825,12 +21825,12 @@ public class FlashModeManager {
                 int level = spyglass.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
                 int triggerTicks = getSpyglassFocusTriggerTicks(level);
                 if (ticks % 5 == 0 || ticks == 1) {
-                    spawnSpyglassWarmupParticles(online, target, hitFace, level, ticks, triggerTicks);
+                    spawnSpyglassWarmupParticles(online, trace, level, ticks, triggerTicks);
                 }
                 if (ticks >= triggerTicks) {
                     spyglassFocusTicks.remove(uuid);
                     spyglassFocusBlocks.remove(uuid);
-                    spawnSpyglassFireArea(online, room, target, hitFace, level);
+                    spawnSpyglassFireArea(online, room, trace, level);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);
@@ -21856,46 +21856,27 @@ public class FlashModeManager {
         return face;
     }
 
-    private void spawnSpyglassWarmupParticles(Player player, Block target, BlockFace face, int level, int ticks, int triggerTicks) {
-        World world = target.getWorld();
-        SpyglassPlane plane = createSpyglassPlane(target, face);
+    private void spawnSpyglassWarmupParticles(Player player, RayTraceResult centerTrace, int level, int ticks, int triggerTicks) {
         double progress = Math.min(1.0D, ticks / (double) Math.max(1, triggerTicks));
-        int radius = Math.min(4, 1 + level);
-        int samples = Math.max(6, (int) Math.round(6 + progress * 18));
-        for (int i = 0; i < samples; i++) {
-            int a = ThreadLocalRandom.current().nextInt(-radius, radius + 1);
-            int b = ThreadLocalRandom.current().nextInt(-radius, radius + 1);
-            if (Math.abs(a) + Math.abs(b) > radius + 1) {
-                continue;
-            }
-            Location loc = planeLocation(plane, a + ThreadLocalRandom.current().nextDouble(-0.32D, 0.33D),
-                    b + ThreadLocalRandom.current().nextDouble(-0.32D, 0.33D),
-                    0.035D + progress * 0.10D);
-            world.spawnParticle(Particle.SMALL_FLAME, loc, 1, 0.035D, 0.035D, 0.035D, 0.004D);
-            if (ticks % 10 == 0) {
-                world.spawnParticle(Particle.SMOKE, loc, 1, 0.030D, 0.030D, 0.030D, 0.002D);
-            }
-        }
+        int samples = Math.max(14, (int) Math.round(14 + progress * 34));
+        spawnSpyglassCircularSurfaceParticles(player, centerTrace, level, samples,
+                0.32D + progress * 0.68D, ticks, false);
         if (ticks % 20 == 0) {
             player.playSound(player.getLocation(), Sound.BLOCK_FIRE_AMBIENT, 0.25f, 1.35f + (float) progress * 0.25f);
         }
     }
 
-    private void spawnSpyglassFireArea(Player player, GameRoom room, Block target, BlockFace face, int level) {
+    private void spawnSpyglassFireArea(Player player, GameRoom room, RayTraceResult centerTrace, int level) {
+        Block target = centerTrace == null ? null : centerTrace.getHitBlock();
+        if (target == null) {
+            return;
+        }
+        BlockFace face = normalizeSpyglassHitFace(centerTrace.getHitBlockFace());
         World world = target.getWorld();
         SpyglassPlane plane = createSpyglassPlane(target, face);
         Location center = plane.center().clone();
         int radius = Math.min(4, 1 + level);
-        for (int a = -radius; a <= radius; a++) {
-            for (int b = -radius; b <= radius; b++) {
-                if (Math.abs(a) + Math.abs(b) > radius + 1) {
-                    continue;
-                }
-                Location loc = planeLocation(plane, a, b, 0.06D);
-                world.spawnParticle(Particle.FLAME, loc, 5, 0.055D, 0.055D, 0.055D, 0.01);
-                world.spawnParticle(Particle.SMALL_FLAME, loc, 3, 0.045D, 0.045D, 0.045D, 0.01);
-            }
-        }
+        spawnSpyglassCircularSurfaceParticles(player, centerTrace, level, 92, 1.0D, player.getTicksLived(), true);
         for (Entity entity : world.getNearbyEntities(center, radius + 1.2D, radius + 1.7D, radius + 1.2D)) {
             if (!(entity instanceof LivingEntity living) || living.getUniqueId().equals(player.getUniqueId())) {
                 continue;
@@ -21912,6 +21893,61 @@ public class FlashModeManager {
         }
         world.playSound(center, Sound.ITEM_FIRECHARGE_USE, 0.85f, 1.25f);
         world.playSound(center, Sound.BLOCK_FIRE_AMBIENT, 0.55f, 1.45f);
+    }
+
+    private void spawnSpyglassCircularSurfaceParticles(Player player, RayTraceResult centerTrace, int level,
+                                                        int samples, double radiusScale, int phase, boolean ignition) {
+        if (player == null || centerTrace == null || centerTrace.getHitPosition() == null || samples <= 0) {
+            return;
+        }
+        World world = player.getWorld();
+        Location eye = player.getEyeLocation();
+        Vector forward = eye.getDirection();
+        if (forward.lengthSquared() < 0.0001D) {
+            return;
+        }
+        forward.normalize();
+        Vector right = forward.clone().crossProduct(new Vector(0.0D, 1.0D, 0.0D));
+        if (right.lengthSquared() < 0.0001D) {
+            right = forward.clone().crossProduct(new Vector(1.0D, 0.0D, 0.0D));
+        }
+        right.normalize();
+        Vector up = right.clone().crossProduct(forward).normalize();
+        double centerDistance = Math.max(1.5D, centerTrace.getHitPosition().distance(eye.toVector()));
+        double radius = Math.min(4.0D, 1.0D + Math.max(1, level)) * Math.max(0.10D, radiusScale);
+        double rotation = phase * 0.17D;
+        final double goldenAngle = 2.399963229728653D;
+
+        for (int i = 0; i < samples; i++) {
+            double radial = radius * Math.sqrt((i + 0.5D) / samples);
+            double angle = i * goldenAngle + rotation;
+            Vector offset = right.clone().multiply(Math.cos(angle) * radial)
+                    .add(up.clone().multiply(Math.sin(angle) * radial));
+            Vector rayDirection = forward.clone().multiply(centerDistance).add(offset).normalize();
+            RayTraceResult surface = world.rayTraceBlocks(eye, rayDirection, 96.0D,
+                    FluidCollisionMode.NEVER, true);
+            if (surface == null || surface.getHitBlock() == null || surface.getHitPosition() == null) {
+                continue;
+            }
+            BlockFace hitFace = normalizeSpyglassHitFace(surface.getHitBlockFace());
+            Vector normal = new Vector(hitFace.getModX(), hitFace.getModY(), hitFace.getModZ());
+            if (normal.lengthSquared() > 0.0001D) {
+                normal.normalize().multiply(ignition ? 0.075D : 0.045D);
+            }
+            Location hit = surface.getHitPosition().toLocation(world).add(normal);
+            if (ignition) {
+                world.spawnParticle(Particle.FLAME, hit, 2, 0.040D, 0.040D, 0.040D, 0.008D);
+                world.spawnParticle(Particle.SMALL_FLAME, hit, 1, 0.025D, 0.025D, 0.025D, 0.003D);
+                if (i % 6 == 0) {
+                    world.spawnParticle(Particle.SMOKE, hit, 1, 0.025D, 0.025D, 0.025D, 0.002D);
+                }
+            } else {
+                world.spawnParticle(Particle.SMALL_FLAME, hit, 1, 0.025D, 0.025D, 0.025D, 0.002D);
+                if (i % 8 == 0) {
+                    world.spawnParticle(Particle.SMOKE, hit, 1, 0.018D, 0.018D, 0.018D, 0.001D);
+                }
+            }
+        }
     }
 
     private SpyglassPlane createSpyglassPlane(Block target, BlockFace face) {
