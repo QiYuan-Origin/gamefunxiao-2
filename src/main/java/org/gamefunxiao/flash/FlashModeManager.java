@@ -607,7 +607,7 @@ public class FlashModeManager {
     private final NamespacedKey flashGlobalMobMinerKey;
     private final Map<UUID, Long> bucketSwordCooldowns = new HashMap<>();
     private final Map<UUID, Integer> spyglassFocusTicks = new HashMap<>();
-    private final Map<UUID, String> spyglassFocusBlocks = new HashMap<>();
+    private final Map<UUID, String> spyglassFocusTargets = new HashMap<>();
     private final Map<UUID, Long> riptideTridentCooldowns = new HashMap<>();
     private final Map<UUID, Long> materialAxeCooldowns = new HashMap<>();
     private final Map<UUID, Long> recentCrossbowLoadOffhandCancels = new HashMap<>();
@@ -2533,7 +2533,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(52, "潮汐鱼饵", "副手潮汐鱼饵+激流钓鱼竿", "抛入水中积累鱼群热度并钓特殊物。", "消耗鱼饵", "钓竿节奏", "热度越高越容易出高编号特殊钓鱼物。"));
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
-        pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域。", "无", "聚焦触发", "用于封路、逼位和点燃区域。"));
+        pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域；聚焦实体会直接灼烧。", "无", "聚焦触发", "实体蓄力时会被环形火粒子包裹，触发后受伤并燃烧。"));
         pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "骷髅25%，末影人45%，僵尸30%。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
@@ -9425,7 +9425,7 @@ public class FlashModeManager {
         clearSpyglassFocus(uuid);
         bucketSwordCooldowns.remove(uuid);
         spyglassFocusTicks.remove(uuid);
-        spyglassFocusBlocks.remove(uuid);
+        spyglassFocusTargets.remove(uuid);
         riptideTridentCooldowns.remove(uuid);
         materialAxeCooldowns.remove(uuid);
         recentCrossbowLoadOffhandCancels.remove(uuid);
@@ -22551,23 +22551,16 @@ public class FlashModeManager {
                     cancel();
                     return;
                 }
-                RayTraceResult trace = online.getWorld().rayTraceBlocks(
-                        online.getEyeLocation(),
-                        online.getEyeLocation().getDirection(),
-                        96.0D,
-                        FluidCollisionMode.NEVER,
-                        true);
-                Block target = trace == null ? null : trace.getHitBlock();
-                if (target == null || target.isPassable()) {
+                RayTraceResult trace = findSpyglassFocusTrace(online, room);
+                String key = getSpyglassFocusTargetKey(trace);
+                if (key == null) {
                     spyglassFocusTicks.remove(uuid);
-                    spyglassFocusBlocks.remove(uuid);
+                    spyglassFocusTargets.remove(uuid);
                     return;
                 }
-                BlockFace hitFace = normalizeSpyglassHitFace(trace.getHitBlockFace());
 
-                String key = target.getWorld().getName() + ":" + target.getX() + ":" + target.getY() + ":" + target.getZ() + ":" + hitFace.name();
-                int ticks = key.equals(spyglassFocusBlocks.get(uuid)) ? spyglassFocusTicks.getOrDefault(uuid, 0) + 1 : 1;
-                spyglassFocusBlocks.put(uuid, key);
+                int ticks = key.equals(spyglassFocusTargets.get(uuid)) ? spyglassFocusTicks.getOrDefault(uuid, 0) + 1 : 1;
+                spyglassFocusTargets.put(uuid, key);
                 spyglassFocusTicks.put(uuid, ticks);
 
                 int level = spyglass.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
@@ -22577,11 +22570,74 @@ public class FlashModeManager {
                 }
                 if (ticks >= triggerTicks) {
                     spyglassFocusTicks.remove(uuid);
-                    spyglassFocusBlocks.remove(uuid);
+                    spyglassFocusTargets.remove(uuid);
                     spawnSpyglassFireArea(online, room, trace, level);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    private RayTraceResult findSpyglassFocusTrace(Player player, GameRoom room) {
+        Location eye = player.getEyeLocation();
+        Vector direction = eye.getDirection();
+        if (direction.lengthSquared() < 0.0001D) {
+            return null;
+        }
+        direction.normalize();
+        RayTraceResult blockTrace = player.getWorld().rayTraceBlocks(
+                eye, direction, 96.0D, FluidCollisionMode.NEVER, true);
+        double entityDistance = 96.0D;
+        if (blockTrace != null && blockTrace.getHitPosition() != null) {
+            entityDistance = Math.min(entityDistance,
+                    eye.toVector().distance(blockTrace.getHitPosition()) + 0.05D);
+        }
+        RayTraceResult entityTrace = player.getWorld().rayTraceEntities(
+                eye, direction, entityDistance, 0.28D,
+                entity -> isSpyglassLivingTarget(player, resolveSpyglassLivingTarget(entity)));
+        if (entityTrace != null) {
+            LivingEntity entityTarget = resolveSpyglassLivingTarget(entityTrace.getHitEntity());
+            if (entityTarget != null) {
+                return canSpyglassFocusEntity(player, room, entityTarget) ? entityTrace : null;
+            }
+        }
+        Block target = blockTrace == null ? null : blockTrace.getHitBlock();
+        return target != null && !target.isPassable() ? blockTrace : null;
+    }
+
+    private String getSpyglassFocusTargetKey(RayTraceResult trace) {
+        LivingEntity living = trace == null ? null : resolveSpyglassLivingTarget(trace.getHitEntity());
+        if (living != null) {
+            return "entity:" + living.getUniqueId();
+        }
+        Block target = trace == null ? null : trace.getHitBlock();
+        if (target == null || target.isPassable()) {
+            return null;
+        }
+        BlockFace hitFace = normalizeSpyglassHitFace(trace.getHitBlockFace());
+        return "block:" + target.getWorld().getName() + ":" + target.getX() + ":" + target.getY()
+                + ":" + target.getZ() + ":" + hitFace.name();
+    }
+
+    private LivingEntity resolveSpyglassLivingTarget(Entity entity) {
+        if (entity instanceof LivingEntity living) {
+            return living;
+        }
+        if (entity instanceof ComplexEntityPart part && part.getParent() instanceof LivingEntity living) {
+            return living;
+        }
+        return null;
+    }
+
+    private boolean isSpyglassLivingTarget(Player player, LivingEntity target) {
+        return player != null && target != null && target.isValid() && !target.isDead()
+                && !target.getUniqueId().equals(player.getUniqueId());
+    }
+
+    private boolean canSpyglassFocusEntity(Player player, GameRoom room, LivingEntity target) {
+        if (!isSpyglassLivingTarget(player, target)) {
+            return false;
+        }
+        return !(target instanceof Player targetPlayer) || canDamage(room, player, targetPlayer);
     }
 
     private int getSpyglassFocusTriggerTicks(int fireAspectLevel) {
@@ -22593,7 +22649,7 @@ public class FlashModeManager {
             return;
         }
         spyglassFocusTicks.remove(uuid);
-        spyglassFocusBlocks.remove(uuid);
+        spyglassFocusTargets.remove(uuid);
         spyglassFocusMonitors.remove(uuid);
     }
 
@@ -22607,14 +22663,33 @@ public class FlashModeManager {
     private void spawnSpyglassWarmupParticles(Player player, RayTraceResult centerTrace, int level, int ticks, int triggerTicks) {
         double progress = Math.min(1.0D, ticks / (double) Math.max(1, triggerTicks));
         int samples = Math.max(14, (int) Math.round(14 + progress * 34));
-        spawnSpyglassCircularSurfaceParticles(player, centerTrace, level, samples,
-                0.32D + progress * 0.68D, ticks, false);
+        LivingEntity living = centerTrace == null ? null : resolveSpyglassLivingTarget(centerTrace.getHitEntity());
+        if (living != null) {
+            spawnSpyglassEntityParticles(player, living, samples,
+                    0.32D + progress * 0.68D, ticks, false);
+        } else {
+            spawnSpyglassCircularSurfaceParticles(player, centerTrace, level, samples,
+                    0.32D + progress * 0.68D, ticks, false);
+        }
         if (ticks % 20 == 0) {
             player.playSound(player.getLocation(), Sound.BLOCK_FIRE_AMBIENT, 0.25f, 1.35f + (float) progress * 0.25f);
         }
     }
 
     private void spawnSpyglassFireArea(Player player, GameRoom room, RayTraceResult centerTrace, int level) {
+        LivingEntity directTarget = centerTrace == null ? null : resolveSpyglassLivingTarget(centerTrace.getHitEntity());
+        if (directTarget != null) {
+            if (!applySpyglassBurn(player, room, directTarget, level)) {
+                return;
+            }
+            spawnSpyglassEntityParticles(player, directTarget, 76, 1.0D,
+                    player.getTicksLived(), true);
+            Location center = directTarget.getLocation().add(0.0D,
+                    Math.max(0.35D, directTarget.getHeight() * 0.5D), 0.0D);
+            directTarget.getWorld().playSound(center, Sound.ITEM_FIRECHARGE_USE, 0.92f, 1.22f);
+            directTarget.getWorld().playSound(center, Sound.ENTITY_BLAZE_HURT, 0.48f, 1.45f);
+            return;
+        }
         Block target = centerTrace == null ? null : centerTrace.getHitBlock();
         if (target == null) {
             return;
@@ -22626,21 +22701,65 @@ public class FlashModeManager {
         int radius = Math.min(4, 1 + level);
         spawnSpyglassCircularSurfaceParticles(player, centerTrace, level, 92, 1.0D, player.getTicksLived(), true);
         for (Entity entity : world.getNearbyEntities(center, radius + 1.2D, radius + 1.7D, radius + 1.2D)) {
-            if (!(entity instanceof LivingEntity living) || living.getUniqueId().equals(player.getUniqueId())) {
+            if (!(entity instanceof LivingEntity living) || !isInsideSpyglassPlaneArea(plane, living, radius)) {
                 continue;
             }
-            if (living instanceof Player targetPlayer && !canDamage(room, player, targetPlayer)) {
-                continue;
-            }
-            if (!isInsideSpyglassPlaneArea(plane, living, radius)) {
-                continue;
-            }
-            living.setFireTicks(Math.max(living.getFireTicks(), 70 + level * 20));
-            living.damage(1.5D + level * 0.75D, player);
-            world.spawnParticle(Particle.FLAME, living.getLocation().add(0.0D, Math.min(1.0D, living.getHeight() * 0.55D), 0.0D), 10, 0.20D, 0.22D, 0.20D, 0.02D);
+            applySpyglassBurn(player, room, living, level);
         }
         world.playSound(center, Sound.ITEM_FIRECHARGE_USE, 0.85f, 1.25f);
         world.playSound(center, Sound.BLOCK_FIRE_AMBIENT, 0.55f, 1.45f);
+    }
+
+    private boolean applySpyglassBurn(Player player, GameRoom room, LivingEntity target, int level) {
+        if (!canSpyglassFocusEntity(player, room, target)) {
+            return false;
+        }
+        target.setFireTicks(Math.max(target.getFireTicks(), 70 + level * 20));
+        target.damage(1.5D + level * 0.75D, player);
+        Location center = target.getLocation().add(0.0D, Math.min(1.0D, target.getHeight() * 0.55D), 0.0D);
+        target.getWorld().spawnParticle(Particle.FLAME, center, 12, 0.22D, 0.26D, 0.22D, 0.025D);
+        target.getWorld().spawnParticle(Particle.LAVA, center, 2, 0.16D, 0.20D, 0.16D, 0.0D);
+        return true;
+    }
+
+    private void spawnSpyglassEntityParticles(Player player, LivingEntity target, int samples,
+                                               double radiusScale, int phase, boolean ignition) {
+        if (player == null || target == null || samples <= 0 || !target.isValid()
+                || !player.getWorld().equals(target.getWorld())) {
+            return;
+        }
+        World world = target.getWorld();
+        Location base = target.getLocation();
+        double height = Math.max(0.65D, Math.min(4.0D, target.getHeight()));
+        double radius = Math.max(0.32D, Math.min(2.2D, target.getWidth() * 0.72D + 0.18D))
+                * Math.max(0.10D, radiusScale);
+        double rotation = phase * 0.17D;
+        final double goldenAngle = 2.399963229728653D;
+        for (int i = 0; i < samples; i++) {
+            double vertical = (i + 0.5D) / samples;
+            double angle = i * goldenAngle + rotation;
+            double ringRadius = radius * (0.72D + Math.sin(vertical * Math.PI) * 0.28D);
+            Location point = base.clone().add(
+                    Math.cos(angle) * ringRadius,
+                    0.08D + vertical * height * 0.88D,
+                    Math.sin(angle) * ringRadius);
+            if (ignition) {
+                world.spawnParticle(Particle.FLAME, point, 2, 0.035D, 0.035D, 0.035D, 0.007D);
+                world.spawnParticle(Particle.SMALL_FLAME, point, 1, 0.020D, 0.020D, 0.020D, 0.002D);
+                if (i % 6 == 0) {
+                    world.spawnParticle(Particle.SMOKE, point, 1, 0.022D, 0.022D, 0.022D, 0.001D);
+                }
+            } else {
+                world.spawnParticle(Particle.SMALL_FLAME, point, 1, 0.024D, 0.024D, 0.024D, 0.002D);
+                if (i % 9 == 0) {
+                    world.spawnParticle(Particle.SMOKE, point, 1, 0.018D, 0.018D, 0.018D, 0.001D);
+                }
+            }
+        }
+        Location center = base.clone().add(0.0D, height * 0.50D, 0.0D);
+        world.spawnParticle(ignition ? Particle.FLAME : Particle.SMALL_FLAME, center,
+                ignition ? 16 : 4, radius * 0.22D, height * 0.20D, radius * 0.22D,
+                ignition ? 0.018D : 0.004D);
     }
 
     private void spawnSpyglassCircularSurfaceParticles(Player player, RayTraceResult centerTrace, int level,
