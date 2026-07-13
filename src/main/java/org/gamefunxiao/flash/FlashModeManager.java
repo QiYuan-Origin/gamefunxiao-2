@@ -12565,7 +12565,7 @@ public class FlashModeManager {
     }
 
     private ItemStack createRandomFlashGlobalMobWeapon(ThreadLocalRandom random) {
-        Material[] pool = {Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD, Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE};
+        Material[] pool = {Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD};
         return new ItemStack(pool[random.nextInt(pool.length)]);
     }
 
