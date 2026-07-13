@@ -37,6 +37,7 @@ import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInputEvent;
+import org.bukkit.event.player.PlayerItemBreakEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -135,6 +136,11 @@ public class FlashModeListener implements Listener {
         plugin.getFlashModeManager().cancelDispenserLauncherCharge(event.getPlayer(), false);
         org.bukkit.Bukkit.getScheduler().runTask(plugin,
                 () -> plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(event.getPlayer()));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerItemBreak(PlayerItemBreakEvent event) {
+        plugin.getFlashModeManager().handleMaceShieldItemBreak(event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)

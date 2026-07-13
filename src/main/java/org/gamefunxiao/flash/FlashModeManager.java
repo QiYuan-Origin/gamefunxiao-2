@@ -110,6 +110,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.event.player.PlayerItemBreakEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.Event;
@@ -616,6 +617,7 @@ public class FlashModeManager {
     private final Map<UUID, Double> unstableMaceNextReboundChances = new HashMap<>();
     private final Map<UUID, Long> unstableMaceDisplacementLocks = new HashMap<>();
     private final Set<UUID> unstableMaceSpecialDamageGuards = new HashSet<>();
+    private final Map<UUID, PendingMaceShieldBreak> pendingMaceShieldBreaks = new HashMap<>();
     private final Map<UUID, UnstableMacePearlTrigger> unstableMacePearlTriggers = new HashMap<>();
     private final Map<UUID, UnstableMacePearlTrigger> unstableMaceLoadedPearls = new HashMap<>();
     private final Map<UUID, UnstableMaceAmbushBonus> unstableMaceAmbushBonuses = new HashMap<>();
@@ -794,6 +796,8 @@ public class FlashModeManager {
         this.turtleShellSpeedModifierKey = new NamespacedKey(plugin, "flash_turtle_shell_speed");
         this.flashGlobalMobGearKey = new NamespacedKey(plugin, "flash_global_mob_gear");
         this.flashGlobalMobMinerKey = new NamespacedKey(plugin, "flash_global_mob_miner");
+        // Resolve every payload during enable so an incomplete runtime package fails before a match starts.
+        CrossbowPayload.values();
         startRailgunTasks();
     }
 
@@ -9436,6 +9440,9 @@ public class FlashModeManager {
         unstableMacePearlTriggers.remove(uuid);
         unstableMaceLoadedPearls.remove(uuid);
         unstableMaceAmbushBonuses.remove(uuid);
+        pendingMaceShieldBreaks.remove(uuid);
+        pendingMaceShieldBreaks.entrySet().removeIf(entry -> entry.getValue() == null
+                || uuid.equals(entry.getValue().attackerUuid()));
         shieldWindChargeSafeFallExpires.remove(uuid);
         shieldWindChargeLastUseMillis.remove(uuid);
         shieldWindChargeAirBounceCounts.remove(uuid);
@@ -14114,30 +14121,28 @@ public class FlashModeManager {
         if (expectedResult == null || expectedResult.getType() == Material.AIR) {
             return;
         }
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                Player player = Bukkit.getPlayer(playerId);
-                if (player == null || !player.isOnline()) {
-                    return;
-                }
-                ItemStack current = getItemInHand(player, hand);
-                if (current == null || current.getType() != expectedResult.getType() || current.getAmount() != 1) {
-                    return;
-                }
-                if (current.hasItemMeta() && expectedResult.hasItemMeta() && current.getItemMeta().equals(expectedResult.getItemMeta())) {
-                    return;
-                }
-
-                ItemStack fixed = expectedResult.clone();
-                fixed.setAmount(1);
-                if (hand == EquipmentSlot.OFF_HAND) {
-                    player.getInventory().setItemInOffHand(fixed);
-                } else {
-                    player.getInventory().setItemInMainHand(fixed);
-                }
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null || !player.isOnline()) {
+                return;
             }
-        }.runTask(plugin);
+            ItemStack current = getItemInHand(player, hand);
+            if (current == null || current.getType() != expectedResult.getType() || current.getAmount() != 1) {
+                return;
+            }
+            if (current.hasItemMeta() && expectedResult.hasItemMeta()
+                    && current.getItemMeta().equals(expectedResult.getItemMeta())) {
+                return;
+            }
+
+            ItemStack fixed = expectedResult.clone();
+            fixed.setAmount(1);
+            if (hand == EquipmentSlot.OFF_HAND) {
+                player.getInventory().setItemInOffHand(fixed);
+            } else {
+                player.getInventory().setItemInMainHand(fixed);
+            }
+        });
     }
 
     private Material resolveFilledBucketResultType(PlayerBucketFillEvent event) {
@@ -19928,14 +19933,22 @@ public class FlashModeManager {
         if (!isRecordedAttackWeapon(attacker, weapon)) {
             return false;
         }
-
         float fallDistance = attacker.getFallDistance();
         if (fallDistance < MACE_SMASH_MIN_FALL_DISTANCE) {
             return false;
         }
 
-        event.setDamage(event.getDamage() * 1.25D);
         int unstableLevel = getUnstableMaceLevel(weapon);
+        if (victim instanceof Player target) {
+            ItemStack shield = findBlockingShield(target);
+            if (isShieldBlockingAttack(target, attacker)
+                    || isUnstableCoreShieldBlockingAttack(target, attacker, shield)) {
+                rememberPendingMaceShieldBreak(attacker, target, room, event.getDamage() * 1.25D);
+                return false;
+            }
+        }
+
+        event.setDamage(event.getDamage() * 1.25D);
         if (unstableLevel > 0) {
             applyUnstableMaceSmashDamage(event, attacker, victim, room, unstableLevel);
             if (unstableLevel >= 2) {
@@ -19963,6 +19976,80 @@ public class FlashModeManager {
         }
 
         return applyRecordedAxeShieldMaceCombo(event, attacker, victim, room);
+    }
+
+    private void rememberPendingMaceShieldBreak(Player attacker, Player target, GameRoom room, double smashDamage) {
+        if (attacker == null || target == null || !Double.isFinite(smashDamage) || smashDamage <= 0.0D) {
+            return;
+        }
+        String roomId = getFlashContextId(attacker, room);
+        if (roomId.isBlank()) {
+            return;
+        }
+        UUID targetUuid = target.getUniqueId();
+        PendingMaceShieldBreak pending = new PendingMaceShieldBreak(
+                attacker.getUniqueId(), targetUuid, roomId, smashDamage, System.currentTimeMillis() + 300L);
+        pendingMaceShieldBreaks.put(targetUuid, pending);
+        Bukkit.getScheduler().runTaskLater(plugin,
+                () -> pendingMaceShieldBreaks.remove(targetUuid, pending), 3L);
+    }
+
+    public void handleMaceShieldItemBreak(PlayerItemBreakEvent event) {
+        if (event == null || event.getBrokenItem() == null || event.getBrokenItem().getType() != Material.SHIELD) {
+            return;
+        }
+        Player target = event.getPlayer();
+        PendingMaceShieldBreak pending = pendingMaceShieldBreaks.remove(target.getUniqueId());
+        if (pending == null || System.currentTimeMillis() > pending.expiresAtMillis()) {
+            return;
+        }
+        ItemStack brokenShield = event.getBrokenItem().clone();
+        brokenShield.setAmount(1);
+        Bukkit.getScheduler().runTask(plugin, () -> triggerMaceShieldBreakSmash(pending, brokenShield));
+    }
+
+    private void triggerMaceShieldBreakSmash(PendingMaceShieldBreak pending, ItemStack brokenShield) {
+        Player attacker = Bukkit.getPlayer(pending.attackerUuid());
+        Player target = Bukkit.getPlayer(pending.targetUuid());
+        if (attacker == null || target == null || !attacker.isOnline() || !target.isOnline() || target.isDead()
+                || !attacker.getWorld().equals(target.getWorld())) {
+            return;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(attacker.getUniqueId());
+        if (!pending.roomId().equals(getFlashContextId(attacker, room))
+                || !isFlashCombatAvailable(attacker, room) || !canDamage(room, attacker, target)) {
+            return;
+        }
+
+        double damage = pending.smashDamage() * 1.25D;
+        if (!Double.isFinite(damage) || damage <= 0.0D) {
+            return;
+        }
+        if (target.hasActiveItem() && target.getActiveItem() != null
+                && target.getActiveItem().getType() == Material.SHIELD) {
+            target.clearActiveItem();
+        }
+        unstableMaceSpecialDamageGuards.add(attacker.getUniqueId());
+        try {
+            target.setNoDamageTicks(0);
+            target.damage(damage, attacker);
+        } finally {
+            unstableMaceSpecialDamageGuards.remove(attacker.getUniqueId());
+        }
+
+        Location center = target.getLocation().add(0.0D, Math.min(1.05D, target.getHeight() * 0.55D), 0.0D);
+        World world = center.getWorld();
+        if (world == null) {
+            return;
+        }
+        world.spawnParticle(Particle.ITEM, center, 24, 0.32D, 0.30D, 0.32D, 0.10D, brokenShield);
+        world.spawnParticle(Particle.FLAME, center, 30, 0.42D, 0.34D, 0.42D, 0.08D);
+        world.spawnParticle(Particle.SMALL_FLAME, center, 18, 0.34D, 0.26D, 0.34D, 0.045D);
+        world.spawnParticle(Particle.LAVA, center, 7, 0.30D, 0.20D, 0.30D, 0.0D);
+        world.spawnParticle(Particle.GUST, center, 7, 0.24D, 0.20D, 0.24D, 0.04D);
+        world.playSound(center, Sound.ITEM_SHIELD_BREAK, 1.0F, 1.0F);
+        world.playSound(center, Sound.ITEM_MACE_SMASH_GROUND_HEAVY, 1.0F, 1.0F);
+        world.playSound(center, Sound.ITEM_FIRECHARGE_USE, 0.82F, 1.0F);
     }
 
     private void applyUnstableMaceSmashDamage(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim,
@@ -21273,10 +21360,6 @@ public class FlashModeManager {
         if (room == null || room.getState() != RoomState.PLAYING || !room.isGameActuallyStarted()) {
             return;
         }
-        if (room.getGameMode().isFlashLike() && room.isEndFlashDragonDefeated()) {
-            room.setEndFlashDragonDefeated(false);
-        }
-
         event.setDamage(event.getDamage() * (1.0D - FLASH_ENDER_DRAGON_DAMAGE_REDUCTION));
     }
 
@@ -22780,6 +22863,10 @@ public class FlashModeManager {
     }
 
     private record ShieldBreakTrace(UUID targetUuid, String roomId, long timeMillis) {
+    }
+
+    private record PendingMaceShieldBreak(UUID attackerUuid, UUID targetUuid, String roomId,
+                                          double smashDamage, long expiresAtMillis) {
     }
 
     private static final class CoreShieldWindChargeSession {

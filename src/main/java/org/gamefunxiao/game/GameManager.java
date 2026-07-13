@@ -10542,6 +10542,7 @@ public class GameManager {
     }
 
     private void updateCompassTracking(GameRoom room) {
+        plugin.getRoomManager().refreshLocatorBarColors(room);
         boolean tournamentCompass = room.getGameMode().isFlashTournament();
         for (UUID hunterUuid : room.getAllPlayerUUIDs()) {
             if (!room.isHunter(hunterUuid)) continue;
@@ -10644,6 +10645,7 @@ public class GameManager {
         if (player == null || target == null || target.getWorld() == null) {
             return;
         }
+        boolean requiresLodestoneTarget = player.getWorld().getEnvironment() != World.Environment.NORMAL;
         if (player.getWorld().equals(target.getWorld())) {
             Location compassTarget = target.clone();
             compassTarget.setX(compassTarget.getBlockX() + 0.5D);
@@ -10657,16 +10659,18 @@ public class GameManager {
                 player.setCompassTarget(compassTarget);
             }
         }
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, false);
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, false);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, target, false,
+                requiresLodestoneTarget);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, target, false,
+                requiresLodestoneTarget);
     }
 
     private void makeHeldTrackingCompassesSpin(Player player) {
         if (player == null) {
             return;
         }
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, true);
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, true);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, null, true, false);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, null, true, false);
     }
 
     private void clearHeldTrackingCompasses(Player player) {
@@ -10678,7 +10682,8 @@ public class GameManager {
         clearTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND);
     }
 
-    private void updateTrackingCompassInHand(Player player, org.bukkit.inventory.EquipmentSlot hand, boolean spin) {
+    private void updateTrackingCompassInHand(Player player, org.bukkit.inventory.EquipmentSlot hand, Location target,
+                                             boolean spin, boolean requiresLodestoneTarget) {
         if (player == null || hand == null) {
             return;
         }
@@ -10691,6 +10696,8 @@ public class GameManager {
         ItemStack updated = compass.clone();
         boolean changed = spin
                 ? updateTrackingCompassSpinMeta(updated, player)
+                : requiresLodestoneTarget
+                ? updateTrackingCompassLodestoneMeta(updated, target)
                 : clearTrackingCompassMeta(updated);
         if (!changed) {
             return;
@@ -10777,6 +10784,31 @@ public class GameManager {
         return false;
     }
 
+    private boolean updateTrackingCompassLodestoneMeta(ItemStack compass, Location target) {
+        if (!isTrackingCompass(compass) || target == null || target.getWorld() == null) {
+            return false;
+        }
+        ItemMeta meta = compass.getItemMeta();
+        if (!(meta instanceof CompassMeta compassMeta)) {
+            return false;
+        }
+        Location fixedTarget = target.clone();
+        fixedTarget.setX(fixedTarget.getBlockX() + 0.5D);
+        fixedTarget.setZ(fixedTarget.getBlockZ() + 0.5D);
+        Location current = compassMeta.getLodestone();
+        if (compassMeta.isLodestoneCompass() && !compassMeta.isLodestoneTracked()
+                && current != null && current.getWorld() != null
+                && current.getWorld().equals(fixedTarget.getWorld())
+                && current.getBlockX() == fixedTarget.getBlockX()
+                && current.getBlockZ() == fixedTarget.getBlockZ()) {
+            return false;
+        }
+        compassMeta.setLodestone(fixedTarget);
+        compassMeta.setLodestoneTracked(false);
+        compass.setItemMeta(compassMeta);
+        return true;
+    }
+
     private double calculateTrackingDistance(GameRoom room, Location hunterLoc, Location preyLoc) {
         if (room.hasModifier("IncludeY")) {
             return hunterLoc.distance(preyLoc);
@@ -10797,6 +10829,7 @@ public class GameManager {
         room.clearFlashTournamentStartLocations();
         room.setState(RoomState.ENDED);
         room.setPreyWon(preyWin);
+        scheduleEndedRoomClosure(room, preyWin ? 20 : 10);
         setTournamentAdvancementAnnouncements(room, false);
         cleanupRandomCompassMode(room.getRoomId());
         cleanupSurvivalMode(room.getRoomId());
@@ -10809,7 +10842,6 @@ public class GameManager {
         if (gameTask != null) {
             gameTask.cancel();
         }
-
         // 发送结束消息
         if (!isTournamentSilent(room)) {
             String resultKey = preyWin ? "game.prey_win" : "game.hunter_win";
@@ -10859,69 +10891,6 @@ public class GameManager {
             }
         }
 
-        // 猎物胜利20秒，猎人胜利10秒
-        int closingTime = preyWin ? 20 : 10;
-
-        new BukkitRunnable() {
-            int countdown = closingTime;
-
-            @Override
-            public void run() {
-                if (countdown <= 0) {
-                    if (plugin.getChildServerManager().isManagedNodeRoom(room.getRoomId())) {
-                        plugin.getChildServerManager().returnManagedRoomPlayersToLobby(room);
-                        plugin.getRoomManager().clearAllRoleNameTags(room);
-                        plugin.getRoomManager().deleteRoom(room.getRoomId());
-                        plugin.getChildServerManager().scheduleNodeShutdown();
-                        cancel();
-                        return;
-                    }
-
-                    if (plugin.getChildServerManager().isManagedCrossServerRoom(room.getRoomId())) {
-                        plugin.getChildServerManager().returnCrossServerRoomPlayersToLobby(room);
-                        plugin.getRoomManager().clearAllRoleNameTags(room);
-                        plugin.getRoomManager().deleteRoom(room.getRoomId());
-                        cancel();
-                        return;
-                    }
-
-                    // 踢出所有玩家并恢复状态
-                    Set<UUID> restoreTargets = new LinkedHashSet<>(room.getAllPlayerUUIDs());
-                    restoreTargets.addAll(room.getSpectators());
-                    for (UUID uuid : restoreTargets) {
-                        plugin.getRoomManager().restorePlayerAfterRoom(room, uuid, true);
-                    }
-
-                    // 清除头顶职业前缀
-                    plugin.getRoomManager().clearAllRoleNameTags(room);
-                    // 删除房间
-                    plugin.getRoomManager().deleteRoom(room.getRoomId());
-                    cancel();
-                    return;
-                }
-
-                // 显示倒计时
-                if (isTournamentSilent(room)) {
-                    countdown--;
-                    return;
-                }
-
-                if (countdown <= 5) {
-                    // 5秒及以下时显示倒计时
-                    Set<UUID> closeRecipients = new LinkedHashSet<>(room.getAllPlayerUUIDs());
-                    closeRecipients.addAll(room.getSpectators());
-                    for (UUID uuid : closeRecipients) {
-                        Player player = Bukkit.getPlayer(uuid);
-                        if (player != null) {
-                            player.sendMessage("§x§F§F§5§5§5§5⏱ §c" + countdown + " §7秒后关闭...");
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.0f);
-                        }
-                    }
-                }
-
-                countdown--;
-            }
-        }.runTaskTimer(plugin, 20L, 20L);
     }
 
     public void endGameWithoutReward(GameRoom room) {
@@ -10933,6 +10902,7 @@ public class GameManager {
         room.clearDualPreyStack();
         room.setState(RoomState.ENDED);
         room.setPreyWon(!room.isPreyQuit());
+        scheduleEndedRoomClosure(room, 10);
         setTournamentAdvancementAnnouncements(room, false);
         cleanupRandomCompassMode(room.getRoomId());
         cleanupSurvivalMode(room.getRoomId());
@@ -10945,7 +10915,6 @@ public class GameManager {
         if (gameTask != null) {
             gameTask.cancel();
         }
-
         // 发送结束消息
         if (!isTournamentSilent(room)) {
             if (room.getGameMode().isLuckyPillars()) {
@@ -10984,67 +10953,122 @@ public class GameManager {
             }
         }
 
-        // 10秒倒计时
-        new BukkitRunnable() {
-            int countdown = 10;
+    }
 
-            @Override
-            public void run() {
-                if (countdown <= 0) {
-                    if (plugin.getChildServerManager().isManagedNodeRoom(room.getRoomId())) {
-                        plugin.getChildServerManager().returnManagedRoomPlayersToLobby(room);
-                        plugin.getRoomManager().clearAllRoleNameTags(room);
-                        plugin.getRoomManager().deleteRoom(room.getRoomId());
-                        plugin.getChildServerManager().scheduleNodeShutdown();
-                        cancel();
+    private void scheduleEndedRoomClosure(GameRoom room, int closingSeconds) {
+        if (room == null) {
+            return;
+        }
+        int[] countdown = {Math.max(0, closingSeconds)};
+        BukkitTask[] taskRef = new BukkitTask[1];
+        try {
+            taskRef[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                try {
+                    if (countdown[0] <= 0) {
+                        cancelEndedRoomClosureTask(taskRef);
+                        finishEndedRoomClosureSafely(room, "倒计时结束");
                         return;
                     }
-
-                    if (plugin.getChildServerManager().isManagedCrossServerRoom(room.getRoomId())) {
-                        plugin.getChildServerManager().returnCrossServerRoomPlayersToLobby(room);
-                        plugin.getRoomManager().clearAllRoleNameTags(room);
-                        plugin.getRoomManager().deleteRoom(room.getRoomId());
-                        cancel();
-                        return;
-                    }
-
-                    // 踢出所有玩家并恢复状态
-                    Set<UUID> restoreTargets = new LinkedHashSet<>(room.getAllPlayerUUIDs());
-                    restoreTargets.addAll(room.getSpectators());
-                    for (UUID uuid : restoreTargets) {
-                        plugin.getRoomManager().restorePlayerAfterRoom(room, uuid, true);
-                    }
-
-                    // 清除头顶职业前缀
-                    plugin.getRoomManager().clearAllRoleNameTags(room);
-                    // 删除房间
-                    plugin.getRoomManager().deleteRoom(room.getRoomId());
-                    cancel();
-                    return;
-                }
-
-                // 显示倒计时
-                if (isTournamentSilent(room)) {
-                    countdown--;
-                    return;
-                }
-
-                if (countdown <= 5) {
-                    // 5秒及以下时显示倒计时
-                    Set<UUID> closeRecipients = new LinkedHashSet<>(room.getAllPlayerUUIDs());
-                    closeRecipients.addAll(room.getSpectators());
-                    for (UUID uuid : closeRecipients) {
-                        Player player = Bukkit.getPlayer(uuid);
-                        if (player != null) {
-                            player.sendMessage("§x§F§F§5§5§5§5⏱ §c" + countdown + " §7秒后关闭...");
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.0f);
+                    if (!isTournamentSilent(room) && countdown[0] <= 5) {
+                        Set<UUID> closeRecipients = new LinkedHashSet<>(room.getAllPlayerUUIDs());
+                        closeRecipients.addAll(room.getSpectators());
+                        for (UUID uuid : closeRecipients) {
+                            Player player = Bukkit.getPlayer(uuid);
+                            if (player != null) {
+                                player.sendMessage("§x§F§F§5§5§5§5⏱ §c" + countdown[0] + " §7秒后关闭...");
+                                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.0f);
+                            }
                         }
                     }
+                    countdown[0]--;
+                } catch (Throwable throwable) {
+                    plugin.getLogger().severe("房间 " + room.getRoomId() + " 结束倒计时异常，正在立即执行关闭: "
+                            + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+                    cancelEndedRoomClosureTask(taskRef);
+                    finishEndedRoomClosureSafely(room, "倒计时异常兜底");
                 }
+            }, 20L, 20L);
+        } catch (Throwable throwable) {
+            plugin.getLogger().severe("房间 " + room.getRoomId() + " 无法创建结束倒计时，正在立即执行关闭: "
+                    + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+            finishEndedRoomClosureSafely(room, "倒计时创建失败兜底");
+        }
+    }
 
-                countdown--;
+    private void cancelEndedRoomClosureTask(BukkitTask[] taskRef) {
+        if (taskRef != null && taskRef.length > 0 && taskRef[0] != null) {
+            taskRef[0].cancel();
+        }
+    }
+
+    private void finishEndedRoomClosureSafely(GameRoom room, String stage) {
+        try {
+            finishEndedRoomClosure(room);
+        } catch (Throwable throwable) {
+            plugin.getLogger().severe("房间 " + (room == null ? "unknown" : room.getRoomId()) + " 在" + stage
+                    + "关闭失败: " + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+        }
+    }
+
+    private void finishEndedRoomClosure(GameRoom room) {
+        if (room == null || plugin.getRoomManager().getRoom(room.getRoomId()) != room) {
+            return;
+        }
+        if (plugin.getChildServerManager().isManagedNodeRoom(room.getRoomId())) {
+            try {
+                plugin.getChildServerManager().returnManagedRoomPlayersToLobby(room);
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("房间 " + room.getRoomId() + " 结束时返回节点玩家失败: "
+                        + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+            } finally {
+                safelyDeleteEndedRoom(room);
+                try {
+                    plugin.getChildServerManager().scheduleNodeShutdown();
+                } catch (Throwable throwable) {
+                    plugin.getLogger().warning("房间 " + room.getRoomId() + " 结束时安排节点关闭失败: "
+                            + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+                }
             }
-        }.runTaskTimer(plugin, 20L, 20L);
+            return;
+        }
+        if (plugin.getChildServerManager().isManagedCrossServerRoom(room.getRoomId())) {
+            try {
+                plugin.getChildServerManager().returnCrossServerRoomPlayersToLobby(room);
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("房间 " + room.getRoomId() + " 结束时返回跨服玩家失败: "
+                        + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+            } finally {
+                safelyDeleteEndedRoom(room);
+            }
+            return;
+        }
+
+        Set<UUID> restoreTargets = new LinkedHashSet<>(room.getAllPlayerUUIDs());
+        restoreTargets.addAll(room.getSpectators());
+        for (UUID uuid : restoreTargets) {
+            try {
+                plugin.getRoomManager().restorePlayerAfterRoom(room, uuid, true);
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("房间 " + room.getRoomId() + " 结束时恢复玩家 " + uuid + " 失败: "
+                        + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+            }
+        }
+        safelyDeleteEndedRoom(room);
+    }
+
+    private void safelyDeleteEndedRoom(GameRoom room) {
+        try {
+            plugin.getRoomManager().clearAllRoleNameTags(room);
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("房间 " + room.getRoomId() + " 结束时清理身份显示失败: "
+                    + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+        }
+        try {
+            plugin.getRoomManager().deleteRoom(room.getRoomId());
+        } catch (Throwable throwable) {
+            plugin.getLogger().severe("房间 " + room.getRoomId() + " 结束时删除房间失败: "
+                    + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+        }
     }
 
     private void showEndGameLeaderboard(GameRoom room, boolean preyWin) {

@@ -2237,6 +2237,31 @@ public class RoomManager {
         player.setWaypointColor(isPrey ? PREY_WAYPOINT_COLOR : HUNTER_WAYPOINT_COLOR);
     }
 
+    public void refreshLocatorBarColors(GameRoom room) {
+        if (room == null) {
+            return;
+        }
+        for (UUID uuid : room.getAllPlayerUUIDs()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            if (room.isSpectator(uuid)) {
+                player.setWaypointColor(SPECTATOR_WAYPOINT_COLOR);
+            } else if (room.isPrey(uuid)) {
+                player.setWaypointColor(PREY_WAYPOINT_COLOR);
+            } else if (room.isHunter(uuid)) {
+                player.setWaypointColor(HUNTER_WAYPOINT_COLOR);
+            }
+        }
+        for (UUID uuid : room.getSpectators()) {
+            Player spectator = Bukkit.getPlayer(uuid);
+            if (spectator != null && spectator.isOnline()) {
+                spectator.setWaypointColor(SPECTATOR_WAYPOINT_COLOR);
+            }
+        }
+    }
+
     private void clearRoleNameTeams(Player player) {
         String entryName = player.getName();
 
