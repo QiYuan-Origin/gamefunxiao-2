@@ -168,10 +168,17 @@ public class PlayerListener implements Listener {
     }
 
     private boolean shouldLockWorldInteraction(Player player, World world, GameRoom room, Location interactionLocation) {
-        if (shouldLockBlockInteraction(room)) {
+        if (shouldLockBlockInteraction(room) && !isEndFlashStartupInteractionAllowed(player, world, room)) {
             return true;
         }
         return shouldProtectLobbyLikeWorld(player, world, interactionLocation);
+    }
+
+    private boolean isEndFlashStartupInteractionAllowed(Player player, World world, GameRoom room) {
+        return player != null
+                && world != null
+                && world.equals(player.getWorld())
+                && plugin.getFlashModeManager().isEndFlashStartupFeatureAvailable(player, room);
     }
 
     private boolean shouldProtectLobbyLikeWorld(Player player, World world, Location interactionLocation) {
@@ -2925,10 +2932,11 @@ public class PlayerListener implements Listener {
         // 在游戏开始阶段（PLAYING状态但游戏还没正式开始），禁止所有人移动物品
         if (room.getState() == RoomState.PLAYING) {
             if (!room.isGameActuallyStarted()) {
-                if (room.getGameMode() == GameMode.END_FLASH && canEditEndFlashStartupInventory(event, player)) {
+                if (plugin.getFlashModeManager().isEndFlashStartupFeatureAvailable(player, room)
+                        && canEditEndFlashStartupInventory(event, player)) {
                     return;
                 }
-                // 其他模式仍保持锁定；终章·闪光只放行玩家自己的背包装备整理。
+                // 其他模式仍保持锁定；终章·闪光入场后放行玩家自己的背包装备整理。
                 event.setCancelled(true);
             }
             // 游戏正式开始后，允许所有玩家移动物品
@@ -2983,7 +2991,8 @@ public class PlayerListener implements Listener {
         }
 
         if (room.getState() == RoomState.PLAYING && !room.isGameActuallyStarted()) {
-            if (room.getGameMode() == GameMode.END_FLASH && canDragEndFlashStartupInventory(event, player)) {
+            if (plugin.getFlashModeManager().isEndFlashStartupFeatureAvailable(player, room)
+                    && canDragEndFlashStartupInventory(event, player)) {
                 return;
             }
             event.setCancelled(true);

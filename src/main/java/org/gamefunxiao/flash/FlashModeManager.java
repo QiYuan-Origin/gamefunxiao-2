@@ -467,8 +467,11 @@ public class FlashModeManager {
     private static final int ENHANCED_WIND_CHARGE_MAX_STACK = 8;
     private static final String ENHANCED_WIND_CHARGE_NAME = "§x§B§B§F§F§F§F强§x§A§8§F§4§F§F化§x§9§5§E§9§F§F风§x§8§2§D§E§F§F弹";
     private static final int RAILGUN_CHARGE_SECONDS = 10;
+    private static final int RAILGUN_TASK_INTERVAL_TICKS = 2;
     private static final int RAILGUN_ANIMATION_STEPS = 24;
-    private static final int RAILGUN_FINAL_HOLD_STEPS = 2;
+    private static final int RAILGUN_FLIGHT_TICKS = RAILGUN_ANIMATION_STEPS * RAILGUN_TASK_INTERVAL_TICKS;
+    private static final int RAILGUN_TNT_FUSE_TICKS = RAILGUN_FLIGHT_TICKS + 24;
+    private static final double RAILGUN_TNT_DRAG = 0.98D;
     private static final double RAILGUN_RING_SPACING = 4.8D;
     private static final int[] RAILGUN_TNT_COUNTS = {0, 96, 240, 480};
     private static final int[] RAILGUN_RING_COUNTS = {0, 3, 5, 8};
@@ -951,7 +954,7 @@ public class FlashModeManager {
 
     public boolean handleFlashCompassBackpackInteract(PlayerInteractEvent event, Player player, GameRoom room, ItemStack item) {
         if (!isFlashMode(room) || isFlashTournamentMode(room)
-                || room.getState() != RoomState.PLAYING || !room.isGameActuallyStarted()
+                || !isFlashCombatAvailable(player, room)
                 || item == null || item.getType() != Material.COMPASS) {
             return false;
         }
@@ -1034,9 +1037,7 @@ public class FlashModeManager {
     private boolean canUseFlashBackpack(Player player, GameRoom room) {
         return isFlashMode(room)
                 && !isFlashTournamentMode(room)
-                && room.getState() == RoomState.PLAYING
-                && room.isGameActuallyStarted()
-                && !room.isSpectator(player.getUniqueId())
+                && isFlashCombatAvailable(player, room)
                 && (room.isHunter(player.getUniqueId())
                 || (room.isPrey(player.getUniqueId()) && room.getPreyUUIDs().size() >= 2));
     }
@@ -1870,6 +1871,9 @@ public class FlashModeManager {
         }
 
         item.setItemMeta(meta);
+        if (getRailgunLevel(item) > 0) {
+            item.unsetData(DataComponentTypes.ITEM_MODEL);
+        }
         if (hasUnstableCoreShield(item)) {
             applyUnstableCoreShieldDurability(item);
         }
@@ -5576,7 +5580,7 @@ public class FlashModeManager {
         lore.add(RAILGUN_LORE_PREFIX + "等级：§f" + railgunLevelName(level));
         lore.add(RAILGUN_LORE_PREFIX + "充能：" + (charged ? "§a已就绪" : "§f" + seconds + "§7/§f10秒"));
         lore.add(RAILGUN_LORE_PREFIX + "锁定：§f" + railgunTargetShape(level) + "区块§7，当前位置居中");
-        lore.add(RAILGUN_LORE_PREFIX + "阵列：§f" + RAILGUN_TNT_COUNTS[level] + "个TNT显示 §8| §7右键锁定");
+        lore.add(RAILGUN_LORE_PREFIX + "阵列：§f" + RAILGUN_TNT_COUNTS[level] + "个真实TNT §8| §7右键锁定");
         meta.setLore(lore);
     }
 
@@ -5655,6 +5659,7 @@ public class FlashModeManager {
         meta.getPersistentDataContainer().set(railgunChargedKey, PersistentDataType.BYTE, charged ? (byte) 1 : (byte) 0);
         refreshRailgunMeta(item, meta);
         item.setItemMeta(meta);
+        item.unsetData(DataComponentTypes.ITEM_MODEL);
     }
 
     private ItemStack findHeldRailgun(Player player, String railgunId) {
@@ -5668,7 +5673,8 @@ public class FlashModeManager {
 
     private void startRailgunTasks() {
         railgunChargeTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeldRailguns, 20L, 20L);
-        railgunAnimationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickRailgunStrikes, 2L, 2L);
+        railgunAnimationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickRailgunStrikes,
+                RAILGUN_TASK_INTERVAL_TICKS, RAILGUN_TASK_INTERVAL_TICKS);
     }
 
     private void tickHeldRailguns() {
@@ -5717,8 +5723,9 @@ public class FlashModeManager {
         int ringTntCount = RAILGUN_TNT_COUNTS[safeLevel] - 1;
         int remaining = ringTntCount;
 
-        TNTPrimed centerTnt = spawnRailgunVisualTnt(world, origin);
-        points.add(new RailgunTntPoint(centerTnt, impact.getX(), impact.getY() + 0.55D, impact.getZ()));
+        double centerY = impact.getY() + 0.55D;
+        TNTPrimed centerTnt = spawnRailgunTnt(world, origin, impact.getX(), centerY, impact.getZ());
+        points.add(new RailgunTntPoint(centerTnt, impact.getX(), centerY, impact.getZ()));
 
         for (int ring = 1; ring <= ringCount; ring++) {
             int ringPoints = ring == ringCount
@@ -5733,8 +5740,9 @@ public class FlashModeManager {
                 int finalY = Math.min(world.getMaxHeight() - 2,
                         Math.max(world.getMinHeight() + 1,
                                 world.getHighestBlockYAt((int) Math.floor(finalX), (int) Math.floor(finalZ)) + 1));
-                TNTPrimed tnt = spawnRailgunVisualTnt(world, origin);
-                points.add(new RailgunTntPoint(tnt, finalX, finalY + 0.55D, finalZ));
+                double targetY = finalY + 0.55D;
+                TNTPrimed tnt = spawnRailgunTnt(world, origin, finalX, targetY, finalZ);
+                points.add(new RailgunTntPoint(tnt, finalX, targetY, finalZ));
             }
         }
 
@@ -5746,15 +5754,22 @@ public class FlashModeManager {
         world.spawnParticle(Particle.ELECTRIC_SPARK, origin, 72, 1.2D, 1.0D, 1.2D, 0.16D);
     }
 
-    private TNTPrimed spawnRailgunVisualTnt(World world, Location origin) {
+    private TNTPrimed spawnRailgunTnt(World world, Location origin, double finalX, double finalY, double finalZ) {
+        double travelFactor = (1.0D - Math.pow(RAILGUN_TNT_DRAG, RAILGUN_FLIGHT_TICKS))
+                / (1.0D - RAILGUN_TNT_DRAG);
+        Vector initialVelocity = new Vector(
+                finalX - origin.getX(),
+                finalY - origin.getY(),
+                finalZ - origin.getZ()
+        ).multiply(1.0D / travelFactor);
         return world.spawn(origin, TNTPrimed.class, tnt -> {
-            tnt.setFuseTicks(72);
+            tnt.setFuseTicks(RAILGUN_TNT_FUSE_TICKS);
             tnt.setYield(0.0F);
             tnt.setIsIncendiary(false);
             tnt.setPersistent(false);
             tnt.setInvulnerable(true);
             tnt.setGravity(false);
-            tnt.setVelocity(new Vector());
+            tnt.setVelocity(initialVelocity);
             tnt.getPersistentDataContainer().set(railgunVisualTntKey, PersistentDataType.BYTE, (byte) 1);
         });
     }
@@ -5780,22 +5795,6 @@ public class FlashModeManager {
         strike.advance();
         int step = strike.step();
         double progress = Math.min(1.0D, step / (double) RAILGUN_ANIMATION_STEPS);
-        double horizontalProgress = Math.sin(progress * Math.PI * 0.5D);
-        double verticalProgress = progress * progress;
-        Location origin = strike.origin();
-
-        for (RailgunTntPoint point : strike.points()) {
-            TNTPrimed tnt = point.tnt();
-            if (!tnt.isValid()) {
-                continue;
-            }
-            double x = origin.getX() + (point.finalX() - origin.getX()) * horizontalProgress;
-            double y = origin.getY() + (point.finalY() - origin.getY()) * verticalProgress;
-            double z = origin.getZ() + (point.finalZ() - origin.getZ()) * horizontalProgress;
-            tnt.teleport(new Location(world, x, y, z));
-            tnt.setVelocity(new Vector());
-            tnt.setFuseTicks(Math.max(20, 72 - step * 2));
-        }
 
         if (step > 0 && step % 6 == 0 && step <= RAILGUN_ANIMATION_STEPS) {
             float pitch = 0.58F + (float) progress * 0.82F;
@@ -5805,7 +5804,7 @@ public class FlashModeManager {
                     38, 1.6D + progress * 3.0D, 1.2D, 1.6D + progress * 3.0D, 0.12D);
         }
 
-        if (step < RAILGUN_ANIMATION_STEPS + RAILGUN_FINAL_HOLD_STEPS) {
+        if (step < RAILGUN_ANIMATION_STEPS) {
             return true;
         }
         detonateRailgunStrike(owner, strike);
@@ -21357,7 +21356,7 @@ public class FlashModeManager {
         }
 
         GameRoom room = getFlashRoomByWorld(dragon.getWorld());
-        if (room == null || room.getState() != RoomState.PLAYING || !room.isGameActuallyStarted()) {
+        if (!isFlashRoomFeaturePhase(room)) {
             return;
         }
         event.setDamage(event.getDamage() * (1.0D - FLASH_ENDER_DRAGON_DAMAGE_REDUCTION));
@@ -21368,8 +21367,7 @@ public class FlashModeManager {
             return;
         }
         GameRoom room = getFlashRoomByWorld(dragon.getWorld());
-        if (room == null || !room.getGameMode().isFlashLike()
-                || room.getState() != RoomState.PLAYING || !room.isGameActuallyStarted()) {
+        if (!isFlashRoomFeaturePhase(room)) {
             return;
         }
         if (room.isEndFlashDragonDefeated()) {
@@ -22111,9 +22109,32 @@ public class FlashModeManager {
             return false;
         }
         if (isFlashMode(room)) {
-            return room.getState() == RoomState.PLAYING && room.isGameActuallyStarted() && !room.isSpectator(player.getUniqueId());
+            return isFlashPlayerFeaturePhase(player, room);
         }
         return room == null && isStandaloneFlashContext(player);
+    }
+
+    public boolean isEndFlashStartupFeatureAvailable(Player player, GameRoom room) {
+        if (player == null || room == null || room.getGameMode() != GameMode.END_FLASH
+                || room.getState() != RoomState.PLAYING || room.isGameActuallyStarted()
+                || room.isSpectator(player.getUniqueId())) {
+            return false;
+        }
+        World gameWorld = room.getGameWorld();
+        return gameWorld != null && gameWorld.equals(player.getWorld());
+    }
+
+    private boolean isFlashPlayerFeaturePhase(Player player, GameRoom room) {
+        if (!isFlashRoomFeaturePhase(room) || room.isSpectator(player.getUniqueId())) {
+            return false;
+        }
+        return room.isGameActuallyStarted() || isEndFlashStartupFeatureAvailable(player, room);
+    }
+
+    private boolean isFlashRoomFeaturePhase(GameRoom room) {
+        return isFlashMode(room)
+                && room.getState() == RoomState.PLAYING
+                && (room.isGameActuallyStarted() || room.getGameMode() == GameMode.END_FLASH);
     }
 
     private boolean isStandaloneFlashContext(Player player) {
@@ -22135,14 +22156,14 @@ public class FlashModeManager {
         if (owner != null) {
             return owner.isOnline() && isFlashCombatAvailable(owner, room);
         }
-        return room == null || (isFlashMode(room) && room.getState() == RoomState.PLAYING && room.isGameActuallyStarted());
+        return room == null || isFlashRoomFeaturePhase(room);
     }
 
     private boolean canFlashExplosionBreakBlocks(Player owner, GameRoom room) {
-        if (!isFlashMode(room) || room.getState() != RoomState.PLAYING || !room.isGameActuallyStarted()) {
+        if (!isFlashRoomFeaturePhase(room)) {
             return false;
         }
-        return owner == null || !room.isSpectator(owner.getUniqueId());
+        return owner == null || isFlashCombatAvailable(owner, room);
     }
 
     private GameRoom getFlashRoomByWorld(World world) {
@@ -22165,7 +22186,7 @@ public class FlashModeManager {
             return true;
         }
         GameRoom room = getFlashRoomByWorld(world);
-        return isFlashMode(room) && room.getState() == RoomState.PLAYING && room.isGameActuallyStarted();
+        return isFlashRoomFeaturePhase(room);
     }
 
     private boolean isSpear(ItemStack item) {
