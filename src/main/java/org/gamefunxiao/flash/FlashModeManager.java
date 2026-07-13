@@ -66,7 +66,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Skeleton;
-import org.bukkit.entity.SmallFireball;
+import org.bukkit.entity.LargeFireball;
 import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.Tameable;
 import org.bukkit.entity.Trident;
@@ -272,18 +272,22 @@ public class FlashModeManager {
     private static final int DISPENSER_LAUNCHER_MAX_CHARGE_TICKS = 50;
     private static final int DISPENSER_LAUNCHER_COOLDOWN_TICKS = 24;
     private static final long DISPENSER_LAUNCHER_COOLDOWN_MILLIS = 1200L;
+    private static final int DISPENSER_FIREBALL_PAYLOAD_COST = 2;
     private static final double DISPENSER_FIREBALL_BASE_DAMAGE = 4.0D;
     private static final double DISPENSER_FIREBALL_MAX_BONUS_DAMAGE = 4.5D;
     private static final double DISPENSER_FIREBALL_BASE_SPEED = 1.18D;
     private static final double DISPENSER_FIREBALL_MAX_BONUS_SPEED = 1.28D;
     private static final double DISPENSER_FIREBALL_BASE_RADIUS = 1.45D;
     private static final double DISPENSER_FIREBALL_MAX_BONUS_RADIUS = 0.55D;
-    private static final double DISPENSER_SONIC_BASE_DAMAGE = 4.5D;
-    private static final double DISPENSER_SONIC_MAX_BONUS_DAMAGE = 4.5D;
-    private static final double DISPENSER_SONIC_BASE_RANGE = 10.0D;
-    private static final double DISPENSER_SONIC_MAX_BONUS_RANGE = 16.0D;
-    private static final double DISPENSER_SONIC_BASE_SPEED = 0.82D;
-    private static final double DISPENSER_SONIC_MAX_BONUS_SPEED = 0.88D;
+    private static final double DISPENSER_ECHO_CANNON_BASE_DAMAGE = 4.5D;
+    private static final double DISPENSER_ECHO_CANNON_MAX_BONUS_DAMAGE = 4.5D;
+    private static final double DISPENSER_ECHO_CANNON_BASE_RANGE = 10.0D;
+    private static final double DISPENSER_ECHO_CANNON_MAX_BONUS_RANGE = 16.0D;
+    private static final double DISPENSER_ECHO_CANNON_BASE_SPEED = 0.82D;
+    private static final double DISPENSER_ECHO_CANNON_MAX_BONUS_SPEED = 0.88D;
+    private static final double DISPENSER_ECHO_CANNON_DAMAGE_MULTIPLIER = 1.20D;
+    private static final double DISPENSER_ECHO_CANNON_RANGE_MULTIPLIER = 3.0D;
+    private static final double DISPENSER_ECHO_CANNON_SPEED_MULTIPLIER = 2.25D;
     private static final double SHIELD_WIND_CHARGE_DASH_SPEED_MULTIPLIER = 1.65D;
     private static final float FLASH_BOW_DOWN_WIND_CHARGE_PITCH_DEGREES = 70.0F;
     private static final double FLASH_BOW_DOWN_WIND_CHARGE_SHIELD_Y_MULTIPLIER = 0.40D;
@@ -339,7 +343,7 @@ public class FlashModeManager {
             "食物弩弹",
             "剑气弩弹",
             "发射器火球",
-            "发射器回响波",
+            "发射器回响炮",
             "Q丢剑气",
             "Q丢锄头陷阱",
             "锄头陷阱材料",
@@ -478,9 +482,17 @@ public class FlashModeManager {
     private static final float[] RAILGUN_EXPLOSION_POWERS = {0.0F, 4.0F, 5.2F, 6.5F};
     private static final String RAILGUN_LORE_PREFIX = "§8- §x§F§F§4§4§4§4轨道炮";
     private static final String STORM_SWORD_LINE_PREFIX = "§8- §x§8§8§D§D§F§F风暴";
-    private static final String STORM_SWORD_KINETIC_LINE = "§8- §x§B§B§F§F§F§F风暴矛势：§7剑伤害额外叠加移动冲击";
-    private static final String STORM_CHESTPLATE_LINE = "§8- §x§7§7§C§C§F§F风暴胸甲：§7免疫风暴剑矛势伤害 §f90%";
-    private static final double STORM_SWORD_KINETIC_RESIST_RATE = 0.90D;
+    private static final String STORM_SWORD_KINETIC_LINE_PREFIX = "§8- §x§B§B§F§F§F§F风暴矛势";
+    private static final String STORM_SWORD_KINETIC_LINE = STORM_SWORD_KINETIC_LINE_PREFIX
+            + " I：§7叠加移动冲击，§f矛势伤害降至40%";
+    private static final String STORM_CHESTPLATE_LINE_PREFIX = "§8- §x§7§7§C§C§F§F风暴胸甲";
+    private static final String STORM_ARMOR_LINE_PREFIX = "§8- §x§7§7§C§C§F§F风暴盔甲";
+    private static final String STORM_ARMOR_LINE = STORM_ARMOR_LINE_PREFIX
+            + "：§7每件减免风暴矛势伤害 §f12.5%";
+    private static final double STORM_ARMOR_REDUCTION_PER_PIECE = 0.125D;
+    private static final double STORM_ARMOR_MAX_REDUCTION = 0.50D;
+    private static final double STORM_SWORD_KINETIC_DAMAGE_MULTIPLIER = 0.40D;
+    private static final double RIPTIDE_FISHING_PULL_MULTIPLIER = 1.70D;
     private static final long FLASH_NOTE_BLOCK_DEFAULT_COOLDOWN_MS = 1250L;
     private static final long FLASH_NOTE_BLOCK_DAMAGE_COOLDOWN_MS = 2600L;
     private static final long FLASH_NOTE_BLOCK_FINALE_COOLDOWN_MS = 45_000L;
@@ -1859,8 +1871,8 @@ public class FlashModeManager {
         if (isDragonBreathWeapon(item)) {
             refreshSingleLoreLine(meta, DRAGON_BREATH_WEAPON_LINE);
         }
-        if (isStormChestplate(item)) {
-            refreshSingleLoreLine(meta, STORM_CHESTPLATE_LINE);
+        if (isStormArmor(item)) {
+            refreshStormArmorLore(meta);
         }
         refreshStormSwordLore(meta, getStormSwordLevelFromMeta(meta), hasPersistentByte(item, stormSwordKineticKey));
         if (isArmor(item)) {
@@ -2008,6 +2020,17 @@ public class FlashModeManager {
         meta.setLore(lore);
     }
 
+    private void refreshStormArmorLore(ItemMeta meta) {
+        if (meta == null) {
+            return;
+        }
+        List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+        lore.removeIf(line -> line != null && (line.startsWith(STORM_CHESTPLATE_LINE_PREFIX)
+                || line.startsWith(STORM_ARMOR_LINE_PREFIX)));
+        lore.add(STORM_ARMOR_LINE);
+        meta.setLore(lore);
+    }
+
     private int getStormSwordLevelFromMeta(ItemMeta meta) {
         if (meta == null) {
             return 0;
@@ -2022,7 +2045,8 @@ public class FlashModeManager {
         }
         applyStormSwordEnchantment(meta, level);
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
-        lore.removeIf(line -> line != null && (line.startsWith(STORM_SWORD_LINE_PREFIX) || line.equals(STORM_SWORD_KINETIC_LINE)));
+        lore.removeIf(line -> line != null && (line.startsWith(STORM_SWORD_LINE_PREFIX)
+                || line.startsWith(STORM_SWORD_KINETIC_LINE_PREFIX)));
         lore.add(STORM_SWORD_LINE_PREFIX + " " + toRoman(level) + "：§7风弹脉冲已接入剑身");
         if (kinetic) {
             lore.add(STORM_SWORD_KINETIC_LINE);
@@ -2518,8 +2542,8 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(37, "激流三叉戟弩", "弩+激流三叉戟", "装填后发射并推进玩家。", "不消耗三叉戟", "约1.85秒", "上次修复后不会卡住闪光物品发射冷却。"));
         pages.add(guideBookQuickPage(38, "食物弩弹", "弩+食物", "装填食物后发射给自己补给。", "消耗食物", "弩本身", "金苹果会额外给再生和吸收。"));
         pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "伤害跟随剑材质和锋利等附魔。"));
-        pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手火焰弹", "长按右键蓄力，松开发射火球。", "消耗1火焰弹", "约1.2秒", "最高蓄力2.5秒，越久伤害和速度越高，不破方块。"));
-        pages.add(guideBookQuickPage(41, "发射器回响波", "主手发射器+副手回响碎片", "长按右键蓄力，松开打出坚守者声波。", "消耗1碎片", "约1.2秒", "最高蓄力2.5秒，越久射程和伤害越高。"));
+        pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；爆炸造成范围伤害，但不会破坏方块。"));
+        pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度+125%、伤害+20%，可连续穿透目标。"));
         pages.add(guideBookQuickPage(42, "Q丢剑气", "任意剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "剑不只是近战，也可构筑远程路线。"));
         pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "敌人踩中后触发并消失，适合封路。"));
         pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "不同材质决定伤害和控制。", "同上", "同上", "金偏失明，钻偏漂浮，合金偏黑暗和强拉。"));
@@ -2529,7 +2553,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(48, "黑唱片", "5/11/13/Ward", "放入唱片机播放。", "唱片播放", "周期刷新", "5偏力量黑暗，11偏速度隐身，13偏抗性。"));
         pages.add(guideBookQuickPage(49, "音符盒旋律", "音符盒", "左键音符盒记录音符并匹配曲谱。", "无", "8秒不弹重置", "最多记录220个音符，匹配后触发法术。"));
         pages.add(guideBookQuickPage(50, "音符盒冷却", "音符盒法术", "不同旋律触发不同冷却。", "无", "普通约1.25秒/伤害约2.6秒/终曲45秒", "长曲谱通常不是乱按用的。"));
-        pages.add(guideBookQuickPage(51, "激流钓鱼竿", "附魔改装+激流钓鱼竿", "抛出超长鱼钩。", "无", "跟随钓竿", "长度64+每级18格，适合追逃和抓位移。"));
+        pages.add(guideBookQuickPage(51, "激流钓鱼竿", "附魔改装+激流钓鱼竿", "抛出超长鱼钩，回收时拉力提高70%。", "无", "跟随钓竿", "长度64+每级18格，水平拉力和抬升力均为原本1.7倍。"));
         pages.add(guideBookQuickPage(52, "潮汐鱼饵", "副手潮汐鱼饵+激流钓鱼竿", "抛入水中积累鱼群热度并钓特殊物。", "消耗鱼饵", "钓竿节奏", "热度越高越容易出高编号特殊钓鱼物。"));
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
@@ -2555,7 +2579,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(74, "矿车雷陷阱", "锄头+TNT矿车", "第一格锄头，第二格TNT矿车制作。", "消耗材料", "触发一次", "踩中1.5秒后普通TNT-20%威力爆炸。"));
         pages.add(guideBookQuickPage(75, "煤炭镐", "主手镐+副手煤炭", "挖矿时烧制矿物或挂煤焰陷阱。", "消耗煤炭", "陷阱短冷却", "矿物直接烧制，其它附着方块挂火焰陷阱。"));
         pages.add(guideBookQuickPage(76, "强化风弹", "风弹+旋风棒两段铁砧", "手持右键同时发射3个风弹。", "消耗1个", "短间隔", "本体是纸，item_model显示风弹，最大堆叠8。"));
-        pages.add(guideBookQuickPage(77, "风暴剑甲", "强化风弹+剑/胸甲", "右键接入风暴路线。", "消耗强化风弹", "无", "剑可获风暴和矛势，胸甲免疫90%矛势额外伤。"));
+        pages.add(guideBookQuickPage(77, "风暴剑甲", "剑首次需2强化风弹/盔甲需1个", "右键接入风暴路线。", "按实际数量消耗", "无", "矛势最高I且伤害降低60%；每件风暴盔甲减免12.5%，四件最高50%。"));
         pages.add(guideBookQuickPage(78, "权限速查", "权限节点", "按服务器权限系统配置。", "无", "无", "玩家: gamefunxiao.use / wiki / flashmusic；管理: gamefunxiao.admin。"));
         pages.add(guideBookQuickPage(79, "其它细节", "闪光书/背包/乐魂", "需要时翻对应页确认。", "无", "无", "手册可丢弃，重要发放会尝试进末影箱。"));
         pages.add(guideBookQuickPage(80, "轨道炮", "钓鱼竿+32红石粉", "手持10秒充能，右键选择区块后呼叫环形TNT轰击。", "不消耗TNT", "每次只能存1发", "二级需16红石块，三级需8侦测器；范围3x3/5x5/9x5。"));
@@ -5939,12 +5963,20 @@ public class FlashModeManager {
         if (normalizeRedstoneStabilizerItem(cursor)) {
             event.setCursor(cursor);
         }
+        if (isInitialStormSwordUpgradeMissingCatalyst(current, cursor)
+                || isInitialStormSwordUpgradeMissingCatalyst(cursor, current)) {
+            event.setCancelled(true);
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§B§B§F§F§F§F✦ §e风暴剑首次接入需要同时提供 §f2 §e个强化风弹。");
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.58f, 1.0f);
+            return true;
+        }
 
         StormEquipmentUpgradeMatch cursorStormMatch = createStormEquipmentUpgrade(current, cursor);
         if (cursorStormMatch != null) {
             event.setCancelled(true);
             event.setCurrentItem(cursorStormMatch.result());
-            consumeCursorItem(event, cursor);
+            consumeCursorItem(event, cursor, cursorStormMatch.catalystCost());
             playStormEquipmentFeedback(player, cursorStormMatch);
             return true;
         }
@@ -5953,7 +5985,7 @@ public class FlashModeManager {
         if (currentStormMatch != null) {
             event.setCancelled(true);
             event.setCursor(currentStormMatch.result());
-            consumeCurrentItem(event, current);
+            consumeCurrentItem(event, current, currentStormMatch.catalystCost());
             playStormEquipmentFeedback(player, currentStormMatch);
             return true;
         }
@@ -6028,27 +6060,35 @@ public class FlashModeManager {
             return null;
         }
         if (isSword(equipment)) {
+            int catalystCost = getStormSwordLevel(equipment) <= 0 ? 2 : 1;
+            if (catalyst.getAmount() < catalystCost) {
+                return null;
+            }
             ItemStack result = tryApplyStormToSword(equipment);
             if (result == null) {
                 return null;
             }
-            return new StormEquipmentUpgradeMatch(result, hasStormSwordKinetic(result) ? "风暴矛势" : "风暴剑", getStormSwordLevel(result));
+            boolean kinetic = hasStormSwordKinetic(result);
+            return new StormEquipmentUpgradeMatch(result, kinetic ? "风暴矛势" : "风暴剑",
+                    kinetic ? 1 : getStormSwordLevel(result), catalystCost);
         }
-        if (isChestplate(equipment) && !isStormChestplate(equipment)) {
+        if (isArmor(equipment) && !isStormArmor(equipment)) {
             ItemStack result = equipment.clone();
             ItemMeta meta = result.getItemMeta();
             if (meta == null) {
                 return null;
             }
             meta.getPersistentDataContainer().set(stormChestplateResistKey, PersistentDataType.BYTE, (byte) 1);
-            List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
-            lore.removeIf(STORM_CHESTPLATE_LINE::equals);
-            lore.add(STORM_CHESTPLATE_LINE);
-            meta.setLore(lore);
+            refreshStormArmorLore(meta);
             result.setItemMeta(meta);
-            return new StormEquipmentUpgradeMatch(result, "风暴胸甲", 0);
+            return new StormEquipmentUpgradeMatch(result, "风暴盔甲", 0, 1);
         }
         return null;
+    }
+
+    private boolean isInitialStormSwordUpgradeMissingCatalyst(ItemStack equipment, ItemStack catalyst) {
+        return isSword(equipment) && getStormSwordLevel(equipment) <= 0 && !hasStormSwordKinetic(equipment)
+                && isEnhancedWindCharge(catalyst) && catalyst.getAmount() < 2;
     }
 
     private EquipmentSlot getArmorEquipmentSlot(Material armorType) {
@@ -6086,7 +6126,8 @@ public class FlashModeManager {
             return null;
         }
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
-        lore.removeIf(line -> line != null && (line.startsWith(STORM_SWORD_LINE_PREFIX) || line.equals(STORM_SWORD_KINETIC_LINE)));
+        lore.removeIf(line -> line != null && (line.startsWith(STORM_SWORD_LINE_PREFIX)
+                || line.startsWith(STORM_SWORD_KINETIC_LINE_PREFIX)));
         if (currentLevel <= 0) {
             int rolledLevel = rollStormSwordLevel();
             meta.getPersistentDataContainer().set(stormSwordLevelKey, PersistentDataType.INTEGER, rolledLevel);
@@ -6808,14 +6849,22 @@ public class FlashModeManager {
     }
 
     private void consumeCursorItem(InventoryClickEvent event, ItemStack cursor) {
+        consumeCursorItem(event, cursor, 1);
+    }
+
+    private void consumeCursorItem(InventoryClickEvent event, ItemStack cursor, int amount) {
         ItemStack rest = cursor.clone();
-        rest.setAmount(rest.getAmount() - 1);
+        rest.setAmount(rest.getAmount() - Math.max(1, amount));
         event.setCursor(rest.getAmount() <= 0 ? null : rest);
     }
 
     private void consumeCurrentItem(InventoryClickEvent event, ItemStack current) {
+        consumeCurrentItem(event, current, 1);
+    }
+
+    private void consumeCurrentItem(InventoryClickEvent event, ItemStack current, int amount) {
         ItemStack rest = current.clone();
-        rest.setAmount(rest.getAmount() - 1);
+        rest.setAmount(rest.getAmount() - Math.max(1, amount));
         event.setCurrentItem(rest.getAmount() <= 0 ? null : rest);
     }
 
@@ -7944,13 +7993,18 @@ public class FlashModeManager {
         if (dispenserChargeSessions.containsKey(playerId)) {
             return true;
         }
+        int payloadCost = getDispenserLauncherPayloadCost(offhand.getType());
+        if (offhand.getAmount() < payloadCost) {
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
+            player.sendActionBar("§c大火球 §8| §c至少需要 §f" + payloadCost + " §c个火焰弹");
+            return true;
+        }
         long now = System.currentTimeMillis();
         long cooldownUntil = dispenserLauncherCooldowns.getOrDefault(playerId, 0L);
         if (now < cooldownUntil || player.hasCooldown(Material.DISPENSER)) {
             long remaining = Math.max(1L, ((Math.max(cooldownUntil, now + player.getCooldown(Material.DISPENSER) * 50L) - now) + 999L) / 1000L);
-            player.swingHand(EquipmentSlot.HAND);
             player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
-            String payload = offhand.getType() == Material.FIRE_CHARGE ? "§c火球" : "§b回响波";
+            String payload = offhand.getType() == Material.FIRE_CHARGE ? "§c大火球" : "§b回响炮";
             player.sendActionBar(payload + " §8| §e冷却 §f" + remaining + "秒");
             return true;
         }
@@ -7961,6 +8015,10 @@ public class FlashModeManager {
 
     private boolean isDispenserLauncherPayload(Material type) {
         return type == Material.FIRE_CHARGE || type == Material.ECHO_SHARD;
+    }
+
+    private int getDispenserLauncherPayloadCost(Material type) {
+        return type == Material.FIRE_CHARGE ? DISPENSER_FIREBALL_PAYLOAD_COST : 1;
     }
 
     private void startDispenserLauncherCharge(Player player, GameRoom room, Material payloadType) {
@@ -8005,15 +8063,16 @@ public class FlashModeManager {
                 double ratio = getDispenserChargeRatio(ticks);
                 int percent = (int) Math.round(ratio * 100.0D);
                 playDispenserLauncherChargeStage(online, current.payloadType(), ratio);
+                String chargeState = ratio >= 1.0D ? "§a已蓄满，松开发射" : "§7蓄满才可发射";
                 if (current.payloadType() == Material.FIRE_CHARGE) {
-                    online.sendActionBar("§c火球 §8| §f蓄力 §6" + percent + "% §8| §7松开发射");
+                    online.sendActionBar("§c大火球 §8| §f蓄力 §6" + percent + "% §8| " + chargeState);
                     if (ticks % 6 == 0) {
                         Location effect = online.getEyeLocation().add(online.getEyeLocation().getDirection().normalize().multiply(0.72D));
                         online.getWorld().spawnParticle(Particle.FLAME, effect, 5, 0.08D, 0.06D, 0.08D, 0.015D);
                         online.getWorld().spawnParticle(Particle.SMOKE, effect, 3, 0.07D, 0.05D, 0.07D, 0.008D);
                     }
                 } else {
-                    online.sendActionBar("§b回响波 §8| §f蓄力 §3" + percent + "% §8| §7松开发射");
+                    online.sendActionBar("§b回响炮 §8| §f蓄力 §3" + percent + "% §8| " + chargeState);
                     if (ticks % 6 == 0) {
                         Location effect = online.getEyeLocation().add(online.getEyeLocation().getDirection().normalize().multiply(0.72D));
                         online.getWorld().spawnParticle(Particle.SCULK_SOUL, effect, 4, 0.08D, 0.06D, 0.08D, 0.02D);
@@ -8085,7 +8144,8 @@ public class FlashModeManager {
         ItemStack main = player.getInventory().getItemInMainHand();
         ItemStack offhand = player.getInventory().getItemInOffHand();
         return main != null && main.getType() == Material.DISPENSER
-                && offhand != null && offhand.getType() == payloadType && offhand.getAmount() > 0;
+                && offhand != null && offhand.getType() == payloadType
+                && offhand.getAmount() >= getDispenserLauncherPayloadCost(payloadType);
     }
 
     private boolean isDispenserLauncherActivelyUsing(Player player) {
@@ -8162,13 +8222,25 @@ public class FlashModeManager {
             player.sendActionBar("§7发射器 §8| §c蓄力中断");
             return;
         }
-        if (consumePayload && !consumeHandItemIfType(player, EquipmentSlot.OFF_HAND, session.payloadType(), 1)) {
+        double ratio = getDispenserChargeRatio(chargeTicks);
+        if (ratio < 1.0D) {
+            if (player.hasActiveItem() && player.getActiveItem() != null
+                    && player.getActiveItem().getType() == Material.DISPENSER) {
+                player.clearActiveItem();
+            }
+            int percent = (int) Math.round(ratio * 100.0D);
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
+            player.sendActionBar("§7发射器 §8| §c蓄力仅 §f" + percent + "% §8| §e必须蓄满100%");
+            player.updateInventory();
+            return;
+        }
+        int payloadCost = getDispenserLauncherPayloadCost(session.payloadType());
+        if (consumePayload && !consumeHandItemIfType(player, EquipmentSlot.OFF_HAND, session.payloadType(), payloadCost)) {
             player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
             player.sendActionBar("§7发射器 §8| §c副手弹药不足");
             return;
         }
 
-        double ratio = Math.max(0.15D, getDispenserChargeRatio(chargeTicks));
         dispenserLauncherCooldowns.put(playerId, System.currentTimeMillis() + DISPENSER_LAUNCHER_COOLDOWN_MILLIS);
         player.setCooldown(Material.DISPENSER, DISPENSER_LAUNCHER_COOLDOWN_TICKS);
         player.swingHand(EquipmentSlot.HAND);
@@ -8179,10 +8251,10 @@ public class FlashModeManager {
         int percent = (int) Math.round(Math.min(1.0D, ratio) * 100.0D);
         if (session.payloadType() == Material.FIRE_CHARGE) {
             launchDispenserFireball(player, room, ratio, session.roomId());
-            player.sendActionBar("§c火球 §8| §f蓄力 §6" + percent + "% §8| §a已发射");
+            player.sendActionBar("§c大火球 §8| §f蓄力 §6" + percent + "% §8| §a已发射");
         } else {
-            launchDispenserSonicWave(player, room, ratio, session.roomId());
-            player.sendActionBar("§b回响波 §8| §f蓄力 §3" + percent + "% §8| §a已发射");
+            launchDispenserEchoCannon(player, room, ratio, session.roomId());
+            player.sendActionBar("§b回响炮 §8| §f蓄力 §3" + percent + "% §8| §a已发射");
         }
         player.updateInventory();
     }
@@ -8229,7 +8301,7 @@ public class FlashModeManager {
         double damage = DISPENSER_FIREBALL_BASE_DAMAGE + DISPENSER_FIREBALL_MAX_BONUS_DAMAGE * ratio;
         double radius = DISPENSER_FIREBALL_BASE_RADIUS + DISPENSER_FIREBALL_MAX_BONUS_RADIUS * ratio;
         Location start = player.getEyeLocation().clone().add(launchDirection.clone().multiply(0.92D));
-        SmallFireball fireball = world.spawn(start, SmallFireball.class, entity -> {
+        LargeFireball fireball = world.spawn(start, LargeFireball.class, entity -> {
             entity.setShooter(player);
             entity.setYield(0.0F);
             entity.setIsIncendiary(false);
@@ -8261,7 +8333,7 @@ public class FlashModeManager {
                     cancel();
                     return;
                 }
-                if (!(entity instanceof SmallFireball fireball) || !fireball.isValid() || fireball.isDead()) {
+                if (!(entity instanceof LargeFireball fireball) || !fireball.isValid() || fireball.isDead()) {
                     Bukkit.getScheduler().runTaskLater(plugin, () -> dispenserFireballs.remove(fireballId), 2L);
                     cancel();
                     return;
@@ -8407,7 +8479,7 @@ public class FlashModeManager {
         }
     }
 
-    private void launchDispenserSonicWave(Player player, GameRoom room, double ratio, String roomId) {
+    private void launchDispenserEchoCannon(Player player, GameRoom room, double ratio, String roomId) {
         World world = player.getWorld();
         Vector direction = player.getEyeLocation().getDirection();
         if (direction.lengthSquared() < 0.0001D) {
@@ -8419,9 +8491,12 @@ public class FlashModeManager {
         direction.normalize();
         Vector sonicDirection = direction.clone();
         Location start = player.getEyeLocation().clone().add(sonicDirection.clone().multiply(0.80D));
-        double damage = DISPENSER_SONIC_BASE_DAMAGE + DISPENSER_SONIC_MAX_BONUS_DAMAGE * ratio;
-        double range = DISPENSER_SONIC_BASE_RANGE + DISPENSER_SONIC_MAX_BONUS_RANGE * ratio;
-        double speed = DISPENSER_SONIC_BASE_SPEED + DISPENSER_SONIC_MAX_BONUS_SPEED * ratio;
+        double damage = (DISPENSER_ECHO_CANNON_BASE_DAMAGE + DISPENSER_ECHO_CANNON_MAX_BONUS_DAMAGE * ratio)
+                * DISPENSER_ECHO_CANNON_DAMAGE_MULTIPLIER;
+        double range = (DISPENSER_ECHO_CANNON_BASE_RANGE + DISPENSER_ECHO_CANNON_MAX_BONUS_RANGE * ratio)
+                * DISPENSER_ECHO_CANNON_RANGE_MULTIPLIER;
+        double speed = (DISPENSER_ECHO_CANNON_BASE_SPEED + DISPENSER_ECHO_CANNON_MAX_BONUS_SPEED * ratio)
+                * DISPENSER_ECHO_CANNON_SPEED_MULTIPLIER;
         UUID ownerId = player.getUniqueId();
         world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.72f, 1.0f);
         world.playSound(start, Sound.BLOCK_SCULK_SENSOR_CLICKING_STOP, 0.58f, 1.0f);
@@ -8430,6 +8505,7 @@ public class FlashModeManager {
 
         new BukkitRunnable() {
             private double travelled;
+            private final Set<UUID> hitTargets = new HashSet<>();
 
             @Override
             public void run() {
@@ -8447,11 +8523,10 @@ public class FlashModeManager {
                     Location point = start.clone().add(sonicDirection.clone().multiply(travelled));
                     world.spawnParticle(Particle.SONIC_BOOM, point, 1, 0.0D, 0.0D, 0.0D, 0.0D);
                     world.spawnParticle(Particle.SCULK_SOUL, point, 2, 0.08D, 0.06D, 0.08D, 0.012D);
-                    LivingEntity target = findDispenserSonicTarget(owner, activeRoom, point);
+                    LivingEntity target = findDispenserEchoCannonTarget(owner, activeRoom, point, hitTargets);
                     if (target != null) {
-                        applyDispenserSonicHit(owner, target, point, sonicDirection, damage);
-                        cancel();
-                        return;
+                        hitTargets.add(target.getUniqueId());
+                        applyDispenserEchoCannonHit(owner, target, point, sonicDirection, damage);
                     }
                     if (travelled > range) {
                         cancel();
@@ -8462,14 +8537,16 @@ public class FlashModeManager {
         }.runTaskTimer(plugin, 0L, 1L);
     }
 
-    private LivingEntity findDispenserSonicTarget(Player shooter, GameRoom room, Location point) {
+    private LivingEntity findDispenserEchoCannonTarget(Player shooter, GameRoom room, Location point,
+                                                        Set<UUID> hitTargets) {
         if (point == null || point.getWorld() == null) {
             return null;
         }
         LivingEntity best = null;
         double bestDistance = Double.MAX_VALUE;
         for (Entity entity : point.getWorld().getNearbyEntities(point, 1.35D, 1.35D, 1.35D)) {
-            if (!(entity instanceof LivingEntity living) || !canFlashNoteHitLiving(shooter, room, living)) {
+            if (!(entity instanceof LivingEntity living) || hitTargets.contains(living.getUniqueId())
+                    || !canFlashNoteHitLiving(shooter, room, living)) {
                 continue;
             }
             BoundingBox hitbox = living.getBoundingBox().clone().expand(0.42D);
@@ -8485,7 +8562,8 @@ public class FlashModeManager {
         return best;
     }
 
-    private void applyDispenserSonicHit(Player shooter, LivingEntity target, Location point, Vector direction, double damage) {
+    private void applyDispenserEchoCannonHit(Player shooter, LivingEntity target, Location point, Vector direction,
+                                              double damage) {
         target.damage(Math.max(1.0D, damage), shooter);
         target.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 45, 0, false, true, true));
         target.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 35, 0, false, true, true));
@@ -16620,8 +16698,21 @@ public class FlashModeManager {
         return item != null && (item.getType() == Material.WIND_CHARGE || isEnhancedWindCharge(item));
     }
 
-    private boolean isStormChestplate(ItemStack item) {
-        return isChestplate(item) && hasPersistentByte(item, stormChestplateResistKey);
+    private boolean isStormArmor(ItemStack item) {
+        return isArmor(item) && hasPersistentByte(item, stormChestplateResistKey);
+    }
+
+    private int countEquippedStormArmorPieces(Player player) {
+        if (player == null) {
+            return 0;
+        }
+        int pieces = 0;
+        for (ItemStack armor : player.getInventory().getArmorContents()) {
+            if (isStormArmor(armor)) {
+                pieces++;
+            }
+        }
+        return pieces;
     }
 
     private int getStormSwordLevel(ItemStack item) {
@@ -21253,11 +21344,17 @@ public class FlashModeManager {
             return;
         }
         double kineticDamage = Math.floor(Math.min(48.0D, relativeSpeed) * profile.damageMultiplier());
-        double extra = Math.max(0.0D, profile.baseDamage() + kineticDamage);
-        if (victim instanceof Player victimPlayer && isStormChestplate(victimPlayer.getInventory().getChestplate())) {
-            extra *= 1.0D - STORM_SWORD_KINETIC_RESIST_RATE;
-            victimPlayer.getWorld().spawnParticle(Particle.GUST, victimPlayer.getLocation().add(0.0D, 1.0D, 0.0D),
-                    10, 0.25D, 0.16D, 0.25D, 0.035D);
+        double extra = Math.max(0.0D, profile.baseDamage() + kineticDamage)
+                * STORM_SWORD_KINETIC_DAMAGE_MULTIPLIER;
+        if (victim instanceof Player victimPlayer) {
+            int stormArmorPieces = countEquippedStormArmorPieces(victimPlayer);
+            double reduction = Math.min(STORM_ARMOR_MAX_REDUCTION,
+                    stormArmorPieces * STORM_ARMOR_REDUCTION_PER_PIECE);
+            extra *= 1.0D - reduction;
+            if (stormArmorPieces > 0) {
+                victimPlayer.getWorld().spawnParticle(Particle.GUST, victimPlayer.getLocation().add(0.0D, 1.0D, 0.0D),
+                        6 + stormArmorPieces * 3, 0.25D, 0.16D, 0.25D, 0.035D);
+            }
         }
         if (extra <= 0.05D) {
             return;
@@ -22452,14 +22549,18 @@ public class FlashModeManager {
                 Vector pullVector = player.getLocation().toVector().subtract(living.getLocation().toVector());
                 if (pullVector.lengthSquared() > 0.001D) {
                     double distance = Math.max(1.0D, living.getLocation().distance(player.getLocation()));
-                    double strength = Math.min(3.20D, 0.42D + distance * 0.045D);
-                    double lift = Math.min(1.15D, 0.20D + distance * 0.012D);
+                    double strength = Math.min(3.20D, 0.42D + distance * 0.045D)
+                            * RIPTIDE_FISHING_PULL_MULTIPLIER;
+                    double lift = Math.min(1.15D, 0.20D + distance * 0.012D)
+                            * RIPTIDE_FISHING_PULL_MULTIPLIER;
                     pullVector.normalize().multiply(strength);
                     pullVector.setY(Math.max(lift, pullVector.getY() + lift * 0.42D));
                     living.setVelocity(pullVector);
                     living.getWorld().spawnParticle(Particle.END_ROD, living.getLocation().add(0.0D, Math.min(1.0D, living.getHeight() * 0.55D), 0.0D), 14, 0.20D, 0.14D, 0.20D, 0.035D);
                     living.getWorld().spawnParticle(Particle.CRIT, living.getLocation().add(0.0D, Math.min(1.0D, living.getHeight() * 0.55D), 0.0D), 8, 0.16D, 0.12D, 0.16D, 0.025D);
-                    player.sendActionBar("§x§8§8§D§D§F§F☄ §f钓竿拉力 §d" + String.format(Locale.ROOT, "%.1f", strength) + " §7/ §f距离 §e" + String.format(Locale.ROOT, "%.1f", distance) + "格");
+                    player.sendActionBar("§x§8§8§D§D§F§F☄ §f钓竿拉力 §a+70% §8| §d"
+                            + String.format(Locale.ROOT, "%.1f", strength) + " §7/ §f距离 §e"
+                            + String.format(Locale.ROOT, "%.1f", distance) + "格");
                 }
             }
         }
@@ -23411,7 +23512,7 @@ public class FlashModeManager {
     private record WindRodUpgradeMatch(ItemStack result, String kind, double speedBonus) {
     }
 
-    private record StormEquipmentUpgradeMatch(ItemStack result, String kind, int level) {
+    private record StormEquipmentUpgradeMatch(ItemStack result, String kind, int level, int catalystCost) {
     }
 
     private record BundleTakeResult(ItemStack bundle, ItemStack item) {
