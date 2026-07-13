@@ -23,6 +23,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @SuppressWarnings({"deprecation"})
 public class RoomManager {
 
+    private static final org.bukkit.Color PREY_WAYPOINT_COLOR = org.bukkit.Color.fromRGB(0x55FF55);
+    private static final org.bukkit.Color HUNTER_WAYPOINT_COLOR = org.bukkit.Color.fromRGB(0xFF5555);
+    private static final org.bukkit.Color SPECTATOR_WAYPOINT_COLOR = org.bukkit.Color.fromRGB(0xAAAAAA);
+
     private boolean isDisabledMode(GameMode mode) {
         return mode != null && mode.isLegacyRemovedMode();
     }
@@ -1964,7 +1968,8 @@ public class RoomManager {
         if (player == null || room == null) {
             return;
         }
-        clearRoleNameTag(player);
+        clearRoleNameTeams(player);
+        setRoleWaypointColor(player, isPrey);
 
         String teamName = "gf_t" + (isPrey ? "p_" : "h_") + player.getName();
         if (teamName.length() > 16) {
@@ -2034,7 +2039,8 @@ public class RoomManager {
             String teamName = "gf_lp_" + player.getName();
             if (teamName.length() > 16) teamName = teamName.substring(0, 16);
 
-            clearRoleNameTag(player);
+            clearRoleNameTeams(player);
+            player.setWaypointColor(null);
 
             java.util.Set<java.util.UUID> allPlayers = new java.util.HashSet<>();
             allPlayers.addAll(room.getAllPlayerUUIDs());
@@ -2069,7 +2075,8 @@ public class RoomManager {
             String label = normalizeRoleLabel(roleLabel, "参赛", 16);
             String prefix = "§b[" + label + "§b] §r";
 
-            clearRoleNameTag(player);
+            clearRoleNameTeams(player);
+            player.setWaypointColor(null);
 
             java.util.Set<java.util.UUID> allPlayers = new java.util.HashSet<>();
             allPlayers.addAll(room.getAllPlayerUUIDs());
@@ -2104,10 +2111,14 @@ public class RoomManager {
         String prefix = (isPrey ? "§a[" : "§c[") + label + (isPrey ? "§a] §r" : "§c] §r");
 
         // 先移除旧的
-        clearRoleNameTag(player);
+        clearRoleNameTeams(player);
 
         // 获取房间内所有玩家（包括旁观者）
-        if (room == null) return;
+        if (room == null) {
+            player.setWaypointColor(null);
+            return;
+        }
+        setRoleWaypointColor(player, isPrey);
 
         java.util.Set<java.util.UUID> allPlayers = new java.util.HashSet<>();
         allPlayers.addAll(room.getAllPlayerUUIDs());
@@ -2158,14 +2169,16 @@ public class RoomManager {
     public void setSpectatorNameTag(Player player, String roomId) {
         GameRoom tournamentRoom = rooms.get(roomId);
         if (tournamentRoom != null && tournamentRoom.getGameMode().isFlashTournament()) {
-            clearRoleNameTag(player);
+            clearRoleNameTeams(player);
+            player.setWaypointColor(SPECTATOR_WAYPOINT_COLOR);
             player.setPlayerListName("§f" + player.getName());
             return;
         }
         String teamName = "gf_spec_" + player.getName();
         if (teamName.length() > 16) teamName = teamName.substring(0, 16);
 
-        clearRoleNameTag(player);
+        clearRoleNameTeams(player);
+        player.setWaypointColor(SPECTATOR_WAYPOINT_COLOR);
 
         // 设置头顶前缀：[房间号] [旁观]
         String gradientRoomId = formatGradientRoomId(roomId);
@@ -2215,6 +2228,16 @@ public class RoomManager {
         if (player == null) {
             return;
         }
+        player.setCompassTarget(player.getWorld().getSpawnLocation());
+        clearRoleNameTeams(player);
+        player.setWaypointColor(null);
+    }
+
+    private void setRoleWaypointColor(Player player, boolean isPrey) {
+        player.setWaypointColor(isPrey ? PREY_WAYPOINT_COLOR : HUNTER_WAYPOINT_COLOR);
+    }
+
+    private void clearRoleNameTeams(Player player) {
         String entryName = player.getName();
 
         // 从所有在线玩家的记分板中移除该玩家的 GameFun 身份团队

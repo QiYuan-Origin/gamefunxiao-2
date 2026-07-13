@@ -10106,7 +10106,6 @@ public class GameManager {
             ItemStack mainHand = prey.getInventory().getItemInMainHand();
             ItemStack offHand = prey.getInventory().getItemInOffHand();
             if (isRewardChestCompass(mainHand) || isRewardChestCompass(offHand)) {
-                prey.setCompassTarget(room.getRewardChestLocation());
                 double distance = prey.getLocation().distance(room.getRewardChestLocation());
                 prey.sendActionBar("§x§F§F§D§7§0§0🎁 §e奖励箱距离: §b" + String.format("%.1f", distance) + " §e格");
             }
@@ -10214,25 +10213,32 @@ public class GameManager {
         for (UUID preyUuid : room.getPreyUUIDs()) {
             Player prey = Bukkit.getPlayer(preyUuid);
             if (prey == null || !prey.isOnline()) continue;
-            prey.getInventory().addItem(createRewardChestCompass());
+            prey.getInventory().addItem(createRewardChestCompass(room.getRewardChestLocation()));
             prey.playSound(prey.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.2f);
         }
     }
 
-    private ItemStack createRewardChestCompass() {
+    private ItemStack createRewardChestCompass(Location target) {
         ItemStack compass = new ItemStack(Material.COMPASS);
         ItemMeta meta = compass.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName("§x§F§F§D§7§0§0🎁 §x§F§F§B§B§3§3奖§x§F§F§9§9§6§6励§x§F§F§7§7§9§9箱§x§F§F§5§5§C§C指§x§F§F§3§3§F§F南针");
-            meta.setCustomModelData(10010);
+        if (meta instanceof CompassMeta compassMeta) {
+            compassMeta.setDisplayName("§x§F§F§D§7§0§0🎁 §x§F§F§B§B§3§3奖§x§F§F§9§9§6§6励§x§F§F§7§7§9§9箱§x§F§F§5§5§C§C指§x§F§F§3§3§F§F南针");
+            compassMeta.setCustomModelData(10010);
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §e会持续指向奖励箱");
             lore.add("§f- §a奖励箱生成在路地上");
             lore.add("§f- §b里面有矿物和随机武器");
             lore.add("§8· · · · · · · · · · · · · ·");
-            meta.setLore(lore);
-            compass.setItemMeta(meta);
+            compassMeta.setLore(lore);
+            if (target != null && target.getWorld() != null) {
+                Location fixedTarget = target.clone();
+                fixedTarget.setX(fixedTarget.getBlockX() + 0.5D);
+                fixedTarget.setZ(fixedTarget.getBlockZ() + 0.5D);
+                compassMeta.setLodestone(fixedTarget);
+                compassMeta.setLodestoneTracked(false);
+            }
+            compass.setItemMeta(compassMeta);
         }
         return compass;
     }
@@ -10577,11 +10583,11 @@ public class GameManager {
                         hunter.sendActionBar("§e🧭 距离最近猎物: §b" + String.format("%.1f", displayDistance) + " §e格"
                                 + " §8| §d传送: §f" + cooldownText);
                     }
-                    updateHeldTrackingCompasses(hunter, mainHand, offHand, target, tournamentCompass);
+                    updateHeldTrackingCompasses(hunter, target);
                 } else if (hasDifferentDimensionPrey) {
-                    makeHeldTrackingCompassesSpin(hunter, mainHand, offHand);
+                    makeHeldTrackingCompassesSpin(hunter);
                 } else {
-                    clearHeldTrackingCompasses(hunter, mainHand, offHand);
+                    clearHeldTrackingCompasses(hunter);
                 }
             }
         }
@@ -10618,9 +10624,9 @@ public class GameManager {
                     String cooldownText = plugin.getPlayerListener().getCompassTpRemainingDisplay(preyUuid);
                     preyPlayer.sendActionBar("§x§F§F§A§A§D§D🧭 最近猎物队友: §b" + String.format("%.1f", displayDistance) + " §e格"
                             + " §8| §d传送: §f" + cooldownText);
-                    updateHeldTrackingCompasses(preyPlayer, mainHand, offHand, target, false);
+                    updateHeldTrackingCompasses(preyPlayer, target);
                 } else {
-                    makeHeldTrackingCompassesSpin(preyPlayer, mainHand, offHand);
+                    makeHeldTrackingCompassesSpin(preyPlayer);
                 }
             }
         }
@@ -10634,34 +10640,45 @@ public class GameManager {
         return meta == null || !meta.hasCustomModelData();
     }
 
-    private void updateHeldTrackingCompasses(Player player, ItemStack mainHand, ItemStack offHand, Location target, boolean tournamentCompass) {
+    private void updateHeldTrackingCompasses(Player player, Location target) {
         if (player == null || target == null || target.getWorld() == null) {
             return;
         }
         if (player.getWorld().equals(target.getWorld())) {
-            player.setCompassTarget(target);
+            Location compassTarget = target.clone();
+            compassTarget.setX(compassTarget.getBlockX() + 0.5D);
+            compassTarget.setZ(compassTarget.getBlockZ() + 0.5D);
+            Location currentTarget = player.getCompassTarget();
+            if (currentTarget == null
+                    || currentTarget.getWorld() == null
+                    || !currentTarget.getWorld().equals(compassTarget.getWorld())
+                    || currentTarget.getBlockX() != compassTarget.getBlockX()
+                    || currentTarget.getBlockZ() != compassTarget.getBlockZ()) {
+                player.setCompassTarget(compassTarget);
+            }
         }
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, target, false, tournamentCompass);
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, target, false, tournamentCompass);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, false);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, false);
     }
 
-    private void makeHeldTrackingCompassesSpin(Player player, ItemStack mainHand, ItemStack offHand) {
+    private void makeHeldTrackingCompassesSpin(Player player) {
         if (player == null) {
             return;
         }
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, null, true, false);
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, null, true, false);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, true);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, true);
     }
 
-    private void clearHeldTrackingCompasses(Player player, ItemStack mainHand, ItemStack offHand) {
+    private void clearHeldTrackingCompasses(Player player) {
         if (player == null) {
             return;
         }
+        player.setCompassTarget(player.getWorld().getSpawnLocation());
         clearTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND);
         clearTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND);
     }
 
-    private void updateTrackingCompassInHand(Player player, org.bukkit.inventory.EquipmentSlot hand, Location target, boolean spin, boolean tournamentCompass) {
+    private void updateTrackingCompassInHand(Player player, org.bukkit.inventory.EquipmentSlot hand, boolean spin) {
         if (player == null || hand == null) {
             return;
         }
@@ -10672,13 +10689,11 @@ public class GameManager {
             return;
         }
         ItemStack updated = compass.clone();
-        if (spin) {
-            updateTrackingCompassSpinMeta(updated, player);
-        } else if (tournamentCompass) {
-            // 赛事指南针只用玩家个人 compass target，不写每秒变化的 lodestone NBT，避免近距离追踪时前后跳舞。
-            clearTrackingCompassMeta(updated);
-        } else {
-            updateTrackingCompassMeta(updated, target);
+        boolean changed = spin
+                ? updateTrackingCompassSpinMeta(updated, player)
+                : clearTrackingCompassMeta(updated);
+        if (!changed) {
+            return;
         }
         if (hand == org.bukkit.inventory.EquipmentSlot.OFF_HAND) {
             player.getInventory().setItemInOffHand(updated);
@@ -10698,7 +10713,9 @@ public class GameManager {
             return;
         }
         ItemStack updated = compass.clone();
-        clearTrackingCompassMeta(updated);
+        if (!clearTrackingCompassMeta(updated)) {
+            return;
+        }
         if (hand == org.bukkit.inventory.EquipmentSlot.OFF_HAND) {
             player.getInventory().setItemInOffHand(updated);
         } else {
@@ -10706,33 +10723,22 @@ public class GameManager {
         }
     }
 
-    private void updateTrackingCompassMeta(ItemStack compass, Location target) {
-        if (!isTrackingCompass(compass) || target == null || target.getWorld() == null) {
-            return;
-        }
-        ItemMeta meta = compass.getItemMeta();
-        if (meta instanceof CompassMeta compassMeta) {
-            Location lodestoneTarget = target.clone();
-            lodestoneTarget.setX(lodestoneTarget.getBlockX() + 0.5D);
-            lodestoneTarget.setY(lodestoneTarget.getBlockY());
-            lodestoneTarget.setZ(lodestoneTarget.getBlockZ() + 0.5D);
-            compassMeta.setLodestone(lodestoneTarget);
-            compassMeta.setLodestoneTracked(false);
-            compass.setItemMeta(compassMeta);
-        }
-    }
-
-    private void updateTrackingCompassSpinMeta(ItemStack compass, Player player) {
+    private boolean updateTrackingCompassSpinMeta(ItemStack compass, Player player) {
         if (!isTrackingCompass(compass) || player == null || player.getWorld() == null) {
-            return;
+            return false;
         }
         ItemMeta meta = compass.getItemMeta();
         if (meta instanceof CompassMeta compassMeta) {
+            if (compassMeta.isLodestoneCompass() && compassMeta.isLodestoneTracked()) {
+                return false;
+            }
             Location lostTarget = findLostCompassTarget(player);
             compassMeta.setLodestone(lostTarget);
             compassMeta.setLodestoneTracked(true);
             compass.setItemMeta(compassMeta);
+            return true;
         }
+        return false;
     }
 
     private Location findLostCompassTarget(Player player) {
@@ -10755,16 +10761,20 @@ public class GameManager {
         return new Location(world, baseX + 0.5D, baseY, baseZ + 0.5D);
     }
 
-    private void clearTrackingCompassMeta(ItemStack compass) {
+    private boolean clearTrackingCompassMeta(ItemStack compass) {
         if (!isTrackingCompass(compass)) {
-            return;
+            return false;
         }
         ItemMeta meta = compass.getItemMeta();
         if (meta instanceof CompassMeta compassMeta) {
-            compassMeta.setLodestone(null);
-            compassMeta.setLodestoneTracked(false);
+            if (!compassMeta.isLodestoneCompass()) {
+                return false;
+            }
+            compassMeta.clearLodestone();
             compass.setItemMeta(compassMeta);
+            return true;
         }
+        return false;
     }
 
     private double calculateTrackingDistance(GameRoom room, Location hunterLoc, Location preyLoc) {
