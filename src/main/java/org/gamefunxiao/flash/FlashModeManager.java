@@ -380,6 +380,24 @@ public class FlashModeManager {
             "轨道炮",
     };
     private static final int FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE = 9;
+    private static final int FLASH_GUIDE_VOLUME_MAIN = 0;
+    private static final int FLASH_GUIDE_VOLUME_ALL = 8;
+    private static final String[] FLASH_GUIDE_VOLUME_NAMES = {
+            "主书", "基础规则", "铁砧强化", "风弹装填", "战斗机关",
+            "宠物乐魂", "通关农耕", "沉重爆破", "完整目录"
+    };
+    private static final int[] FLASH_GUIDE_VOLUME_STARTS = {0, 1, 13, 30, 42, 56, 63, 70, 1};
+    private static final int[] FLASH_GUIDE_VOLUME_ENDS = {0, 12, 34, 41, 55, 62, 69, 79, 79};
+    private static final String[] FLASH_GUIDE_VOLUME_HEADERS = {
+            "§x§9§8§D§D§F§F§l主 §8§l· §x§F§4§C§3§F§F§l闪光书",
+            "§b§l基础规则", "§6§l铁砧强化", "§9§l风弹装填", "§c§l战斗机关",
+            "§a§l宠物乐魂", "§5§l通关农耕", "§x§6§0§6§0§6§0§l沉重爆破", "§f§l完整目录"
+    };
+    private static final String[] FLASH_GUIDE_VOLUME_ITEM_NAMES = {
+            "§x§9§8§D§D§F§F主 §8· §x§F§4§C§3§F§F闪光书",
+            "§b基础规则", "§6铁砧强化", "§9风弹装填", "§c战斗机关",
+            "§a宠物乐魂", "§5通关农耕", "§x§6§0§6§0§6§0沉重爆破", "§f完整目录"
+    };
     private static final int NORMAL_SHIELD_BLOCKING_DELAY_TICKS = 5;
     private static final int FLASH_SHIELD_BREAK_BASE_COOLDOWN_TICKS = 100;
     private static final double JUKEBOX_AURA_RADIUS = 500.0D;
@@ -591,6 +609,7 @@ public class FlashModeManager {
     private final Map<UUID, Long> recentCrossbowLoadOffhandCancels = new HashMap<>();
     private final Map<UUID, Long> recentCrossbowPayloadShots = new HashMap<>();
     private final Map<UUID, DispenserChargeSession> dispenserChargeSessions = new HashMap<>();
+    private final Map<UUID, Integer> dispenserChargeFeedbackStages = new HashMap<>();
     private final Map<UUID, Long> dispenserLauncherCooldowns = new HashMap<>();
     private final Map<UUID, DispenserFireballData> dispenserFireballs = new HashMap<>();
     private final Map<UUID, Integer> unstableMaceSmashCounts = new HashMap<>();
@@ -2183,7 +2202,7 @@ public class FlashModeManager {
 
 
     public ItemStack createFlashGameGuideBook() {
-        return createFlashGuideBook(FlashGuideVolume.MAIN);
+        return createFlashMainGuideBook();
     }
 
     public ItemStack createFlashGameGuideBook(String volumeId) {
@@ -2191,7 +2210,14 @@ public class FlashModeManager {
         if (entry > 0) {
             return createFlashGuideEntryBook(entry);
         }
-        return createFlashGuideBook(FlashGuideVolume.fromId(volumeId));
+        int volume = resolveFlashGuideVolume(volumeId);
+        if (volume == FLASH_GUIDE_VOLUME_MAIN) {
+            return createFlashMainGuideBook();
+        }
+        if (volume == FLASH_GUIDE_VOLUME_ALL) {
+            return createFlashFullGuideBook();
+        }
+        return createFlashGuideVolumeBook(volume);
     }
 
     public void openFlashGameGuideBook(Player player, String volumeId) {
@@ -2204,17 +2230,6 @@ public class FlashModeManager {
                 player.openBook(book);
             }
         });
-    }
-
-    private ItemStack createFlashGuideBook(FlashGuideVolume volume) {
-        FlashGuideVolume safeVolume = volume == null ? FlashGuideVolume.MAIN : volume;
-        if (safeVolume == FlashGuideVolume.MAIN) {
-            return createFlashMainGuideBook();
-        }
-        if (safeVolume == FlashGuideVolume.ALL) {
-            return createFlashFullGuideBook();
-        }
-        return createFlashGuideVolumeBook(safeVolume);
     }
 
     private ItemStack createFlashMainGuideBook() {
@@ -2266,15 +2281,15 @@ public class FlashModeManager {
         return book;
     }
 
-    private ItemStack createFlashGuideVolumeBook(FlashGuideVolume volume) {
+    private ItemStack createFlashGuideVolumeBook(int volume) {
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         if (!(book.getItemMeta() instanceof BookMeta meta)) {
             return book;
         }
-        meta.setTitle("闪光书 · " + volume.displayName);
+        meta.setTitle("闪光书 · " + FLASH_GUIDE_VOLUME_NAMES[volume]);
         meta.setAuthor("起程小游戏");
         meta.setGeneration(BookMeta.Generation.ORIGINAL);
-        meta.setItemName(volume.itemName());
+        meta.setItemName(FLASH_GUIDE_VOLUME_ITEM_NAMES[volume]);
         meta.setLore(List.of(
                 "§8- §7这是主 · 闪光书打开的内容目录",
                 "§8- §f点击返回主目录可回到主书",
@@ -2283,7 +2298,7 @@ public class FlashModeManager {
         List<Component> fullPages = getFlashFullGuidePages();
         List<Component> pages = new ArrayList<>();
         pages.add(guideBookVolumeDirectory(volume));
-        for (int entry = volume.startEntry; entry <= volume.endEntry; entry++) {
+        for (int entry = FLASH_GUIDE_VOLUME_STARTS[volume]; entry <= FLASH_GUIDE_VOLUME_ENDS[volume]; entry++) {
             int fullIndex = entry + getFlashGuideDirectoryPageCount() - 1;
             if (fullIndex >= 0 && fullIndex < fullPages.size()) {
                 pages.add(guideBookVolumeContentPage(fullPages.get(fullIndex)));
@@ -2322,17 +2337,36 @@ public class FlashModeManager {
         return pages;
     }
 
-    private Component guideBookVolumeDirectory(FlashGuideVolume volume) {
-        Component component = guideBookPageHeader(volume.header() + "\n§0本目录收录第 "
-                + String.format(Locale.ROOT, "%02d", volume.startEntry) + "～"
-                + String.format(Locale.ROOT, "%02d", volume.endEntry) + " 条。\n§8点击条目跳转，或返回主书。\n\n")
+    private Component guideBookVolumeDirectory(int volume) {
+        int startEntry = FLASH_GUIDE_VOLUME_STARTS[volume];
+        int endEntry = FLASH_GUIDE_VOLUME_ENDS[volume];
+        Component component = guideBookPageHeader(FLASH_GUIDE_VOLUME_HEADERS[volume] + "\n§0本目录收录第 "
+                + String.format(Locale.ROOT, "%02d", startEntry) + "～"
+                + String.format(Locale.ROOT, "%02d", endEntry) + " 条。\n§8点击条目跳转，或返回主书。\n\n")
                 .append(guideBookCommandLine("§8[§b返回主目录§8]", "/gamefunxiao wikiopen main"))
                 .append(LegacyComponentSerializer.legacySection().deserialize("\n"));
-        for (int entry = volume.startEntry; entry <= volume.endEntry; entry++) {
+        for (int entry = startEntry; entry <= endEntry; entry++) {
             component = component.append(guideBookJumpLine("§8- §0" + String.format(Locale.ROOT, "%02d", entry)
-                    + ". " + guideEntryTitle(entry), entry - volume.startEntry + 2));
+                    + ". " + guideEntryTitle(entry), entry - startEntry + 2));
         }
         return component;
+    }
+
+    private int resolveFlashGuideVolume(String rawId) {
+        if (rawId == null || rawId.isBlank()) {
+            return FLASH_GUIDE_VOLUME_MAIN;
+        }
+        return switch (rawId.trim().toLowerCase(Locale.ROOT)) {
+            case "basic", "base", "start", "基础", "基础规则" -> 1;
+            case "forge", "anvil", "upgrade", "强化", "铁砧", "铁砧强化" -> 2;
+            case "load", "wind", "crossbow", "装填", "风弹", "风弹装填" -> 3;
+            case "combat", "fight", "trap", "战斗", "机关", "战斗机关" -> 4;
+            case "creature", "pet", "ghast", "宠物", "乐魂", "宠物乐魂" -> 5;
+            case "farm", "food", "block", "农耕", "食物", "方块", "通关农耕" -> 6;
+            case "heavy", "blast", "shield", "沉重", "爆破", "沉重爆破" -> 7;
+            case "all", "full", "完整", "全部", "旧目录" -> FLASH_GUIDE_VOLUME_ALL;
+            default -> FLASH_GUIDE_VOLUME_MAIN;
+        };
     }
 
     private Component guideBookVolumeContentPage(Component original) {
@@ -7913,7 +7947,8 @@ public class FlashModeManager {
             long remaining = Math.max(1L, ((Math.max(cooldownUntil, now + player.getCooldown(Material.DISPENSER) * 50L) - now) + 999L) / 1000L);
             player.swingHand(EquipmentSlot.HAND);
             player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
-            player.sendActionBar("§x§F§F§A§A§5§5✦ §e发射器冷却中 §8| §7还需 §c" + remaining + "秒");
+            String payload = offhand.getType() == Material.FIRE_CHARGE ? "§c火球" : "§b回响波";
+            player.sendActionBar(payload + " §8| §e冷却 §f" + remaining + "秒");
             return true;
         }
 
@@ -7966,15 +8001,16 @@ public class FlashModeManager {
 
                 double ratio = getDispenserChargeRatio(ticks);
                 int percent = (int) Math.round(ratio * 100.0D);
+                playDispenserLauncherChargeStage(online, current.payloadType(), ratio);
                 if (current.payloadType() == Material.FIRE_CHARGE) {
-                    online.sendActionBar("§x§F§F§8§4§4§4✦ §c火球发射器蓄力 §6" + percent + "% §8| §7松开右键发射");
+                    online.sendActionBar("§c火球 §8| §f蓄力 §6" + percent + "% §8| §7松开发射");
                     if (ticks % 6 == 0) {
                         Location effect = online.getEyeLocation().add(online.getEyeLocation().getDirection().normalize().multiply(0.72D));
                         online.getWorld().spawnParticle(Particle.FLAME, effect, 5, 0.08D, 0.06D, 0.08D, 0.015D);
                         online.getWorld().spawnParticle(Particle.SMOKE, effect, 3, 0.07D, 0.05D, 0.07D, 0.008D);
                     }
                 } else {
-                    online.sendActionBar("§x§8§8§D§D§F§F✦ §b回响发射器蓄力 §3" + percent + "% §8| §7松开右键释放声波");
+                    online.sendActionBar("§b回响波 §8| §f蓄力 §3" + percent + "% §8| §7松开发射");
                     if (ticks % 6 == 0) {
                         Location effect = online.getEyeLocation().add(online.getEyeLocation().getDirection().normalize().multiply(0.72D));
                         online.getWorld().spawnParticle(Particle.SCULK_SOUL, effect, 4, 0.08D, 0.06D, 0.08D, 0.02D);
@@ -7986,6 +8022,7 @@ public class FlashModeManager {
 
         dispenserChargeSessions.put(playerId, new DispenserChargeSession(payloadType, roomId, System.currentTimeMillis(), task,
                 hadConsumable, previousConsumable));
+        dispenserChargeFeedbackStages.put(playerId, 0);
         player.swingHand(EquipmentSlot.HAND);
         player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_DISPENSE, 0.62f, 1.0f);
         player.playSound(player.getLocation(), payloadType == Material.FIRE_CHARGE
@@ -8002,6 +8039,29 @@ public class FlashModeManager {
                 }
             }
         }, 1L);
+    }
+
+    private void playDispenserLauncherChargeStage(Player player, Material payloadType, double ratio) {
+        int stage = ratio >= 1.0D ? 3 : ratio >= 0.62D ? 2 : ratio >= 0.28D ? 1 : 0;
+        UUID playerId = player.getUniqueId();
+        int previous = dispenserChargeFeedbackStages.getOrDefault(playerId, 0);
+        if (stage <= previous) {
+            return;
+        }
+        dispenserChargeFeedbackStages.put(playerId, stage);
+        if (stage == 1) {
+            player.playSound(player.getLocation(), Sound.ITEM_CROSSBOW_LOADING_MIDDLE, 0.44f, 1.0f);
+            return;
+        }
+        if (stage == 2) {
+            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_DISPENSE, 0.34f, 1.0f);
+            player.playSound(player.getLocation(), payloadType == Material.FIRE_CHARGE
+                    ? Sound.BLOCK_RESPAWN_ANCHOR_CHARGE : Sound.BLOCK_SCULK_SENSOR_CLICKING, 0.38f, 1.0f);
+            return;
+        }
+        player.playSound(player.getLocation(), Sound.ITEM_CROSSBOW_LOADING_END, 0.62f, 1.0f);
+        player.playSound(player.getLocation(), payloadType == Material.FIRE_CHARGE
+                ? Sound.BLOCK_RESPAWN_ANCHOR_CHARGE : Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.52f, 1.0f);
     }
 
     private void applyDispenserLauncherUseComponent(ItemStack dispenser) {
@@ -8061,6 +8121,7 @@ public class FlashModeManager {
         if (session == null) {
             return;
         }
+        dispenserChargeFeedbackStages.remove(playerId);
         if (session.task() != null) {
             session.task().cancel();
         }
@@ -8070,7 +8131,7 @@ public class FlashModeManager {
         }
         if (feedback && player.isOnline()) {
             player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
-            player.sendActionBar("§x§9§9§9§9§9§9✦ §7发射器蓄力已中断");
+            player.sendActionBar("§7发射器 §8| §c蓄力中断");
         }
     }
 
@@ -8083,6 +8144,7 @@ public class FlashModeManager {
         if (session == null) {
             return;
         }
+        dispenserChargeFeedbackStages.remove(playerId);
         if (session.task() != null) {
             session.task().cancel();
         }
@@ -8094,12 +8156,12 @@ public class FlashModeManager {
         if (!session.roomId().equals(getFlashContextId(player, room)) || !isFlashCombatAvailable(player, room)
                 || !isDispenserLauncherStillHeld(player, session.payloadType())) {
             player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
-            player.sendActionBar("§x§9§9§9§9§9§9✦ §7发射器蓄力已中断");
+            player.sendActionBar("§7发射器 §8| §c蓄力中断");
             return;
         }
         if (consumePayload && !consumeHandItemIfType(player, EquipmentSlot.OFF_HAND, session.payloadType(), 1)) {
             player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
-            player.sendActionBar("§x§F§F§8§8§8§8✦ §c副手弹药不足，发射取消");
+            player.sendActionBar("§7发射器 §8| §c副手弹药不足");
             return;
         }
 
@@ -8114,10 +8176,10 @@ public class FlashModeManager {
         int percent = (int) Math.round(Math.min(1.0D, ratio) * 100.0D);
         if (session.payloadType() == Material.FIRE_CHARGE) {
             launchDispenserFireball(player, room, ratio, session.roomId());
-            player.sendActionBar("§x§F§F§6§6§3§3✦ §c火球发射 §8| §7蓄力 §e" + percent + "%");
+            player.sendActionBar("§c火球 §8| §f蓄力 §6" + percent + "% §8| §a已发射");
         } else {
             launchDispenserSonicWave(player, room, ratio, session.roomId());
-            player.sendActionBar("§x§8§8§D§D§F§F✦ §b回响波发射 §8| §7蓄力 §e" + percent + "%");
+            player.sendActionBar("§b回响波 §8| §f蓄力 §3" + percent + "% §8| §a已发射");
         }
         player.updateInventory();
     }
@@ -8175,7 +8237,7 @@ public class FlashModeManager {
         });
         dispenserFireballs.put(fireball.getUniqueId(), new DispenserFireballData(player.getUniqueId(), roomId, damage, radius,
                 System.currentTimeMillis() + 5000L));
-        monitorDispenserFireball(player.getUniqueId(), fireball.getUniqueId());
+        monitorDispenserFireball(player.getUniqueId(), fireball.getUniqueId(), start);
         world.spawnParticle(Particle.FLAME, start, 18, 0.16D, 0.10D, 0.16D, 0.04D);
         world.spawnParticle(Particle.SMOKE, start, 9, 0.12D, 0.08D, 0.12D, 0.02D);
         world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.82f, 1.0f);
@@ -8183,15 +8245,21 @@ public class FlashModeManager {
         world.playSound(start, Sound.ENTITY_BLAZE_SHOOT, 0.50f, 1.0f);
     }
 
-    private void monitorDispenserFireball(UUID ownerId, UUID fireballId) {
+    private void monitorDispenserFireball(UUID ownerId, UUID fireballId, Location initialLocation) {
         new BukkitRunnable() {
+            private Location previous = initialLocation.clone();
+
             @Override
             public void run() {
                 DispenserFireballData data = dispenserFireballs.get(fireballId);
                 Entity entity = Bukkit.getEntity(fireballId);
                 Player owner = Bukkit.getPlayer(ownerId);
-                if (data == null || !(entity instanceof SmallFireball fireball) || !fireball.isValid() || fireball.isDead()) {
-                    dispenserFireballs.remove(fireballId);
+                if (data == null) {
+                    cancel();
+                    return;
+                }
+                if (!(entity instanceof SmallFireball fireball) || !fireball.isValid() || fireball.isDead()) {
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> dispenserFireballs.remove(fireballId), 2L);
                     cancel();
                     return;
                 }
@@ -8206,11 +8274,39 @@ public class FlashModeManager {
                 Location loc = fireball.getLocation();
                 World world = loc.getWorld();
                 if (world != null) {
+                    LivingEntity target = findDispenserFireballTarget(owner, room, previous, loc);
+                    if (target != null) {
+                        DispenserFireballData impactData = dispenserFireballs.remove(fireballId);
+                        fireball.remove();
+                        if (impactData != null) {
+                            Location hit = target.getLocation().add(0.0D,
+                                    Math.min(1.0D, Math.max(0.35D, target.getHeight() * 0.50D)), 0.0D);
+                            applyDispenserFireballImpact(owner, impactData, hit, target);
+                        }
+                        cancel();
+                        return;
+                    }
                     world.spawnParticle(Particle.FLAME, loc, 3, 0.08D, 0.05D, 0.08D, 0.01D);
                     world.spawnParticle(Particle.SMOKE, loc, 1, 0.06D, 0.04D, 0.06D, 0.004D);
                 }
+                previous = loc.clone();
             }
         }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    private LivingEntity findDispenserFireballTarget(Player shooter, GameRoom room, Location from, Location to) {
+        if (shooter == null || from == null || to == null || from.getWorld() == null
+                || !from.getWorld().equals(to.getWorld())) {
+            return null;
+        }
+        Vector travel = to.toVector().subtract(from.toVector());
+        double distance = travel.length();
+        if (distance < 0.001D) {
+            return null;
+        }
+        RayTraceResult result = from.getWorld().rayTraceEntities(from, travel.normalize(), distance, 0.38D,
+                entity -> entity instanceof LivingEntity living && canFlashNoteHitLiving(shooter, room, living));
+        return result != null && result.getHitEntity() instanceof LivingEntity living ? living : null;
     }
 
     public boolean handleDispenserLauncherFireballDamage(EntityDamageByEntityEvent event) {
@@ -8325,12 +8421,12 @@ public class FlashModeManager {
         double speed = DISPENSER_SONIC_BASE_SPEED + DISPENSER_SONIC_MAX_BONUS_SPEED * ratio;
         UUID ownerId = player.getUniqueId();
         world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.72f, 1.0f);
+        world.playSound(start, Sound.BLOCK_SCULK_SENSOR_CLICKING_STOP, 0.58f, 1.0f);
         world.playSound(start, Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.78f, 1.0f);
         world.spawnParticle(Particle.SCULK_SOUL, start, 18, 0.18D, 0.12D, 0.18D, 0.05D);
 
         new BukkitRunnable() {
             private double travelled;
-            private final Set<UUID> checked = new HashSet<>();
 
             @Override
             public void run() {
@@ -8348,7 +8444,7 @@ public class FlashModeManager {
                     Location point = start.clone().add(sonicDirection.clone().multiply(travelled));
                     world.spawnParticle(Particle.SONIC_BOOM, point, 1, 0.0D, 0.0D, 0.0D, 0.0D);
                     world.spawnParticle(Particle.SCULK_SOUL, point, 2, 0.08D, 0.06D, 0.08D, 0.012D);
-                    LivingEntity target = findDispenserSonicTarget(owner, activeRoom, point, checked);
+                    LivingEntity target = findDispenserSonicTarget(owner, activeRoom, point);
                     if (target != null) {
                         applyDispenserSonicHit(owner, target, point, sonicDirection, damage);
                         cancel();
@@ -8363,18 +8459,21 @@ public class FlashModeManager {
         }.runTaskTimer(plugin, 0L, 1L);
     }
 
-    private LivingEntity findDispenserSonicTarget(Player shooter, GameRoom room, Location point, Set<UUID> checked) {
+    private LivingEntity findDispenserSonicTarget(Player shooter, GameRoom room, Location point) {
         if (point == null || point.getWorld() == null) {
             return null;
         }
         LivingEntity best = null;
-        double bestDistance = 1.05D * 1.05D;
-        for (Entity entity : point.getWorld().getNearbyEntities(point, 1.05D, 1.05D, 1.05D)) {
-            if (!(entity instanceof LivingEntity living) || checked.contains(entity.getUniqueId()) || !canFlashNoteHitLiving(shooter, room, living)) {
+        double bestDistance = Double.MAX_VALUE;
+        for (Entity entity : point.getWorld().getNearbyEntities(point, 1.35D, 1.35D, 1.35D)) {
+            if (!(entity instanceof LivingEntity living) || !canFlashNoteHitLiving(shooter, room, living)) {
                 continue;
             }
-            checked.add(entity.getUniqueId());
-            double distance = living.getBoundingBox().getCenter().distanceSquared(point.toVector());
+            BoundingBox hitbox = living.getBoundingBox().clone().expand(0.42D);
+            if (!hitbox.contains(point.toVector())) {
+                continue;
+            }
+            double distance = hitbox.getCenter().distanceSquared(point.toVector());
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = living;
@@ -19847,36 +19946,14 @@ public class FlashModeManager {
         }
         world.spawnParticle(Particle.END_ROD, hit, 34, 0.32, 0.28, 0.32, 0.85);
         world.spawnParticle(Particle.GUST, hit, 6, 0.22, 0.18, 0.22, 0.04);
-        playFlashMaceSmashImpactSound(world, hit);
+        world.playSound(hit, Sound.ITEM_MACE_SMASH_GROUND, 0.95f, 1.0f);
+        world.playSound(hit, Sound.ENTITY_BREEZE_WIND_BURST, 0.55f, 1.0f);
         if (unstableLevel > 0) {
             world.spawnParticle(Particle.ELECTRIC_SPARK, hit, 12 + unstableLevel * 3, 0.32D, 0.32D, 0.32D, 0.08D);
             maybeTriggerUnstableMaceRebound(attacker, victim, room, unstableLevel);
         }
 
         return applyRecordedAxeShieldMaceCombo(event, attacker, victim, room);
-    }
-
-    private void playFlashMaceSmashImpactSound(World world, Location hit) {
-        if (world == null || hit == null) {
-            return;
-        }
-        world.playSound(hit, Sound.ITEM_MACE_SMASH_GROUND_HEAVY, 1.0f, 1.0f);
-        world.playSound(hit, Sound.ENTITY_GENERIC_EXPLODE, 0.35f, 1.0f);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (hit.getWorld() == world) {
-                world.playSound(hit, Sound.ENTITY_BREEZE_WIND_BURST, 0.65f, 1.0f);
-            }
-        }, 1L);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (hit.getWorld() == world) {
-                world.playSound(hit, Sound.BLOCK_ANVIL_LAND, 0.45f, 1.0f);
-            }
-        }, 2L);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (hit.getWorld() == world) {
-                world.playSound(hit, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.35f, 1.05f);
-            }
-        }, 4L);
     }
 
     private void applyUnstableMaceSmashDamage(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim,
@@ -22590,6 +22667,8 @@ public class FlashModeManager {
     private record UnstableMaceAmbushBonus(UUID targetUuid, String roomId, long expiresAtMillis, int level) {
     }
 
+    // Kept only so a server still running the previous manager class can resolve its lazy-loaded guide enum.
+    @Deprecated
     private enum FlashGuideVolume {
         MAIN("main", "主书", 0, 0, "§x§9§8§D§D§F§F§l主 §8§l· §x§F§4§C§3§F§F§l闪光书", "§x§9§8§D§D§F§F主 §8· §x§F§4§C§3§F§F闪光书"),
         BASIC("basic", "基础规则", 1, 12, "§b§l基础规则", "§b基础规则"),
@@ -22629,9 +22708,7 @@ public class FlashModeManager {
             if (rawId == null || rawId.isBlank()) {
                 return MAIN;
             }
-            String normalized = rawId.toLowerCase(Locale.ROOT);
-            return switch (normalized) {
-                case "main", "home", "index", "主", "主书", "目录" -> MAIN;
+            return switch (rawId.trim().toLowerCase(Locale.ROOT)) {
                 case "basic", "base", "start", "基础", "基础规则" -> BASIC;
                 case "forge", "anvil", "upgrade", "强化", "铁砧", "铁砧强化" -> FORGE;
                 case "load", "wind", "crossbow", "装填", "风弹", "风弹装填" -> LOAD;
