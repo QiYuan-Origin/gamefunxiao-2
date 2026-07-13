@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 17
+config_version: 18
 
 # 通用消息
 general:
@@ -66,7 +66,7 @@ room:
   child_server_join_loading: "§x§B§B§D§D§F§F🌀 §b正在连接这个房间所在的子服..."
   invalid_mode: "§x§F§F§8§8§5§5⚠ §c这个玩法当前不可用或已下架。"
   child_server_wait_owner: "§x§F§F§B§B§6§6⌛ §e房主还没先进入这个对子服房间，已把你送回大厅。"
-  child_server_returning_lobby: ""
+  child_server_returning_lobby: "§x§8§8§D§D§F§F返回 §b正在返回大厅服务器，请稍候..."
   cross_server_disabled: "§x§F§F§B§B§6§6⌛ §e小游戏服暂未开启，已改为在当前服务器创建房间。"
   cross_server_open_failed: "§x§F§F§5§5§5§5✘ §cgameing 当前未开启或启动失败，请稍等后重试，或联系管理员检查小游戏服状态。"
   cross_server_transferring: "§x§8§8§D§D§F§F🛰 §b正在把你连接到对应的小游戏服务器，请稍候..."
@@ -74,7 +74,7 @@ room:
   cross_server_ready: "§x§5§5§F§F§A§A✔ §a小游戏服务器已准备完成，正在送你进入房间。"
   cross_server_wait_room: "§x§8§8§D§D§F§F🛰 §b正在等待小游戏服创建房间，请稍候..."
   cross_server_start_failed: "§x§F§F§5§5§5§5✘ §c跨服创建房间请求失败，请稍后再试。"
-  cross_server_returning_lobby: ""
+  cross_server_returning_lobby: "§x§8§8§D§D§F§F返回 §b正在返回 §elobby §b大厅，请稍候..."
   end_flash_tune_transferring: "§x§B§B§8§8§F§F✦ §d正在请求 §egameing §d进入固定终章调试世界；第一次会复制等待大厅，之后会继续使用同一个世界。"
   end_flash_tune_local: "§x§D§D§A§A§F§F✦ §d当前就在 §egameing §d，正在进入固定终章调试世界。"
   end_flash_tune_joined: "§x§5§5§F§F§A§A✔ §a已进入终章调试世界。这个世界会保留，下次命令会继续传送到这里。"
