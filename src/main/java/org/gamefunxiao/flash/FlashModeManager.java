@@ -12426,7 +12426,8 @@ public class FlashModeManager {
     }
 
     public void handleFlashLingeringCloudSpawn(EntitySpawnEvent event) {
-        if (event == null || !(event.getEntity() instanceof AreaEffectCloud cloud) || !isFlashWorldActive(cloud.getWorld())) {
+        if (event == null || !(event.getEntity() instanceof AreaEffectCloud cloud)
+                || !isFlashWorldActive(cloud.getWorld()) || !isPotionAreaEffectCloud(cloud)) {
             return;
         }
         boolean windCharged = isWindChargedAreaCloud(cloud);
@@ -12438,7 +12439,8 @@ public class FlashModeManager {
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (!cloud.isValid() || cloud.isDead() || cloud.getDuration() <= 0 || cloud.getWorld() == null) {
+                if (!cloud.isValid() || cloud.isDead() || cloud.getDuration() <= 0 || cloud.getWorld() == null
+                        || !isFlashWorldActive(cloud.getWorld()) || !isPotionAreaEffectCloud(cloud)) {
                     cancel();
                     return;
                 }
@@ -12448,6 +12450,13 @@ public class FlashModeManager {
                 }
             }
         }.runTaskTimer(plugin, 20L, 20L);
+    }
+
+    private boolean isPotionAreaEffectCloud(AreaEffectCloud cloud) {
+        if (cloud == null || cloud.getParticle() == Particle.DRAGON_BREATH) {
+            return false;
+        }
+        return cloud.getBasePotionType() != null || !cloud.getCustomEffects().isEmpty();
     }
 
     private boolean isWindChargedAreaCloud(AreaEffectCloud cloud) {
