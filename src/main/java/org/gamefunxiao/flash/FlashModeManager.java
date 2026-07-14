@@ -275,8 +275,8 @@ public class FlashModeManager {
     private static final int DISPENSER_FIREBALL_PAYLOAD_COST = 2;
     private static final double DISPENSER_FIREBALL_BASE_DAMAGE = 4.0D;
     private static final double DISPENSER_FIREBALL_MAX_BONUS_DAMAGE = 4.5D;
-    private static final double DISPENSER_FIREBALL_BASE_SPEED = 1.18D;
-    private static final double DISPENSER_FIREBALL_MAX_BONUS_SPEED = 1.28D;
+    private static final double DISPENSER_FIREBALL_BASE_SPEED = 1.65D;
+    private static final double DISPENSER_FIREBALL_MAX_BONUS_SPEED = 1.85D;
     private static final double DISPENSER_FIREBALL_BASE_RADIUS = 1.45D;
     private static final double DISPENSER_FIREBALL_MAX_BONUS_RADIUS = 0.55D;
     private static final double DISPENSER_ECHO_CANNON_BASE_DAMAGE = 4.5D;
@@ -285,9 +285,10 @@ public class FlashModeManager {
     private static final double DISPENSER_ECHO_CANNON_MAX_BONUS_RANGE = 16.0D;
     private static final double DISPENSER_ECHO_CANNON_BASE_SPEED = 0.82D;
     private static final double DISPENSER_ECHO_CANNON_MAX_BONUS_SPEED = 0.88D;
-    private static final double DISPENSER_ECHO_CANNON_DAMAGE_MULTIPLIER = 1.20D;
+    private static final double DISPENSER_ECHO_CANNON_DAMAGE_MULTIPLIER = 1.74D;
+    private static final double DISPENSER_ECHO_CANNON_ARMOR_PIERCE_RATE = 0.20D;
     private static final double DISPENSER_ECHO_CANNON_RANGE_MULTIPLIER = 3.0D;
-    private static final double DISPENSER_ECHO_CANNON_SPEED_MULTIPLIER = 2.25D;
+    private static final double DISPENSER_ECHO_CANNON_SPEED_MULTIPLIER = 4.50D;
     private static final double SHIELD_WIND_CHARGE_DASH_SPEED_MULTIPLIER = 1.65D;
     private static final float FLASH_BOW_DOWN_WIND_CHARGE_PITCH_DEGREES = 70.0F;
     private static final double FLASH_BOW_DOWN_WIND_CHARGE_SHIELD_Y_MULTIPLIER = 0.40D;
@@ -476,12 +477,13 @@ public class FlashModeManager {
     private static final int RAILGUN_FLIGHT_TICKS = RAILGUN_ANIMATION_STEPS * RAILGUN_TASK_INTERVAL_TICKS;
     private static final int RAILGUN_TNT_FUSE_TICKS = RAILGUN_FLIGHT_TICKS + 24;
     private static final double RAILGUN_TNT_DRAG = 0.98D;
-    private static final double[] RAILGUN_RING_SPACINGS = {0.0D, 2.8D, 3.0D, 3.2D};
-    private static final double[] RAILGUN_DENSITIES = {0.0D, 0.42D, 0.46D, 0.50D};
-    private static final double[] RAILGUN_FLY_SPEEDS = {0.0D, 1.35D, 1.35D, 1.35D};
-    private static final int[] RAILGUN_HEIGHT_OFFSETS = {0, 56, 64, 70};
-    private static final int[] RAILGUN_TNT_FUSE_TICKS_BY_LEVEL = {0, 52, 58, 64};
-    private static final int[] RAILGUN_TNT_COUNTS = {0, 45, 88, 151};
+    private static final double[] RAILGUN_RING_SPACINGS = {0.0D, 2.4D, 2.7D, 3.0D};
+    private static final double[] RAILGUN_DENSITIES = {0.0D, 0.90D, 1.05D, 1.20D};
+    private static final double[] RAILGUN_FLY_SPEEDS = {0.0D, 2.15D, 2.35D, 2.55D};
+    private static final double[] RAILGUN_DOWNWARD_SPEEDS = {0.0D, -1.05D, -1.18D, -1.32D};
+    private static final int[] RAILGUN_HEIGHT_OFFSETS = {0, 24, 28, 32};
+    private static final int[] RAILGUN_TNT_FUSE_TICKS_BY_LEVEL = {0, 34, 38, 42};
+    private static final int[] RAILGUN_TNT_COUNTS = {0, 83, 179, 340};
     private static final int[] RAILGUN_RING_COUNTS = {0, 3, 4, 5};
     private static final float[] RAILGUN_EXPLOSION_POWERS = {0.0F, 3.2F, 3.6F, 4.0F};
     private static final String RAILGUN_LORE_PREFIX = "§8- §x§F§F§4§4§4§4轨道炮";
@@ -1888,7 +1890,7 @@ public class FlashModeManager {
 
         item.setItemMeta(meta);
         if (getRailgunLevel(item) > 0) {
-            item.unsetData(DataComponentTypes.ITEM_MODEL);
+            forceRailgunVanillaFishingRodModel(item);
         }
         if (hasUnstableCoreShield(item)) {
             applyUnstableCoreShieldDurability(item);
@@ -2547,7 +2549,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(38, "食物弩弹", "弩+食物", "装填食物后发射给自己补给。", "消耗食物", "弩本身", "金苹果会额外给再生和吸收。"));
         pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "伤害跟随剑材质和锋利等附魔。"));
         pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；爆炸造成范围伤害，但不会破坏方块。"));
-        pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度+125%、伤害+20%，可连续穿透目标。"));
+        pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度再次强化、伤害+74%，命中追加20%破甲伤害。"));
         pages.add(guideBookQuickPage(42, "Q丢剑气", "任意剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "剑不只是近战，也可构筑远程路线。"));
         pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "敌人踩中后触发并消失，适合封路。"));
         pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "不同材质决定伤害和控制。", "同上", "同上", "金偏失明，钻偏漂浮，合金偏黑暗和强拉。"));
@@ -5571,7 +5573,7 @@ public class FlashModeManager {
         }
         refreshRailgunMeta(result, meta);
         result.setItemMeta(meta);
-        result.unsetData(DataComponentTypes.ITEM_MODEL);
+        forceRailgunVanillaFishingRodModel(result);
         return result;
     }
 
@@ -5589,12 +5591,15 @@ public class FlashModeManager {
         }
         refreshRailgunMeta(railgun, meta);
         railgun.setItemMeta(meta);
-        railgun.unsetData(DataComponentTypes.ITEM_MODEL);
+        forceRailgunVanillaFishingRodModel(railgun);
     }
 
     private void refreshRailgunMeta(ItemStack railgun, ItemMeta meta) {
         railgun.setType(Material.FISHING_ROD);
-        railgun.unsetData(DataComponentTypes.ITEM_MODEL);
+        meta.setItemModel(NamespacedKey.minecraft("fishing_rod"));
+        if (meta.hasCustomModelData()) {
+            meta.setCustomModelData(null);
+        }
         int level = Math.max(1, Math.min(3, getRailgunLevelFromMeta(meta)));
         int seconds = Math.max(0, Math.min(RAILGUN_CHARGE_SECONDS,
                 getPersistentInteger(meta, railgunChargeSecondsKey, 0)));
@@ -5690,7 +5695,15 @@ public class FlashModeManager {
         meta.getPersistentDataContainer().set(railgunChargedKey, PersistentDataType.BYTE, charged ? (byte) 1 : (byte) 0);
         refreshRailgunMeta(item, meta);
         item.setItemMeta(meta);
-        item.unsetData(DataComponentTypes.ITEM_MODEL);
+        forceRailgunVanillaFishingRodModel(item);
+    }
+
+    private void forceRailgunVanillaFishingRodModel(ItemStack item) {
+        if (item == null || getRailgunLevel(item) <= 0) {
+            return;
+        }
+        item.setType(Material.FISHING_ROD);
+        item.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.minecraft("fishing_rod"));
     }
 
     private ItemStack findHeldRailgun(Player player, String railgunId) {
@@ -5750,6 +5763,7 @@ public class FlashModeManager {
         double circleSpacing = RAILGUN_RING_SPACINGS[safeLevel];
         double density = RAILGUN_DENSITIES[safeLevel];
         double flySpeed = RAILGUN_FLY_SPEEDS[safeLevel];
+        double downwardSpeed = RAILGUN_DOWNWARD_SPEEDS[safeLevel];
         int circleCount = RAILGUN_RING_COUNTS[safeLevel];
         double spawnY = Math.min(world.getMaxHeight() - 2.0D,
                 Math.max(world.getMinHeight() + 4.0D, impact.getY() + RAILGUN_HEIGHT_OFFSETS[safeLevel]));
@@ -5760,17 +5774,17 @@ public class FlashModeManager {
             int tntCount = Math.max(1, (int) Math.round(2.0D * Math.PI * flyDistance * density));
             for (int index = 0; index < tntCount; index++) {
                 double angle = Math.PI * 2.0D * index / tntCount;
-                double horizontalSpeed = flyDistance / (fuseTicks * 0.8D) * flySpeed;
+                double horizontalSpeed = flyDistance / (fuseTicks * 0.55D) * flySpeed;
                 Vector velocity = new Vector(
                         Math.cos(angle) * horizontalSpeed,
-                        -0.10D,
+                        downwardSpeed,
                         Math.sin(angle) * horizontalSpeed
                 );
                 spawnRailgunTnt(world, owner, spawnCenter, velocity, fuseTicks, safeLevel, breakBlocks);
             }
         }
 
-        spawnRailgunTnt(world, owner, spawnCenter, new Vector(0.0D, 0.0D, 0.0D), fuseTicks, safeLevel, breakBlocks);
+        spawnRailgunTnt(world, owner, spawnCenter, new Vector(0.0D, downwardSpeed * 1.18D, 0.0D), fuseTicks, safeLevel, breakBlocks);
         world.playSound(spawnCenter, Sound.ENTITY_TNT_PRIMED, 2.4F, 0.58F);
         world.playSound(spawnCenter, Sound.BLOCK_BEACON_ACTIVATE, 1.4F, 0.42F);
         world.spawnParticle(Particle.ELECTRIC_SPARK, spawnCenter, 72, 1.2D, 1.0D, 1.2D, 0.16D);
@@ -7988,7 +8002,6 @@ public class FlashModeManager {
         }
         int payloadCost = getDispenserLauncherPayloadCost(offhand.getType());
         if (offhand.getAmount() < payloadCost) {
-            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
             player.sendActionBar("§c大火球 §8| §c至少需要 §f" + payloadCost + " §c个火焰弹");
             return true;
         }
@@ -7996,7 +8009,7 @@ public class FlashModeManager {
         long cooldownUntil = dispenserLauncherCooldowns.getOrDefault(playerId, 0L);
         if (now < cooldownUntil || player.hasCooldown(Material.DISPENSER)) {
             long remaining = Math.max(1L, ((Math.max(cooldownUntil, now + player.getCooldown(Material.DISPENSER) * 50L) - now) + 999L) / 1000L);
-            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
+            player.setCooldown(offhand.getType(), Math.max(4, player.getCooldown(offhand.getType())));
             String payload = offhand.getType() == Material.FIRE_CHARGE ? "§c大火球" : "§b回响炮";
             player.sendActionBar(payload + " §8| §e冷却 §f" + remaining + "秒");
             return true;
@@ -8055,7 +8068,7 @@ public class FlashModeManager {
 
                 double ratio = getDispenserChargeRatio(ticks);
                 int percent = (int) Math.round(ratio * 100.0D);
-                playDispenserLauncherChargeStage(online, current.payloadType(), ratio);
+                updateDispenserLauncherChargeStage(online, ratio);
                 String chargeState = ratio >= 1.0D ? "§a已蓄满，松开发射" : "§7蓄满才可发射";
                 if (current.payloadType() == Material.FIRE_CHARGE) {
                     online.sendActionBar("§c大火球 §8| §f蓄力 §6" + percent + "% §8| " + chargeState);
@@ -8078,10 +8091,6 @@ public class FlashModeManager {
         dispenserChargeSessions.put(playerId, new DispenserChargeSession(payloadType, roomId, System.currentTimeMillis(), task,
                 hadConsumable, previousConsumable));
         dispenserChargeFeedbackStages.put(playerId, 0);
-        player.swingHand(EquipmentSlot.HAND);
-        player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_DISPENSE, 0.62f, 1.0f);
-        player.playSound(player.getLocation(), payloadType == Material.FIRE_CHARGE
-                ? Sound.ITEM_CROSSBOW_LOADING_START : Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.48f, 1.0f);
         try {
             player.startUsingItem(EquipmentSlot.HAND);
         } catch (IllegalArgumentException | IllegalStateException ignored) {
@@ -8096,27 +8105,13 @@ public class FlashModeManager {
         }, 1L);
     }
 
-    private void playDispenserLauncherChargeStage(Player player, Material payloadType, double ratio) {
+    private void updateDispenserLauncherChargeStage(Player player, double ratio) {
         int stage = ratio >= 1.0D ? 3 : ratio >= 0.62D ? 2 : ratio >= 0.28D ? 1 : 0;
         UUID playerId = player.getUniqueId();
         int previous = dispenserChargeFeedbackStages.getOrDefault(playerId, 0);
-        if (stage <= previous) {
-            return;
+        if (stage > previous) {
+            dispenserChargeFeedbackStages.put(playerId, stage);
         }
-        dispenserChargeFeedbackStages.put(playerId, stage);
-        if (stage == 1) {
-            player.playSound(player.getLocation(), Sound.ITEM_CROSSBOW_LOADING_MIDDLE, 0.44f, 1.0f);
-            return;
-        }
-        if (stage == 2) {
-            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_DISPENSE, 0.34f, 1.0f);
-            player.playSound(player.getLocation(), payloadType == Material.FIRE_CHARGE
-                    ? Sound.BLOCK_RESPAWN_ANCHOR_CHARGE : Sound.BLOCK_SCULK_SENSOR_CLICKING, 0.38f, 1.0f);
-            return;
-        }
-        player.playSound(player.getLocation(), Sound.ITEM_CROSSBOW_LOADING_END, 0.62f, 1.0f);
-        player.playSound(player.getLocation(), payloadType == Material.FIRE_CHARGE
-                ? Sound.BLOCK_RESPAWN_ANCHOR_CHARGE : Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.52f, 1.0f);
     }
 
     private void applyDispenserLauncherUseComponent(ItemStack dispenser) {
@@ -8126,7 +8121,7 @@ public class FlashModeManager {
         dispenser.setData(DataComponentTypes.CONSUMABLE, Consumable.consumable()
                 .consumeSeconds(72000.0F)
                 .animation(ItemUseAnimation.CROSSBOW)
-                .sound(Key.key("minecraft:block.dispenser.dispense"))
+                .sound(Key.key("minecraft:intentionally_empty"))
                 .hasConsumeParticles(false));
     }
 
@@ -8186,7 +8181,6 @@ public class FlashModeManager {
             player.clearActiveItem();
         }
         if (feedback && player.isOnline()) {
-            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
             player.sendActionBar("§7发射器 §8| §c蓄力中断");
         }
     }
@@ -8211,7 +8205,6 @@ public class FlashModeManager {
         GameRoom room = plugin.getRoomManager().getPlayerRoom(playerId);
         if (!session.roomId().equals(getFlashContextId(player, room)) || !isFlashCombatAvailable(player, room)
                 || !isDispenserLauncherStillHeld(player, session.payloadType())) {
-            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
             player.sendActionBar("§7发射器 §8| §c蓄力中断");
             return;
         }
@@ -8222,21 +8215,19 @@ public class FlashModeManager {
                 player.clearActiveItem();
             }
             int percent = (int) Math.round(ratio * 100.0D);
-            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.46f, 1.0f);
             player.sendActionBar("§7发射器 §8| §c蓄力仅 §f" + percent + "% §8| §e必须蓄满100%");
             player.updateInventory();
             return;
         }
         int payloadCost = getDispenserLauncherPayloadCost(session.payloadType());
         if (consumePayload && !consumeHandItemIfType(player, EquipmentSlot.OFF_HAND, session.payloadType(), payloadCost)) {
-            player.playSound(player.getLocation(), Sound.BLOCK_DISPENSER_FAIL, 0.42f, 1.0f);
             player.sendActionBar("§7发射器 §8| §c副手弹药不足");
             return;
         }
 
         dispenserLauncherCooldowns.put(playerId, System.currentTimeMillis() + DISPENSER_LAUNCHER_COOLDOWN_MILLIS);
         player.setCooldown(Material.DISPENSER, DISPENSER_LAUNCHER_COOLDOWN_TICKS);
-        player.swingHand(EquipmentSlot.HAND);
+        player.setCooldown(session.payloadType(), DISPENSER_LAUNCHER_COOLDOWN_TICKS);
         if (player.hasActiveItem() && player.getActiveItem() != null && player.getActiveItem().getType() == Material.DISPENSER) {
             player.clearActiveItem();
         }
@@ -8299,7 +8290,7 @@ public class FlashModeManager {
             entity.setYield(0.0F);
             entity.setIsIncendiary(false);
             entity.setDirection(launchDirection.clone());
-            entity.setPower(launchDirection.clone().multiply(0.08D));
+            entity.setPower(launchDirection.clone().multiply(0.18D));
             entity.setVelocity(launchDirection.clone().multiply(speed));
             entity.setDisplayItem(new ItemStack(Material.FIRE_CHARGE));
         });
@@ -8308,9 +8299,10 @@ public class FlashModeManager {
         monitorDispenserFireball(player.getUniqueId(), fireball.getUniqueId(), start);
         world.spawnParticle(Particle.FLAME, start, 18, 0.16D, 0.10D, 0.16D, 0.04D);
         world.spawnParticle(Particle.SMOKE, start, 9, 0.12D, 0.08D, 0.12D, 0.02D);
-        world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.82f, 1.0f);
-        world.playSound(start, Sound.ITEM_FIRECHARGE_USE, 0.72f, 1.0f);
-        world.playSound(start, Sound.ENTITY_BLAZE_SHOOT, 0.50f, 1.0f);
+        world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 1.02f, 0.88f);
+        world.playSound(start, Sound.ITEM_FIRECHARGE_USE, 0.86f, 0.92f);
+        world.playSound(start, Sound.ENTITY_BLAZE_SHOOT, 0.74f, 0.84f);
+        world.playSound(start, Sound.ENTITY_GENERIC_EXPLODE, 0.28f, 1.32f);
     }
 
     private void monitorDispenserFireball(UUID ownerId, UUID fireballId, Location initialLocation) {
@@ -8423,8 +8415,9 @@ public class FlashModeManager {
             return;
         }
         World world = hit.getWorld();
-        world.spawnParticle(Particle.EXPLOSION, hit, 1, 0.0D, 0.0D, 0.0D, 0.0D);
-        world.spawnParticle(Particle.FLAME, hit, 26, data.radius() * 0.20D, 0.20D, data.radius() * 0.20D, 0.045D);
+        world.spawnParticle(Particle.EXPLOSION_EMITTER, hit, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        world.spawnParticle(Particle.EXPLOSION, hit, 2, 0.0D, 0.0D, 0.0D, 0.0D);
+        world.spawnParticle(Particle.FLAME, hit, 32, data.radius() * 0.22D, 0.22D, data.radius() * 0.22D, 0.052D);
         world.spawnParticle(Particle.SMOKE, hit, 18, data.radius() * 0.25D, 0.18D, data.radius() * 0.25D, 0.026D);
         world.playSound(hit, Sound.ENTITY_GENERIC_EXPLODE, 0.58f, 1.0f);
         world.playSound(hit, Sound.ITEM_FIRECHARGE_USE, 0.62f, 1.0f);
@@ -8491,10 +8484,12 @@ public class FlashModeManager {
         double speed = (DISPENSER_ECHO_CANNON_BASE_SPEED + DISPENSER_ECHO_CANNON_MAX_BONUS_SPEED * ratio)
                 * DISPENSER_ECHO_CANNON_SPEED_MULTIPLIER;
         UUID ownerId = player.getUniqueId();
-        world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.72f, 1.0f);
-        world.playSound(start, Sound.BLOCK_SCULK_SENSOR_CLICKING_STOP, 0.58f, 1.0f);
-        world.playSound(start, Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.78f, 1.0f);
-        world.spawnParticle(Particle.SCULK_SOUL, start, 18, 0.18D, 0.12D, 0.18D, 0.05D);
+        world.playSound(start, Sound.BLOCK_DISPENSER_LAUNCH, 0.96f, 0.82f);
+        world.playSound(start, Sound.ENTITY_WARDEN_SONIC_BOOM, 1.08f, 1.0f);
+        world.playSound(start, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.62f, 0.72f);
+        world.playSound(start, Sound.BLOCK_SCULK_SENSOR_CLICKING_STOP, 0.62f, 0.92f);
+        world.spawnParticle(Particle.SONIC_BOOM, start, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        world.spawnParticle(Particle.SCULK_SOUL, start, 26, 0.20D, 0.14D, 0.20D, 0.065D);
 
         new BukkitRunnable() {
             private double travelled;
@@ -8558,6 +8553,7 @@ public class FlashModeManager {
     private void applyDispenserEchoCannonHit(Player shooter, LivingEntity target, Location point, Vector direction,
                                               double damage) {
         target.damage(Math.max(1.0D, damage), shooter);
+        applyDispenserEchoCannonArmorPierce(target, damage * DISPENSER_ECHO_CANNON_ARMOR_PIERCE_RATE);
         target.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 45, 0, false, true, true));
         target.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 35, 0, false, true, true));
         target.setVelocity(target.getVelocity().add(direction.clone().normalize().multiply(0.48D).setY(0.10D)));
@@ -8568,6 +8564,18 @@ public class FlashModeManager {
             world.spawnParticle(Particle.SCULK_SOUL, center, 24, 0.22D, 0.20D, 0.22D, 0.04D);
             world.playSound(center, Sound.ENTITY_WARDEN_SONIC_BOOM, 0.82f, 1.0f);
         }
+    }
+
+    private void applyDispenserEchoCannonArmorPierce(LivingEntity target, double damage) {
+        if (target == null || target.isDead() || !target.isValid() || damage <= 0.0D) {
+            return;
+        }
+        double nextHealth = target.getHealth() - damage;
+        if (nextHealth <= 0.0D) {
+            target.setHealth(0.0D);
+            return;
+        }
+        target.setHealth(Math.max(0.01D, nextHealth));
     }
 
     public boolean handleFlashCrossbowLoad(PlayerInteractEvent event) {
