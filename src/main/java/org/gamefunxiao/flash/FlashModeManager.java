@@ -476,10 +476,14 @@ public class FlashModeManager {
     private static final int RAILGUN_FLIGHT_TICKS = RAILGUN_ANIMATION_STEPS * RAILGUN_TASK_INTERVAL_TICKS;
     private static final int RAILGUN_TNT_FUSE_TICKS = RAILGUN_FLIGHT_TICKS + 24;
     private static final double RAILGUN_TNT_DRAG = 0.98D;
-    private static final double RAILGUN_RING_SPACING = 4.8D;
-    private static final int[] RAILGUN_TNT_COUNTS = {0, 96, 240, 480};
-    private static final int[] RAILGUN_RING_COUNTS = {0, 3, 5, 8};
-    private static final float[] RAILGUN_EXPLOSION_POWERS = {0.0F, 4.0F, 5.2F, 6.5F};
+    private static final double[] RAILGUN_RING_SPACINGS = {0.0D, 2.8D, 3.0D, 3.2D};
+    private static final double[] RAILGUN_DENSITIES = {0.0D, 0.42D, 0.46D, 0.50D};
+    private static final double[] RAILGUN_FLY_SPEEDS = {0.0D, 1.35D, 1.35D, 1.35D};
+    private static final int[] RAILGUN_HEIGHT_OFFSETS = {0, 56, 64, 70};
+    private static final int[] RAILGUN_TNT_FUSE_TICKS_BY_LEVEL = {0, 52, 58, 64};
+    private static final int[] RAILGUN_TNT_COUNTS = {0, 45, 88, 151};
+    private static final int[] RAILGUN_RING_COUNTS = {0, 3, 4, 5};
+    private static final float[] RAILGUN_EXPLOSION_POWERS = {0.0F, 3.2F, 3.6F, 4.0F};
     private static final String RAILGUN_LORE_PREFIX = "§8- §x§F§F§4§4§4§4轨道炮";
     private static final String STORM_SWORD_LINE_PREFIX = "§8- §x§8§8§D§D§F§F风暴";
     private static final String STORM_SWORD_KINETIC_LINE_PREFIX = "§8- §x§B§B§F§F§F§F风暴矛势";
@@ -5552,6 +5556,7 @@ public class FlashModeManager {
 
     private ItemStack applyRailgunLevel(ItemStack base, int level) {
         ItemStack result = base.clone();
+        result.setType(Material.FISHING_ROD);
         result.setAmount(1);
         ItemMeta meta = result.getItemMeta();
         if (meta == null) {
@@ -5574,6 +5579,7 @@ public class FlashModeManager {
         if (getRailgunLevel(railgun) <= 0) {
             return;
         }
+        railgun.setType(Material.FISHING_ROD);
         ItemMeta meta = railgun.getItemMeta();
         if (meta == null) {
             return;
@@ -5587,6 +5593,7 @@ public class FlashModeManager {
     }
 
     private void refreshRailgunMeta(ItemStack railgun, ItemMeta meta) {
+        railgun.setType(Material.FISHING_ROD);
         railgun.unsetData(DataComponentTypes.ITEM_MODEL);
         int level = Math.max(1, Math.min(3, getRailgunLevelFromMeta(meta)));
         int seconds = Math.max(0, Math.min(RAILGUN_CHARGE_SECONDS,
@@ -5609,7 +5616,7 @@ public class FlashModeManager {
     }
 
     private int getRailgunLevel(ItemStack item) {
-        if (item == null || item.getType() != Material.FISHING_ROD || !item.hasItemMeta()) {
+        if (item == null || !item.hasItemMeta()) {
             return 0;
         }
         return Math.max(0, Math.min(3, getRailgunLevelFromMeta(item.getItemMeta())));
@@ -5738,63 +5745,49 @@ public class FlashModeManager {
         if (world == null) {
             return;
         }
-        double startY = Math.min(world.getMaxHeight() - 4.0D,
-                Math.max(impact.getY() + 50.0D, owner.getLocation().getY() + 30.0D));
-        Location origin = new Location(world, impact.getX(), startY, impact.getZ());
-        List<RailgunTntPoint> points = new ArrayList<>(RAILGUN_TNT_COUNTS[safeLevel]);
-        int ringCount = RAILGUN_RING_COUNTS[safeLevel];
-        int totalWeight = ringCount * (ringCount + 1) / 2;
-        int ringTntCount = RAILGUN_TNT_COUNTS[safeLevel] - 1;
-        int remaining = ringTntCount;
+        boolean breakBlocks = canFlashExplosionBreakBlocks(owner, room);
+        int fuseTicks = RAILGUN_TNT_FUSE_TICKS_BY_LEVEL[safeLevel];
+        double circleSpacing = RAILGUN_RING_SPACINGS[safeLevel];
+        double density = RAILGUN_DENSITIES[safeLevel];
+        double flySpeed = RAILGUN_FLY_SPEEDS[safeLevel];
+        int circleCount = RAILGUN_RING_COUNTS[safeLevel];
+        double spawnY = Math.min(world.getMaxHeight() - 2.0D,
+                Math.max(world.getMinHeight() + 4.0D, impact.getY() + RAILGUN_HEIGHT_OFFSETS[safeLevel]));
+        Location spawnCenter = new Location(world, impact.getX(), spawnY, impact.getZ());
 
-        double centerY = impact.getY() + 0.55D;
-        TNTPrimed centerTnt = spawnRailgunTnt(world, origin, impact.getX(), centerY, impact.getZ());
-        points.add(new RailgunTntPoint(centerTnt, impact.getX(), centerY, impact.getZ()));
-
-        for (int ring = 1; ring <= ringCount; ring++) {
-            int ringPoints = ring == ringCount
-                    ? remaining
-                    : Math.max(8, (int) Math.round((double) ringTntCount * ring / totalWeight));
-            remaining -= ringPoints;
-            double radius = ring * RAILGUN_RING_SPACING;
-            for (int index = 0; index < ringPoints; index++) {
-                double angle = Math.PI * 2.0D * index / ringPoints;
-                double finalX = impact.getX() + Math.cos(angle) * radius;
-                double finalZ = impact.getZ() + Math.sin(angle) * radius;
-                int finalY = Math.min(world.getMaxHeight() - 2,
-                        Math.max(world.getMinHeight() + 1,
-                                world.getHighestBlockYAt((int) Math.floor(finalX), (int) Math.floor(finalZ)) + 1));
-                double targetY = finalY + 0.55D;
-                TNTPrimed tnt = spawnRailgunTnt(world, origin, finalX, targetY, finalZ);
-                points.add(new RailgunTntPoint(tnt, finalX, targetY, finalZ));
+        for (int circle = 0; circle < circleCount; circle++) {
+            double flyDistance = (circle + 1) * circleSpacing;
+            int tntCount = Math.max(1, (int) Math.round(2.0D * Math.PI * flyDistance * density));
+            for (int index = 0; index < tntCount; index++) {
+                double angle = Math.PI * 2.0D * index / tntCount;
+                double horizontalSpeed = flyDistance / (fuseTicks * 0.8D) * flySpeed;
+                Vector velocity = new Vector(
+                        Math.cos(angle) * horizontalSpeed,
+                        -0.10D,
+                        Math.sin(angle) * horizontalSpeed
+                );
+                spawnRailgunTnt(world, owner, spawnCenter, velocity, fuseTicks, safeLevel, breakBlocks);
             }
         }
 
-        UUID strikeId = UUID.randomUUID();
-        activeRailgunStrikes.put(strikeId,
-                new RailgunStrike(strikeId, owner.getUniqueId(), room, safeLevel, origin, impact.clone(), points));
-        world.playSound(origin, Sound.ENTITY_TNT_PRIMED, 2.4F, 0.58F);
-        world.playSound(origin, Sound.BLOCK_BEACON_ACTIVATE, 1.4F, 0.42F);
-        world.spawnParticle(Particle.ELECTRIC_SPARK, origin, 72, 1.2D, 1.0D, 1.2D, 0.16D);
+        spawnRailgunTnt(world, owner, spawnCenter, new Vector(0.0D, 0.0D, 0.0D), fuseTicks, safeLevel, breakBlocks);
+        world.playSound(spawnCenter, Sound.ENTITY_TNT_PRIMED, 2.4F, 0.58F);
+        world.playSound(spawnCenter, Sound.BLOCK_BEACON_ACTIVATE, 1.4F, 0.42F);
+        world.spawnParticle(Particle.ELECTRIC_SPARK, spawnCenter, 72, 1.2D, 1.0D, 1.2D, 0.16D);
     }
 
-    private TNTPrimed spawnRailgunTnt(World world, Location origin, double finalX, double finalY, double finalZ) {
-        double travelFactor = (1.0D - Math.pow(RAILGUN_TNT_DRAG, RAILGUN_FLIGHT_TICKS))
-                / (1.0D - RAILGUN_TNT_DRAG);
-        Vector initialVelocity = new Vector(
-                finalX - origin.getX(),
-                finalY - origin.getY(),
-                finalZ - origin.getZ()
-        ).multiply(1.0D / travelFactor);
-        return world.spawn(origin, TNTPrimed.class, tnt -> {
-            tnt.setFuseTicks(RAILGUN_TNT_FUSE_TICKS);
-            tnt.setYield(0.0F);
+    private TNTPrimed spawnRailgunTnt(World world, Player owner, Location spawnCenter, Vector velocity,
+                                      int fuseTicks, int level, boolean breakBlocks) {
+        return world.spawn(spawnCenter.clone(), TNTPrimed.class, tnt -> {
+            tnt.setFuseTicks(fuseTicks);
+            tnt.setYield(RAILGUN_EXPLOSION_POWERS[Math.max(1, Math.min(3, level))]);
             tnt.setIsIncendiary(false);
             tnt.setPersistent(false);
-            tnt.setInvulnerable(true);
-            tnt.setGravity(false);
-            tnt.setVelocity(initialVelocity);
-            tnt.getPersistentDataContainer().set(railgunVisualTntKey, PersistentDataType.BYTE, (byte) 1);
+            tnt.setSource(owner);
+            tnt.setVelocity(velocity);
+            if (!breakBlocks) {
+                tnt.getPersistentDataContainer().set(railgunVisualTntKey, PersistentDataType.BYTE, (byte) 1);
+            }
         });
     }
 
@@ -12900,10 +12893,7 @@ public class FlashModeManager {
             return;
         }
         if (isRailgunVisualTnt(tnt)) {
-            event.setCancelled(true);
-            event.setRadius(0.0F);
             event.setFire(false);
-            tnt.remove();
             return;
         }
         byte tmtState = getTmtPrimedState(tnt);
@@ -12929,10 +12919,8 @@ public class FlashModeManager {
             return;
         }
         if (event.getEntity() instanceof TNTPrimed tnt && isRailgunVisualTnt(tnt)) {
-            event.setCancelled(true);
             event.blockList().clear();
             event.setYield(0.0F);
-            tnt.remove();
             return;
         }
         if (event.getEntity() instanceof TNTPrimed tnt && hasTmtPrimed(tnt)) {
