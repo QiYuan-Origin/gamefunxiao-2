@@ -1473,7 +1473,7 @@ body,
 .docs-article {
   min-width: 0;
   max-width: 688px;
-  margin: 0 auto;
+  margin: 0 auto 0 2rem;
 }
 
 .breadcrumbs {
@@ -1971,6 +1971,7 @@ body,
 
   .docs-article {
     max-width: 100%;
+    margin: 0;
   }
 
   .right-sidebar {
