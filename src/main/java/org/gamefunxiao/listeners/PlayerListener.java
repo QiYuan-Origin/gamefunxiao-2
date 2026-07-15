@@ -590,6 +590,10 @@ public class PlayerListener implements Listener {
             return;
         }
 
+        if (plugin.getFlashModeManager().handleFlashRoomGuideBookUse(event, player, room)) {
+            return;
+        }
+
         if (isSwapHoldingPlayer(room, player)) {
             event.setCancelled(true);
             event.setUseInteractedBlock(Event.Result.DENY);
@@ -1043,6 +1047,9 @@ public class PlayerListener implements Listener {
         ItemStack item = event.getItemDrop().getItemStack();
 
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (plugin.getFlashModeManager().handleFlashRoomGuideBookDrop(event, player, room)) {
+            return;
+        }
         if (room == null) {
             plugin.getFlashModeManager().handleSwordWaveDrop(event, player, null);
             return;
@@ -1208,6 +1215,10 @@ public class PlayerListener implements Listener {
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null) return;
 
+        Bukkit.getScheduler().runTaskLater(plugin,
+                () -> plugin.getFlashModeManager().ensureFlashRoomGuideBook(player,
+                        plugin.getRoomManager().getPlayerRoom(player.getUniqueId())), 1L);
+
         // 检查是否有待复活位置（猎物死亡时设置的）
         org.bukkit.Location pendingLoc = room.getPendingRespawnLocation(player.getUniqueId());
         if (pendingLoc != null) {
@@ -1279,6 +1290,9 @@ public class PlayerListener implements Listener {
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
 
         if (room == null || room.getState() != RoomState.PLAYING) return;
+
+        // 房间 Wiki 是固定工具，不参与死亡掉落；复活后由 onPlayerRespawn 补回第二格。
+        event.getDrops().removeIf(plugin.getFlashModeManager()::isFlashRoomGuideBook);
 
         Player earlyKiller = resolveDeathKiller(player, room);
         if (earlyKiller != null && !earlyKiller.getUniqueId().equals(player.getUniqueId())
@@ -2846,6 +2860,10 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (plugin.getFlashModeManager().handleFlashRoomGuideBookClick(event, player, room)) {
+            return;
+        }
         org.bukkit.inventory.Inventory clickedInventory = event.getClickedInventory();
 
         // 自定义菜单点击统一交给 MenuListener 处理。
@@ -2856,7 +2874,6 @@ public class PlayerListener implements Listener {
             return;
         }
 
-        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null) {
             if (plugin.getFlashModeManager().handleDragonBreathWeaponInfusion(event, player, null)) {
                 return;
@@ -2947,11 +2964,15 @@ public class PlayerListener implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (plugin.getFlashModeManager().handleFlashRoomGuideBookDrag(event, player, room)) {
+            return;
+        }
+
         if (event.getView().getTopInventory().getHolder() instanceof org.gamefunxiao.menu.base.BaseMenu) {
             return;
         }
 
-        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null) return;
 
         if (room.getState() == RoomState.WAITING

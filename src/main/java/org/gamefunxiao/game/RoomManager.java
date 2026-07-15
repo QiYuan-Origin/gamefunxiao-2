@@ -1018,6 +1018,7 @@ public class RoomManager {
 
         // 给玩家等待大厅物品
         plugin.getGameManager().giveLobbyItems(player, room);
+        plugin.getFlashModeManager().ensureFlashRoomGuideBook(player, room);
     }
 
     private void checkStartCondition(GameRoom room) {
@@ -1805,6 +1806,7 @@ public class RoomManager {
                 room.getGameMode() == GameMode.END_FLASH ? room.getAssignedEndFlashKitName(playerUUID) : null);
         refreshPlayerVisibility();
         plugin.getScoreboardManager().createScoreboard(player);
+        plugin.getFlashModeManager().ensureFlashRoomGuideBook(player, room);
 
         Map<String, String> placeholders = new HashMap<>();
         placeholders.put("player", player.getName());

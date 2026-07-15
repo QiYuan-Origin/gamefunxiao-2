@@ -83,6 +83,9 @@ public class FlashModeListener implements Listener {
             org.bukkit.Bukkit.getScheduler().runTask(plugin,
                     () -> plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(player));
             var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+            if (plugin.getFlashModeManager().handleFlashRoomGuideBookClick(event, player, room)) {
+                return;
+            }
             if (plugin.getFlashModeManager().handleFlashBackpackInventoryClick(event, player, room)) {
                 return;
             }
@@ -115,6 +118,9 @@ public class FlashModeListener implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         if (event.getWhoClicked() instanceof Player player) {
             var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+            if (plugin.getFlashModeManager().handleFlashRoomGuideBookDrag(event, player, room)) {
+                return;
+            }
             plugin.getFlashModeManager().handleFlashBackpackInventoryDrag(event, player, room);
         }
     }
@@ -124,8 +130,14 @@ public class FlashModeListener implements Listener {
         plugin.getFlashModeManager().handleInvisibleItemFramePlace(event);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        if (plugin.getFlashModeManager().handleFlashRoomGuideBookSwap(player,
+                plugin.getRoomManager().getPlayerRoom(player.getUniqueId()))) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().cancelDispenserLauncherCharge(event.getPlayer(), false);
         org.bukkit.Bukkit.getScheduler().runTask(plugin,
                 () -> plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(event.getPlayer()));
@@ -160,6 +172,11 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (plugin.getFlashModeManager().handleFlashRoomGuideBookUse(event, player,
+                plugin.getRoomManager().getPlayerRoom(player.getUniqueId()))) {
+            return;
+        }
         plugin.getFlashModeManager().normalizeHeldRedstoneStabilizers(event.getPlayer());
         plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(event.getPlayer());
         if (plugin.getFlashModeManager().handleFlashCustomBlockInteract(event)) {
@@ -248,6 +265,10 @@ public class FlashModeListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerDropItem(PlayerDropItemEvent event) {
         Player player = event.getPlayer();
+        if (plugin.getFlashModeManager().handleFlashRoomGuideBookDrop(event, player,
+                plugin.getRoomManager().getPlayerRoom(player.getUniqueId()))) {
+            return;
+        }
         plugin.getFlashModeManager().handleSwordWaveDrop(event, player, plugin.getRoomManager().getPlayerRoom(player.getUniqueId()));
     }
 

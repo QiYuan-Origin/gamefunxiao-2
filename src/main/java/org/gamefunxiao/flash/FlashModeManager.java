@@ -484,6 +484,7 @@ public class FlashModeManager {
     private static final int RAILGUN_SINGLE_FUSE_TICKS = 20 * 3;
     private static final float RAILGUN_SINGLE_EXPLOSION_POWER = 4.0F;
     private static final long RAILGUN_USE_DEBOUNCE_MILLIS = 250L;
+    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 2;
     private static final List<RailgunMaterialRequirement> RAILGUN_ASSEMBLY_REQUIREMENTS = List.of(
             new RailgunMaterialRequirement(Material.HONEY_BLOCK, 12),
             new RailgunMaterialRequirement(Material.SLIME_BLOCK, 24),
@@ -583,9 +584,12 @@ public class FlashModeManager {
     private final NamespacedKey unstableCoreShieldKey;
     private final NamespacedKey spearKineticBoostedKey;
     private final NamespacedKey dragonBreathWeaponKey;
+    private final NamespacedKey flashRoomGuideBookKey;
+    private final NamespacedKey flashRoomGuideBookVersionKey;
     private final NamespacedKey railgunLevelKey;
     private final NamespacedKey railgunChargeSecondsKey;
     private final NamespacedKey railgunChargeProgressKey;
+    private final NamespacedKey railgunAssemblyProgressKey;
     private final NamespacedKey railgunChargedKey;
     private final NamespacedKey railgunIdKey;
     private final NamespacedKey railgunVisualTntKey;
@@ -726,6 +730,7 @@ public class FlashModeManager {
     private final Set<UUID> spyglassFocusMonitors = new HashSet<>();
     private final Map<UUID, Long> heroTrialCooldowns = new HashMap<>();
     private final Map<UUID, Long> railgunUseDebounce = new HashMap<>();
+    private final Map<UUID, Long> flashGuideBookOpenDebounce = new HashMap<>();
     private BukkitTask railgunChargeTask;
 
     public FlashModeManager(GameFunXiao plugin) {
@@ -778,9 +783,12 @@ public class FlashModeManager {
         this.unstableCoreShieldKey = new NamespacedKey(plugin, "flash_unstable_core_shield");
         this.spearKineticBoostedKey = new NamespacedKey(plugin, "flash_spear_kinetic_boosted");
         this.dragonBreathWeaponKey = new NamespacedKey(plugin, "flash_dragon_breath_weapon");
+        this.flashRoomGuideBookKey = new NamespacedKey(plugin, "flash_room_guide_book");
+        this.flashRoomGuideBookVersionKey = new NamespacedKey(plugin, "flash_room_guide_book_version");
         this.railgunLevelKey = new NamespacedKey(plugin, "flash_railgun_level");
         this.railgunChargeSecondsKey = new NamespacedKey(plugin, "flash_railgun_charge_seconds");
         this.railgunChargeProgressKey = new NamespacedKey(plugin, "flash_railgun_charge_progress");
+        this.railgunAssemblyProgressKey = new NamespacedKey(plugin, "flash_railgun_assembly_progress");
         this.railgunChargedKey = new NamespacedKey(plugin, "flash_railgun_charged");
         this.railgunIdKey = new NamespacedKey(plugin, "flash_railgun_id");
         this.railgunVisualTntKey = new NamespacedKey(plugin, "flash_railgun_visual_tnt");
@@ -2269,6 +2277,230 @@ public class FlashModeManager {
         return createFlashMainGuideBook();
     }
 
+    /**
+     * Creates the copy reserved for the second hotbar slot while a player is in a flash room.
+     * The marker is deliberately separate from ordinary /flashwiki books so those books remain
+     * movable outside the reserved room slot.
+     */
+    public ItemStack createFlashRoomGuideBook() {
+        ItemStack book = createFlashGameGuideBook();
+        ItemMeta meta = book.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(flashRoomGuideBookKey, PersistentDataType.BYTE, (byte) 1);
+            meta.getPersistentDataContainer().set(flashRoomGuideBookVersionKey,
+                    PersistentDataType.INTEGER, FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION);
+            book.setItemMeta(meta);
+        }
+        return book;
+    }
+
+    public boolean isFlashRoomGuideBook(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return false;
+        }
+        Byte marker = item.getItemMeta().getPersistentDataContainer()
+                .get(flashRoomGuideBookKey, PersistentDataType.BYTE);
+        return marker != null && marker == (byte) 1;
+    }
+
+    /**
+     * Keeps the room guide in PlayerInventory slot 1. Room entry snapshots the original inventory
+     * before this method is called, so the existing RoomManager restore path remains authoritative.
+     */
+    public boolean ensureFlashRoomGuideBook(Player player, GameRoom room) {
+        if (!isFlashRoomGuideContext(player, room)) {
+            return false;
+        }
+
+        PlayerInventory inventory = player.getInventory();
+        ItemStack slotOne = inventory.getItem(1);
+        boolean slotOneIsGuide = isFlashRoomGuideBook(slotOne);
+        boolean slotOneIsCurrent = slotOneIsGuide && isCurrentFlashRoomGuideBook(slotOne);
+        boolean changed = false;
+
+        // Remove duplicate reserved copies left by a death/reconnect or a kit refresh.
+        for (int slot = 0; slot < 36; slot++) {
+            if (slot == 1) {
+                continue;
+            }
+            if (isFlashRoomGuideBook(inventory.getItem(slot))) {
+                inventory.setItem(slot, null);
+                changed = true;
+            }
+        }
+        if (isFlashRoomGuideBook(inventory.getItemInOffHand())) {
+            inventory.setItemInOffHand(null);
+            changed = true;
+        }
+        ItemStack[] armor = inventory.getArmorContents();
+        boolean armorChanged = false;
+        for (int index = 0; index < armor.length; index++) {
+            if (isFlashRoomGuideBook(armor[index])) {
+                armor[index] = null;
+                armorChanged = true;
+            }
+        }
+        if (armorChanged) {
+            inventory.setArmorContents(armor);
+            changed = true;
+        }
+
+        if (!slotOneIsGuide) {
+            ItemStack displaced = isEmpty(slotOne) ? null : slotOne.clone();
+            inventory.setItem(1, createFlashRoomGuideBook());
+            changed = true;
+            if (displaced != null) {
+                returnRoomItem(player, displaced);
+            }
+        } else if (!slotOneIsCurrent) {
+            inventory.setItem(1, createFlashRoomGuideBook());
+            changed = true;
+        }
+
+        if (changed) {
+            player.updateInventory();
+        }
+        return changed;
+    }
+
+    public boolean handleFlashRoomGuideBookUse(PlayerInteractEvent event, Player player, GameRoom room) {
+        if (event == null || player == null || !isFlashRoomGuideContext(player, room)
+                || !isFlashRoomGuideBook(event.getItem())
+                || (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
+            return false;
+        }
+
+        event.setCancelled(true);
+        event.setUseInteractedBlock(Event.Result.DENY);
+        event.setUseItemInHand(Event.Result.DENY);
+        long now = System.currentTimeMillis();
+        Long lastOpen = flashGuideBookOpenDebounce.put(player.getUniqueId(), now);
+        if (lastOpen != null && now - lastOpen < 250L) {
+            return true;
+        }
+        ItemStack book = event.getItem().clone();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline() && isFlashRoomGuideContext(player,
+                    plugin.getRoomManager().getPlayerRoom(player.getUniqueId()))) {
+                player.openBook(book);
+            }
+        });
+        return true;
+    }
+
+    public boolean handleFlashRoomGuideBookClick(InventoryClickEvent event, Player player, GameRoom room) {
+        if (event == null || player == null || !isFlashRoomGuideContext(player, room)) {
+            return false;
+        }
+
+        boolean touchesGuide = isFlashRoomGuideBook(event.getCurrentItem())
+                || isFlashRoomGuideBook(event.getCursor())
+                || (event.getClickedInventory() == player.getInventory() && event.getSlot() == 1)
+                || (event.getClick() == org.bukkit.event.inventory.ClickType.NUMBER_KEY
+                && event.getHotbarButton() == 1)
+                || (event.getClick() == org.bukkit.event.inventory.ClickType.SWAP_OFFHAND
+                && (isFlashRoomGuideBook(player.getInventory().getItemInMainHand())
+                || isFlashRoomGuideBook(player.getInventory().getItemInOffHand())))
+                || (event.getClick() == org.bukkit.event.inventory.ClickType.DOUBLE_CLICK
+                && containsFlashRoomGuideBook(player));
+        if (!touchesGuide) {
+            return false;
+        }
+        event.setCancelled(true);
+        return true;
+    }
+
+    public boolean handleFlashRoomGuideBookDrag(InventoryDragEvent event, Player player, GameRoom room) {
+        if (event == null || player == null || !isFlashRoomGuideContext(player, room)) {
+            return false;
+        }
+        boolean touchesGuide = isFlashRoomGuideBook(event.getOldCursor());
+        if (!touchesGuide) {
+            for (Integer rawSlot : event.getRawSlots()) {
+                if (rawSlot == null || rawSlot < 0) {
+                    continue;
+                }
+                try {
+                    if (event.getView().convertSlot(rawSlot) == 1
+                            && event.getView().getBottomInventory() == player.getInventory()
+                            && rawSlot >= event.getView().getTopInventory().getSize()) {
+                        touchesGuide = true;
+                        break;
+                    }
+                } catch (RuntimeException ignored) {
+                    // A custom inventory view may reject conversion; it cannot move slot 1 safely.
+                }
+            }
+        }
+        if (!touchesGuide) {
+            return false;
+        }
+        event.setCancelled(true);
+        return true;
+    }
+
+    public boolean handleFlashRoomGuideBookDrop(PlayerDropItemEvent event, Player player, GameRoom room) {
+        if (event == null || player == null || !isFlashRoomGuideContext(player, room)
+                || !isFlashRoomGuideBook(event.getItemDrop().getItemStack())) {
+            return false;
+        }
+        event.setCancelled(true);
+        event.getItemDrop().remove();
+        return true;
+    }
+
+    public boolean handleFlashRoomGuideBookSwap(Player player, GameRoom room) {
+        return player != null && isFlashRoomGuideContext(player, room)
+                && (isFlashRoomGuideBook(player.getInventory().getItemInMainHand())
+                || isFlashRoomGuideBook(player.getInventory().getItemInOffHand()));
+    }
+
+    private boolean isCurrentFlashRoomGuideBook(ItemStack item) {
+        if (!isFlashRoomGuideBook(item)) {
+            return false;
+        }
+        Integer version = item.getItemMeta().getPersistentDataContainer()
+                .get(flashRoomGuideBookVersionKey, PersistentDataType.INTEGER);
+        return version != null && version == FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION;
+    }
+
+    private boolean containsFlashRoomGuideBook(Player player) {
+        if (player == null) {
+            return false;
+        }
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (isFlashRoomGuideBook(item)) {
+                return true;
+            }
+        }
+        return isFlashRoomGuideBook(player.getInventory().getItemInOffHand());
+    }
+
+    private boolean isFlashRoomGuideContext(Player player, GameRoom room) {
+        if (player == null || room == null || !isFlashMode(room) || room.getState() == RoomState.ENDED) {
+            return false;
+        }
+        UUID uuid = player.getUniqueId();
+        return room.getAllPlayerUUIDs().contains(uuid) || room.isSpectator(uuid);
+    }
+
+    private void returnRoomItem(Player player, ItemStack item) {
+        if (player == null || isEmpty(item)) {
+            return;
+        }
+        Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
+        if (!leftovers.isEmpty()) {
+            leftovers = player.getEnderChest().addItem(leftovers.values().toArray(new ItemStack[0]));
+        }
+        if (!leftovers.isEmpty() && player.getWorld() != null) {
+            leftovers.values().forEach(leftover -> {
+                if (!isEmpty(leftover)) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+                }
+            });
+        }
+    }
+
     public ItemStack createFlashGameGuideBook(String volumeId) {
         int entry = parseFlashGuideEntryId(volumeId);
         if (entry > 0) {
@@ -2538,7 +2770,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(1, "本书速查", "闪光书", "打开后点目录数字跳转。", "无", "无", "每页固定写材料、用法、消耗、冷却、注意。"));
         pages.add(guideBookQuickPage(2, "闪光胜利", "末影龙、龙池传送门", "猎物先击败末影龙，再跳入龙池传送门。", "无", "无", "打死龙不是结束，真正结算在龙池。"));
         pages.add(guideBookQuickPage(3, "龙池结算", "末地龙池传送门", "猎物进入会变旁观并触发猎物胜利。", "无", "无", "猎人进入不会结算，会被动量弹开。"));
-        pages.add(guideBookQuickPage(4, "开局发放", "闪光书、浓缩珍珠", "闪光正式开始后自动发书。", "无", "无", "猎物额外获得1个浓缩珍珠，背包满优先放末影箱。"));
+        pages.add(guideBookQuickPage(4, "房间内书", "普通闪光/闪光赛事/终章闪光", "进入房间后闪光书固定在物品栏第二格，右键即可打开。", "无", "离开房间恢复", "书不能移动、丢弃或交换；猎物额外获得1个浓缩末影珍珠。"));
         pages.add(guideBookQuickPage(5, "附魔改装书", "玻璃围绕恶魂之泪", "合成后用于铁砧改装特殊物品。", "材料一次", "无", "它不是普通附魔书，是闪光改装核心。"));
         pages.add(guideBookQuickPage(6, "浓缩珍珠", "9颗末影珍珠", "合成1个浓缩末影珍珠。", "9珍珠", "无", "最大堆叠1，可做逃生、护层、回传材料。"));
         pages.add(guideBookQuickPage(7, "珍珠随机传送", "浓缩末影珍珠", "猎物手持右键随机传送50~200格。", "消耗1个", "短冷却", "落点会尽量找安全地表，不硬塞高空。"));
@@ -2574,7 +2806,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(37, "激流三叉戟弩", "弩+激流三叉戟", "装填后发射并推进玩家。", "不消耗三叉戟", "约1.85秒", "上次修复后不会卡住闪光物品发射冷却。"));
         pages.add(guideBookQuickPage(38, "食物弩弹", "弩+食物", "装填食物后发射给自己补给。", "消耗食物", "弩本身", "金苹果会额外给再生和吸收。"));
         pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "伤害跟随剑材质和锋利等附魔。"));
-        pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；爆炸造成范围伤害，但不会破坏方块。"));
+        pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；碰到方块或实体会爆炸并造成范围伤害，FlashUse不破坏方块，游戏中和FlashSMP会破坏方块。"));
         pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度再次强化、伤害+74%，命中追加20%破甲伤害。"));
         pages.add(guideBookQuickPage(42, "Q丢剑气", "任意剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "剑不只是近战，也可构筑远程路线。"));
         pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "敌人踩中后触发并消失，适合封路。"));
@@ -2613,11 +2845,11 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(76, "强化风弹", "风弹+旋风棒两段铁砧", "手持右键同时发射3个风弹。", "消耗1个", "短间隔", "本体是纸，item_model显示风弹，最大堆叠8。"));
         pages.add(guideBookQuickPage(77, "风暴剑甲", "剑首次需2强化风弹/盔甲需1个", "右键接入风暴路线。", "按实际数量消耗", "无", "矛势最高I且伤害降低60%；每件风暴盔甲减免12.5%，四件最高50%。"));
         pages.add(guideBookQuickPage(78, "权限速查", "权限节点", "按服务器权限系统配置。", "无", "无", "玩家: gamefunxiao.use / wiki / flashmusic；管理: gamefunxiao.admin。"));
-        pages.add(guideBookQuickPage(79, "其它细节", "闪光书/背包/乐魂", "需要时翻对应页确认。", "无", "无", "手册可丢弃，重要发放会尝试进末影箱。"));
-        pages.add(guideBookQuickPage(80, "轨道炮装配一", "蜂蜜块12、粘液块24、箱子1、Precipice唱片1", "黑曜石10、打火石1、发射器24", "音符盒4、活塞12、任意压力板1", "无", "材料必须同时放在背包中。"));
-        pages.add(guideBookQuickPage(81, "轨道炮装配二", "TNT32、红石粉42、红石块12、红石火把8", "幽匿感测体2、红石中继器12", "绊线钩2、线1、侦测器24", "无", "组装会一次扣除完整材料。"));
-        pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "完整装配材料", "无", "材料齐全后，用装配材料右键背包中的钓鱼竿。"));
-        pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "放在主手或副手，每10秒充能1格；32格充满后右键锁定准星方块。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定距离300格，目标上方40格生成32个真实TNT，引信3秒。"));
+        pages.add(guideBookQuickPage(79, "其它细节", "闪光书/背包/乐魂", "需要时翻对应页确认。", "无", "无", "房间内闪光书固定在第二格不可移动；离开房间后会恢复进入前的背包。"));
+        pages.add(guideBookQuickPage(80, "轨道炮装配一", "蜂蜜块12、粘液块24、箱子1、Precipice唱片1", "黑曜石10、打火石1、发射器24", "音符盒4、活塞12、任意压力板1", "无", "材料可以分多次投入，不必一次放齐。"));
+        pages.add(guideBookQuickPage(81, "轨道炮装配二", "TNT32、红石粉42、红石块12、红石火把8", "幽匿感测体2、红石中继器12", "绊线钩2、线1、侦测器24", "无", "每次只扣当前拿着的材料，多出的数量会留在手上。"));
+        pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "逐项投入", "无", "拿着当前材料打开背包右键钓鱼竿，只消耗当前手上的材料并保存进度。"));
+        pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "放在主手或副手，每10秒充能1格；32格充满后右键锁定准星方块。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定距离300格，目标上方40格生成32个真实TNT（含中心一枚），只给向外动量并自然下落，引信3秒；FlashUse保护方块，游戏中和FlashSMP正常爆炸。"));
         return pages;
     }
 
@@ -5512,23 +5744,48 @@ public class FlashModeManager {
         }
 
         event.setCancelled(true);
-        RailgunMaterialRequirement missing = findMissingRailgunMaterial(playerInventory, cursor, rodOnCurrent);
-        if (missing != null) {
-            int available = countRailgunMaterial(playerInventory, cursor, rodOnCurrent, missing.material());
-            playRailgunAssemblyMissingFeedback(player, missing, Math.max(0, missing.amount() - available));
+        int requirementIndex = findRailgunRequirementIndex(suppliedMaterial.getType());
+        if (requirementIndex < 0) {
+            return true;
+        }
+        ItemStack rod = rodOnCurrent ? current : cursor;
+        int[] progress = getRailgunAssemblyProgress(rod);
+        RailgunMaterialRequirement requirement = RAILGUN_ASSEMBLY_REQUIREMENTS.get(requirementIndex);
+        int alreadyInserted = Math.max(0, Math.min(requirement.amount(), progress[requirementIndex]));
+        int insertAmount = Math.min(suppliedMaterial.getAmount(), requirement.amount() - alreadyInserted);
+        if (insertAmount <= 0) {
+            player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
+                    "§x§F§F§7§7§5§5轨道炮装配 §8| §7这类材料已经投入完成 §f"
+                            + alreadyInserted + "§7/§f" + requirement.amount()));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.45F, 1.0F);
             return true;
         }
 
-        consumeRailgunAssemblyMaterials(playerInventory, event, cursor, rodOnCurrent);
-        ItemStack rod = rodOnCurrent ? current : cursor;
-        ItemStack result = applyRailgunLevel(rod, 1);
+        progress[requirementIndex] = alreadyInserted + insertAmount;
+        boolean completed = isRailgunAssemblyComplete(progress);
+        ItemStack result = completed
+                ? applyRailgunLevel(rod, 1)
+                : applyRailgunAssemblyProgress(rod, progress, requirementIndex, suppliedMaterial.getType());
+        ItemStack rest = suppliedMaterial.getAmount() == insertAmount
+                ? null
+                : copyWithAmount(suppliedMaterial, suppliedMaterial.getAmount() - insertAmount);
         if (rodOnCurrent) {
+            event.setCursor(rest);
             event.setCurrentItem(result);
         } else {
-            event.setCurrentItem(playerInventory.getItem(event.getSlot()));
+            event.setCurrentItem(rest);
             event.setCursor(result);
         }
-        playRailgunAssemblyFeedback(player);
+        if (completed) {
+            playRailgunAssemblyFeedback(player);
+        } else {
+            player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
+                    "§x§F§F§4§4§4§4轨道炮装配 §8| §7已投入 §f" + progress[requirementIndex]
+                            + "§7/§f" + requirement.amount() + " §8| §7总进度 §f"
+                            + countCompletedRailgunMaterials(progress) + "§7/§f"
+                            + RAILGUN_ASSEMBLY_REQUIREMENTS.size() + "类"));
+            player.playSound(player.getLocation(), Sound.BLOCK_PISTON_EXTEND, 0.32F, 1.0F);
+        }
         Bukkit.getScheduler().runTask(plugin, player::updateInventory);
         return true;
     }
@@ -5644,41 +5901,16 @@ public class FlashModeManager {
     }
 
     private boolean isRailgunAssemblyMaterial(Material material) {
-        if (material == null) {
-            return false;
-        }
-        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
-            if (railgunMaterialMatches(material, requirement.material())) {
-                return true;
-            }
-        }
-        return false;
+        return findRailgunRequirementIndex(material) >= 0;
     }
 
-    private RailgunMaterialRequirement findMissingRailgunMaterial(PlayerInventory inventory,
-                                                                   ItemStack cursor,
-                                                                   boolean includeCursor) {
-        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
-            int available = countRailgunMaterial(inventory, cursor, includeCursor, requirement.material());
-            if (available < requirement.amount()) {
-                return requirement;
+    private int findRailgunRequirementIndex(Material supplied) {
+        for (int index = 0; index < RAILGUN_ASSEMBLY_REQUIREMENTS.size(); index++) {
+            if (railgunMaterialMatches(supplied, RAILGUN_ASSEMBLY_REQUIREMENTS.get(index).material())) {
+                return index;
             }
         }
-        return null;
-    }
-
-    private int countRailgunMaterial(PlayerInventory inventory, ItemStack cursor,
-                                     boolean includeCursor, Material material) {
-        int amount = 0;
-        for (ItemStack item : inventory.getStorageContents()) {
-            if (!isEmpty(item) && railgunMaterialMatches(item.getType(), material)) {
-                amount += item.getAmount();
-            }
-        }
-        if (includeCursor && !isEmpty(cursor) && railgunMaterialMatches(cursor.getType(), material)) {
-            amount += cursor.getAmount();
-        }
-        return amount;
+        return -1;
     }
 
     private boolean railgunMaterialMatches(Material supplied, Material required) {
@@ -5691,65 +5923,87 @@ public class FlashModeManager {
         return supplied == required;
     }
 
-    private Material findRailgunRequirementMaterial(Material supplied) {
-        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
-            if (railgunMaterialMatches(supplied, requirement.material())) {
-                return requirement.material();
-            }
-        }
-        return null;
-    }
-
-    private void consumeRailgunAssemblyMaterials(PlayerInventory inventory, InventoryClickEvent event,
-                                                 ItemStack cursor, boolean rodOnCurrent) {
-        Map<Material, Integer> remaining = new HashMap<>();
-        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
-            remaining.put(requirement.material(), requirement.amount());
-        }
-
-        if (rodOnCurrent && !isEmpty(cursor)) {
-            Material requirementMaterial = findRailgunRequirementMaterial(cursor.getType());
-            int needed = remaining.getOrDefault(requirementMaterial, 0);
-            if (needed > 0) {
-                int consumed = Math.min(needed, cursor.getAmount());
-                remaining.put(requirementMaterial, needed - consumed);
-                ItemStack rest = cursor.clone();
-                rest.setAmount(cursor.getAmount() - consumed);
-                event.setCursor(rest.getAmount() <= 0 ? null : rest);
-            }
-        }
-
-        ItemStack[] storage = inventory.getStorageContents();
-        for (int slot = 0; slot < storage.length; slot++) {
-            ItemStack item = storage[slot];
-            if (isEmpty(item)) {
-                continue;
-            }
-            Material requirementMaterial = findRailgunRequirementMaterial(item.getType());
-            int needed = remaining.getOrDefault(requirementMaterial, 0);
-            if (needed <= 0) {
-                continue;
-            }
-            int consumed = Math.min(needed, item.getAmount());
-            int restAmount = item.getAmount() - consumed;
-            remaining.put(requirementMaterial, needed - consumed);
-            inventory.setItem(slot, restAmount <= 0 ? null : copyWithAmount(item, restAmount));
-        }
-    }
-
     private ItemStack copyWithAmount(ItemStack item, int amount) {
         ItemStack copy = item.clone();
         copy.setAmount(amount);
         return copy;
     }
 
-    private void playRailgunAssemblyMissingFeedback(Player player, RailgunMaterialRequirement requirement,
-                                                    int missing) {
-        sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix(
-                "railgun.material_missing",
-                Map.of("missing", String.valueOf(Math.max(1, missing)),
-                        "material", railgunMaterialName(requirement.material()))));
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.65F, 1.0F);
+    private int[] getRailgunAssemblyProgress(ItemStack item) {
+        int[] progress = new int[RAILGUN_ASSEMBLY_REQUIREMENTS.size()];
+        if (item == null || !item.hasItemMeta()) {
+            return progress;
+        }
+        int[] stored = item.getItemMeta().getPersistentDataContainer()
+                .get(railgunAssemblyProgressKey, PersistentDataType.INTEGER_ARRAY);
+        if (stored != null) {
+            System.arraycopy(stored, 0, progress, 0, Math.min(stored.length, progress.length));
+        }
+        for (int index = 0; index < progress.length; index++) {
+            progress[index] = Math.max(0, Math.min(
+                    RAILGUN_ASSEMBLY_REQUIREMENTS.get(index).amount(), progress[index]));
+        }
+        return progress;
+    }
+
+    private boolean isRailgunAssemblyComplete(int[] progress) {
+        if (progress == null || progress.length < RAILGUN_ASSEMBLY_REQUIREMENTS.size()) {
+            return false;
+        }
+        for (int index = 0; index < RAILGUN_ASSEMBLY_REQUIREMENTS.size(); index++) {
+            if (progress[index] < RAILGUN_ASSEMBLY_REQUIREMENTS.get(index).amount()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private int countCompletedRailgunMaterials(int[] progress) {
+        int completed = 0;
+        if (progress == null) {
+            return completed;
+        }
+        for (int index = 0; index < RAILGUN_ASSEMBLY_REQUIREMENTS.size() && index < progress.length; index++) {
+            if (progress[index] >= RAILGUN_ASSEMBLY_REQUIREMENTS.get(index).amount()) {
+                completed++;
+            }
+        }
+        return completed;
+    }
+
+    private ItemStack applyRailgunAssemblyProgress(ItemStack base, int[] progress,
+                                                   int currentIndex, Material suppliedMaterial) {
+        ItemStack result = base.clone();
+        result.setType(Material.FISHING_ROD);
+        result.setAmount(1);
+        ItemMeta meta = result.getItemMeta();
+        if (meta == null) {
+            return result;
+        }
+        meta.getPersistentDataContainer().remove(railgunLevelKey);
+        meta.getPersistentDataContainer().set(railgunAssemblyProgressKey,
+                PersistentDataType.INTEGER_ARRAY, progress.clone());
+        meta.setItemModel(NamespacedKey.minecraft("fishing_rod"));
+        if (meta.hasCustomModelData()) {
+            meta.setCustomModelData(null);
+        }
+        List<String> lore = meta.hasLore() && meta.getLore() != null
+                ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+        lore.removeIf(line -> line != null && (line.startsWith(RAILGUN_LORE_PREFIX)
+                || line.contains("轨道炮等级") || line.contains("轨道炮充能")
+                || line.contains("轨道炮锁定") || line.contains("轨道炮阵列")
+                || line.contains("轨道炮装配")));
+        RailgunMaterialRequirement requirement = RAILGUN_ASSEMBLY_REQUIREMENTS.get(currentIndex);
+        lore.add(RAILGUN_LORE_PREFIX + "装配：§f" + countCompletedRailgunMaterials(progress)
+                + "§7/§f" + RAILGUN_ASSEMBLY_REQUIREMENTS.size() + "类");
+        lore.add(RAILGUN_LORE_PREFIX + "当前：§e" + railgunMaterialDisplayName(suppliedMaterial)
+                + " §f" + progress[currentIndex] + "§7/§f" + requirement.amount());
+        lore.add(RAILGUN_LORE_PREFIX + "提示：§7继续手持材料右键投入");
+        meta.setItemName("§x§F§F§3§3§3§3轨§x§F§F§5§5§3§3道§x§F§F§7§7§3§3炮 §7装配中");
+        meta.setLore(lore);
+        result.setItemMeta(meta);
+        result.setData(DataComponentTypes.ITEM_MODEL, NamespacedKey.minecraft("fishing_rod"));
+        return result;
     }
 
     private void playRailgunAssemblyFeedback(Player player) {
@@ -5770,6 +6024,7 @@ public class FlashModeManager {
         meta.getPersistentDataContainer().set(railgunLevelKey, PersistentDataType.INTEGER, 1);
         meta.getPersistentDataContainer().set(railgunChargeSecondsKey, PersistentDataType.INTEGER, 0);
         meta.getPersistentDataContainer().set(railgunChargeProgressKey, PersistentDataType.INTEGER, 0);
+        meta.getPersistentDataContainer().remove(railgunAssemblyProgressKey);
         meta.getPersistentDataContainer().set(railgunChargedKey, PersistentDataType.BYTE, (byte) 0);
         if (!meta.getPersistentDataContainer().has(railgunIdKey, PersistentDataType.STRING)) {
             meta.getPersistentDataContainer().set(railgunIdKey, PersistentDataType.STRING, UUID.randomUUID().toString());
@@ -6061,6 +6316,13 @@ public class FlashModeManager {
             case WRITABLE_BOOK -> "书与笔";
             default -> material.name();
         };
+    }
+
+    private String railgunMaterialDisplayName(Material material) {
+        if (material != null && material.name().endsWith("_PRESSURE_PLATE")) {
+            return "压力板";
+        }
+        return railgunMaterialName(material);
     }
 
     public boolean handleDragonBreathWeaponInfusion(InventoryClickEvent event, Player player, GameRoom room) {

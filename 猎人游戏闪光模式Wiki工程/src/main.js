@@ -412,6 +412,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <tr><td>站位</td><td>猎物在中心，猎人围三圈生成；双/三猎物会沿用闪光的叠骑逻辑。</td></tr>
             <tr><td>死亡</td><td>猎物死亡后进入旁观并飞出去，猎物死完则猎人胜利。猎人死亡后在原地旁观飞出，随机 3~5 分钟复活，复活没有无敌。</td></tr>
             <tr><td>背包与传送</td><td>共享背包、个人背包、指南针传送和 70 格禁传规则都保留。</td></tr>
+            <tr><td>闪光书</td><td>终章房间入场后固定在物品栏第二格，右键打开；不能移动、丢弃或交换，离开房间时恢复进入前的背包。</td></tr>
             <tr><td>龙池通关</td><td>终章也必须先击败末影龙，再让猎物进入龙池传送门才结算；猎人踩进龙池传送门会取消传送，并用动量弹离。</td></tr>
           </tbody></table>
         `
@@ -509,6 +510,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <tr><td>猎人出生</td><td>猎人围绕猎物生成，高人数下会分成 3 圈。</td></tr>
             <tr><td>通关方式</td><td>打死末影龙不会立刻结束；末影龙死亡只会解锁龙池传送门，必须由猎物进入龙池传送门才算闪光通关。</td></tr>
             <tr><td>天气</td><td>正式开始后的前 10 分钟保持晴天；10 分钟后本局主游戏世界进入并保持雷雨天。等待大厅和模板大厅会保持晴天，不会被闪光天气影响。</td></tr>
+            <tr><td>闪光书</td><td>进入普通闪光、闪光赛事或终章闪光房间后，闪光书固定在物品栏第二格；可以右键打开，不能移动、丢弃或交换，离开房间后恢复进入前的背包。</td></tr>
           </tbody></table>
         `
       },
@@ -549,6 +551,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <li>聊天仍然按房间隔离，但不加模式前缀；闪光聊天、title、titer、计分和小游戏币提示都保持静默。</li>
             <li>指南针只保留追踪功能，不显示距离；跨维度时会保持乱转。</li>
             <li>该模式内死亡会掉落装备，猎人打猎人也有伤害。</li>
+            <li>赛事房间同样会提供闪光书，固定在物品栏第二格；它只用于查看规则，不参与死亡掉落，也不能移动或丢弃。</li>
           </ul>
         `
       },
@@ -656,7 +659,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <tr><td>钓鱼竿 + 激流 + 附魔改装</td><td>右键抛出后不再是普通鱼钩，会变成一束向前飞出的 end_rod 粒子钩；粒子钩有重力，最大距离更长，命中实体后会挂住目标。再次右键会按距离计算拉力，目标离你越远，拉回来的力量越大。</td></tr>
             <tr><td>盾牌 + 荆棘 + 附魔改装</td><td>破盾时会提高破盾者受到的反伤。</td></tr>
             <tr><td>水桶 + 海之眷顾 + 附魔改装</td><td>放水时有 10% 概率在水里生成随机剑，抽中后 3 秒冷却；放水和收水会保留物品数据。</td></tr>
-            <tr><td>望远镜 + 火焰附加 + 附魔改装</td><td>持续放大看同一区域：火焰附加 I 约 3 秒触发，火焰附加 II 约 1.5 秒触发。火焰粒子会逐渐聚集，完成后对区域内实体造成火焰伤害。</td></tr>
+            <tr><td>望远镜 + 火焰附加 + 附魔改装</td><td>持续照射同一区域：不是平面粒子，而是以准星为中心的立体圆形照射范围。火焰附加 I 约 3 秒、II 约 1.5 秒触发；照到实体时会显示环绕粒子、造成火焰伤害并点燃目标。</td></tr>
           </tbody></table>
         `
       },
@@ -691,6 +694,8 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <tr><td>风弹</td><td>弩装填或弓发射</td><td>弩发射的风弹无重力；弓发射的风弹有重力。弩有多重射击时会发射 3 个风弹。主手弓 + 副手风弹普通发射只消耗 1 个。</td></tr>
             <tr><td>TNT</td><td>弩装填</td><td>把 TNT 装进弩里发射出去。</td></tr>
             <tr><td>TNT + 已装烟花的弩</td><td>弩已经装入烟花，副手拿 TNT 后发射</td><td>烟花会被替换成无重力 TNT，飞行速度提高 70%，碰到方块或实体立即爆炸；没有碰撞时爆炸时间跟随这枚烟花原本的飞行时间。</td></tr>
+            <tr><td>发射器 + 2 个烈焰弹</td><td>主手发射器，副手烈焰弹，长按右键</td><td>必须蓄满 2.5 秒才可发射大火球；松开发射后碰到方块或实体爆炸并造成范围伤害。FlashUse 不破坏方块，游戏中和 FlashSMP 会破坏方块。</td></tr>
+            <tr><td>发射器 + 回响碎片</td><td>主手发射器，副手回响碎片，长按右键</td><td>蓄满后发射穿透回响炮；射程 +200%、速度继续强化、伤害 +74%，并追加 20% 破甲伤害。</td></tr>
             <tr><td>任意可吃食物</td><td>弩装填</td><td>发射后直接给玩家这个食物对应的饱食度与简单效果。</td></tr>
             <tr><td>三叉戟</td><td>弩装填</td><td>普通三叉戟会发射出去并支持忠诚；激流三叉戟不会飞出去，会回到副手并让玩家冲刺，随后进入 1.85 秒冷却。</td></tr>
             <tr><td>末影珍珠</td><td>弩装填</td><td>把末影珍珠装到弩里发射，按弩发射方向投出珍珠。</td></tr>
@@ -711,6 +716,61 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <li>旋风棒可以敲给三叉戟或弩：三叉戟飞行速度 +50%，弩特殊投射物飞行速度 +20%。</li>
             <li>弩如果打上紫水晶簇，发射特殊投射物时也会提高 12.5% 飞行速度。</li>
           </ul>
+        `
+      }
+    ]
+  },
+  {
+    group: '闪光模式 / 轨道炮',
+    slug: 'flash-railgun',
+    title: '轨道炮',
+    desc: '用红石结构逐项装配钓鱼竿，充满后向准星方块投放一圈真实 TNT。',
+    icon: '钓鱼竿',
+    status: '重型武器',
+    version: '1.0.6',
+    categories: ['闪光模式', '轨道炮', '红石', 'TNT', '书Wiki'],
+    body: [
+      {
+        title: '装配方式',
+        html: `
+          <p>轨道炮只有一个等级，成品外观保持原版钓鱼竿。拿着任意一项材料，打开背包后对钓鱼竿右键；每次只从当前手上投入对应材料，进度会保存在钓鱼竿里，可以分多次完成。</p>
+          <table class="wikitable"><thead><tr><th>材料</th><th>数量</th><th>材料</th><th>数量</th></tr></thead><tbody>
+            <tr><td>蜂蜜块</td><td>12</td><td>粘液块</td><td>24</td></tr>
+            <tr><td>箱子</td><td>1</td><td>Aaron Cherof - Precipice 唱片</td><td>1</td></tr>
+            <tr><td>黑曜石</td><td>10</td><td>打火石</td><td>1</td></tr>
+            <tr><td>发射器</td><td>24</td><td>音符盒</td><td>4</td></tr>
+            <tr><td>活塞</td><td>12</td><td>任意压力板</td><td>1</td></tr>
+            <tr><td>TNT</td><td>32</td><td>红石粉</td><td>42</td></tr>
+            <tr><td>红石块</td><td>12</td><td>红石火把</td><td>8</td></tr>
+            <tr><td>幽匿感测体</td><td>2</td><td>红石中继器</td><td>12</td></tr>
+            <tr><td>绊线钩</td><td>2</td><td>线</td><td>1</td></tr>
+            <tr><td>侦测器</td><td>24</td><td>TNT 矿车</td><td>3</td></tr>
+            <tr><td>漏斗</td><td>12</td><td>标靶</td><td>4</td></tr>
+            <tr><td>讲台</td><td>1</td><td>书与笔</td><td>1</td></tr>
+          </tbody></table>
+          <div class="wiki-notice note"><b>投入规则：</b>不是一次性检测背包。当前手上的材料不足时只投入手上数量，多出的材料不会被吞掉；同一类材料已满后再次投入不会继续扣除。</div>
+        `
+      },
+      {
+        title: '充能与发射',
+        html: `
+          <ul>
+            <li>轨道炮必须拿在主手或副手，只有手持时才会充能。</li>
+            <li>每 <b>10 秒</b>充能 1 格，最多 <b>32 格</b>；充满后右键才可以发射。</li>
+            <li>一次发射固定生成 <b>32 个真实 TNT</b>，不消耗背包里的 TNT；发射后充能归零，钓鱼竿耐久变为 1，必须重新充能。</li>
+            <li>准星会检测视角前方 <b>300 格</b>内的方块，TNT 在目标位置上方 <b>40 格</b>生成；不强行传送 TNT，只给水平方向向外的动量，让它自然下落。</li>
+            <li>引信为 <b>3 秒</b>，中心也会生成一枚 TNT；发射时使用物品碎裂声。</li>
+          </ul>
+        `
+      },
+      {
+        title: '爆炸保护',
+        html: `
+          <table class="wikitable"><thead><tr><th>环境</th><th>方块</th><th>实体</th></tr></thead><tbody>
+            <tr><td>FlashUse</td><td>不破坏</td><td>保留爆炸伤害</td></tr>
+            <tr><td>游戏中 / FlashSMP</td><td>正常破坏</td><td>保留爆炸伤害</td></tr>
+          </tbody></table>
+          <p>轨道炮不使用额外材质，成品和装配中的物品都使用原版钓鱼竿模型。</p>
         `
       }
     ]
@@ -927,6 +987,9 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <li>普通盾牌地面和空中都能弹射，空中每连续成功一次，下一次成功概率减半；失败不会消耗风弹。</li>
             <li>沉重盾牌使用风弹会进入蓄力流程，释放后进入10秒盾牌冷却。</li>
             <li>弓风弹下压弹射使用的是 <b>主手弓 + 副手普通风弹</b>，要求玩家在空中并且低头角度达到 <b>70°</b> 及以上；触发后消耗 <b>2 个</b>风弹。</li>
+            <li>风暴剑首次改装需要 <b>2 个强化风弹</b>；风暴矛势最高为 <b>I</b>，伤害按基础值的 <b>40%</b>计算。</li>
+            <li>每件风暴盔甲最多减免 <b>12.5%</b> 风暴矛势伤害，四件合计最高 <b>50%</b>。</li>
+            <li>激流钓鱼竿回收时的水平拉力和抬升力为原本的 <b>1.7 倍</b>。</li>
           </ul>
         `
       }
@@ -1039,7 +1102,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <tr><td>物品锁定</td><td>伪毒马铃薯和闪光特殊食物都带有闪光数据，不会被普通配方当成普通食材误消耗。</td></tr>
             <tr><td>赛事发放</td><td><b>闪光 · 赛事</b>正式开始后，非旁观玩家每 2 人一组；每组有 <b>25%</b> 概率随机给组内 1 人发放 1 个伪毒马铃薯。</td></tr>
           </tbody></table>
-          <div class="wiki-notice tip"><b>书 Wiki 同步：</b>局内 <b>闪光新增百科</b> 已增加 65～78 页，包含伪毒马铃薯、砂土农耕、沉重盾牌、TMT、矿车雷、煤炭镐、强化风弹和潮汐钓鱼。玩家可用 <code>/flashwiki</code> 或 <code>/gamefunxiao wiki</code> 重新领取。</div>
+          <div class="wiki-notice tip"><b>书 Wiki 同步：</b>局内 <b>闪光新增百科</b> 已同步到 65～83 页，包含伪毒马铃薯、砂土农耕、沉重盾牌、TMT、矿车雷、煤炭镐、强化风弹、风暴剑甲、轨道炮和潮汐钓鱼。普通闪光、闪光赛事、终章闪光房间内的书固定在第二格；玩家可用 <code>/flashwiki</code> 或 <code>/gamefunxiao wiki</code> 查看完整内容。</div>
         `
       },
       {
@@ -3167,7 +3230,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
 
 const app = document.querySelector('#app');
 const defaultSlug = 'start';
-const updatedAtText = '2026年6月17日';
+const updatedAtText = '2026年7月16日';
 
 function parseRouteHash(hash = location.hash) {
   if (!hash || !hash.startsWith('#/')) {

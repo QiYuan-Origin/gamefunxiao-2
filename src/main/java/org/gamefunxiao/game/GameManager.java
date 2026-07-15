@@ -345,6 +345,7 @@ public class GameManager {
             quit.setItemMeta(quitMeta);
         }
         player.getInventory().setItem(8, quit);
+        plugin.getFlashModeManager().ensureFlashRoomGuideBook(player, room);
     }
 
     private void giveStandaloneMiniGameLobbyItems(Player player, GameRoom room) {
@@ -9419,10 +9420,6 @@ public class GameManager {
                     p.setExp(0.0F);
                 }
 
-                if (flashMode && !isTournamentSilent(room)) {
-                    giveFlashStartGuideBook(p, room);
-                }
-
                 // 猎物解除飞行限制，正常生存模式
                 if (room.isPrey(uuid)) {
                     p.setAllowFlight(false);
@@ -9447,6 +9444,10 @@ public class GameManager {
                         p.showTitle(title);
                     }
                     giveHunterItems(p, room);
+                }
+
+                if (flashMode) {
+                    giveFlashStartGuideBook(p, room);
                 }
             }
         }
@@ -9655,20 +9656,15 @@ public class GameManager {
                 || !plugin.getFlashModeManager().isFlashMode(room)
                 || room.getState() != RoomState.PLAYING
                 || !room.isGameActuallyStarted()
-                || !room.getAllPlayerUUIDs().contains(player.getUniqueId())
-                || room.isSpectator(player.getUniqueId())) {
+                || (!room.getAllPlayerUUIDs().contains(player.getUniqueId())
+                && !room.isSpectator(player.getUniqueId()))) {
             return;
         }
-        ItemStack guide = plugin.getFlashModeManager().createFlashGameGuideBook();
-        StartItemGiveResult giveResult = giveOrEnderChestOrDrop(player, guide);
-        if (!isTournamentSilent(room)) {
-            player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
-                    + "§x§9§8§D§D§F§F✦ §b已收到 §f主 · 闪光书§7，§f右键§7打开主目录，点击目录可打开对应内容，§8可直接丢弃。"
-                    + (giveResult.storedInEnderChest() ? "§8（§e背包已满，已放入末影箱§8）" : "")
-                    + (giveResult.dropped() ? "§8（§c末影箱也满了，已掉落在脚下§8）" : ""));
+        boolean inserted = plugin.getFlashModeManager().ensureFlashRoomGuideBook(player, room);
+        if (inserted && !isTournamentSilent(room)) {
+            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.58f, 1.18f);
+            player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.34f, 1.58f);
         }
-        player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.58f, 1.18f);
-        player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.34f, 1.58f);
     }
 
     private void giveFlashPreyStartCondensedEnderPearl(Player prey, GameRoom room) {

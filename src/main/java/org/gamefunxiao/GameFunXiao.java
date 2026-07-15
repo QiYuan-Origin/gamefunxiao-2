@@ -106,6 +106,14 @@ public final class GameFunXiao extends JavaPlugin {
                 flashModeManager.syncFlashItemLore(player);
             }
         }), 60L);
+        // 房间内闪光书是固定工具：应对套装刷新、复活和跨服恢复造成的背包重建。
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            if (flashModeManager == null || roomManager == null) {
+                return;
+            }
+            Bukkit.getOnlinePlayers().forEach(player -> flashModeManager.ensureFlashRoomGuideBook(
+                    player, roomManager.getPlayerRoom(player.getUniqueId())));
+        }, 1L, 20L);
 
         getLogger().info("§x§5§5§F§F§A§A✓ GameFun 启动完成！");
     }
