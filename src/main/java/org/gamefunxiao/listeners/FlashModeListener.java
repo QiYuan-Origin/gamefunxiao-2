@@ -367,6 +367,9 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        if (plugin.getFlashModeManager().handleDispenserFireballExplosionDamage(event)) {
+            return;
+        }
         if (plugin.getFlashModeManager().handleDispenserLauncherFireballDamage(event)) {
             return;
         }
@@ -401,6 +404,7 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityDamage(EntityDamageEvent event) {
+        plugin.getFlashModeManager().handleDispenserFireballExplosionDamage(event);
         plugin.getFlashModeManager().handleFlashEnderDragonDamage(event);
         plugin.getFlashModeManager().handleHappyGhastChestplateDamage(event);
         plugin.getFlashModeManager().handleTntArmorExplosionDamage(event);

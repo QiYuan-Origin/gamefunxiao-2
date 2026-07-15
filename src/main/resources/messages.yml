@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 18
+config_version: 19
 
 # 通用消息
 general:
@@ -20,9 +20,11 @@ general:
 
 railgun:
   inactive: "§x§F§F§7§7§5§5✦ §c轨道炮只能在闪光玩法进行中使用。"
+  no_target: "§x§F§F§7§7§5§5✦ §c准星300格内没有可锁定的方块，未消耗充能。"
   world_changed: "§x§F§F§7§7§5§5✦ §c目标世界已经变化，请重新打开轨道炮。"
   charged_missing: "§x§F§F§7§7§5§5✦ §c没有找到这一把已充能的轨道炮。"
   material_missing: "§x§F§F§7§7§5§5✦ §e材料不足，§7还需要 §f{missing}个§e{material}§7。"
+  assembled: "§x§F§F§4§4§4§4✦ §c轨道炮组装完成，手持或放在副手每10秒充能1格。"
   upgraded: "§x§F§F§4§4§4§4✦ §c轨道炮 {level} §7组装完成，手持 §f10秒 §7即可获得一发充能。"
 
 shop:

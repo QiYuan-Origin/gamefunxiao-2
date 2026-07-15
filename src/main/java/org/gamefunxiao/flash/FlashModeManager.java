@@ -146,7 +146,6 @@ import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.game.GameMode;
 import org.gamefunxiao.game.GameRoom;
 import org.gamefunxiao.game.RoomState;
-import org.gamefunxiao.menu.flash.RailgunTargetMenu;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -279,6 +278,7 @@ public class FlashModeManager {
     private static final double DISPENSER_FIREBALL_MAX_BONUS_SPEED = 1.85D;
     private static final double DISPENSER_FIREBALL_BASE_RADIUS = 1.45D;
     private static final double DISPENSER_FIREBALL_MAX_BONUS_RADIUS = 0.55D;
+    private static final float DISPENSER_FIREBALL_EXPLOSION_POWER = 1.75F;
     private static final double DISPENSER_ECHO_CANNON_BASE_DAMAGE = 4.5D;
     private static final double DISPENSER_ECHO_CANNON_MAX_BONUS_DAMAGE = 4.5D;
     private static final double DISPENSER_ECHO_CANNON_BASE_RANGE = 10.0D;
@@ -471,21 +471,45 @@ public class FlashModeManager {
     private static final String FLASH_FISHING_BAIT_NAME = "§x§5§5§D§D§F§F潮§x§6§8§E§5§F§F汐§x§7§B§E§D§F§F鱼§x§8§E§F§5§F§F饵";
     private static final int ENHANCED_WIND_CHARGE_MAX_STACK = 8;
     private static final String ENHANCED_WIND_CHARGE_NAME = "§x§B§B§F§F§F§F强§x§A§8§F§4§F§F化§x§9§5§E§9§F§F风§x§8§2§D§E§F§F弹";
-    private static final int RAILGUN_CHARGE_SECONDS = 10;
-    private static final int RAILGUN_TASK_INTERVAL_TICKS = 2;
-    private static final int RAILGUN_ANIMATION_STEPS = 24;
-    private static final int RAILGUN_FLIGHT_TICKS = RAILGUN_ANIMATION_STEPS * RAILGUN_TASK_INTERVAL_TICKS;
-    private static final int RAILGUN_TNT_FUSE_TICKS = RAILGUN_FLIGHT_TICKS + 24;
-    private static final double RAILGUN_TNT_DRAG = 0.98D;
-    private static final double[] RAILGUN_RING_SPACINGS = {0.0D, 2.4D, 2.7D, 3.0D};
-    private static final double[] RAILGUN_DENSITIES = {0.0D, 0.90D, 1.05D, 1.20D};
-    private static final double[] RAILGUN_FLY_SPEEDS = {0.0D, 2.15D, 2.35D, 2.55D};
-    private static final double[] RAILGUN_DOWNWARD_SPEEDS = {0.0D, -1.05D, -1.18D, -1.32D};
-    private static final int[] RAILGUN_HEIGHT_OFFSETS = {0, 24, 28, 32};
-    private static final int[] RAILGUN_TNT_FUSE_TICKS_BY_LEVEL = {0, 34, 38, 42};
-    private static final int[] RAILGUN_TNT_COUNTS = {0, 83, 179, 340};
-    private static final int[] RAILGUN_RING_COUNTS = {0, 3, 4, 5};
-    private static final float[] RAILGUN_EXPLOSION_POWERS = {0.0F, 3.2F, 3.6F, 4.0F};
+    private static final int RAILGUN_CHARGE_UNITS = 32;
+    private static final int RAILGUN_CHARGE_UNIT_SECONDS = 10;
+    private static final long RAILGUN_CHARGE_TASK_INTERVAL_TICKS = 20L;
+    private static final double RAILGUN_MAX_TARGET_RANGE = 300.0D;
+    private static final int RAILGUN_HEIGHT_OFFSET = 40;
+    private static final int RAILGUN_SINGLE_TNT_COUNT = 32;
+    private static final int RAILGUN_SINGLE_RING_COUNT = 4;
+    private static final double RAILGUN_SINGLE_RING_SPACING = 3.0D;
+    private static final double RAILGUN_SINGLE_DENSITY = 0.166D;
+    private static final double RAILGUN_SINGLE_FLY_SPEED = 1.0D;
+    private static final int RAILGUN_SINGLE_FUSE_TICKS = 20 * 3;
+    private static final float RAILGUN_SINGLE_EXPLOSION_POWER = 4.0F;
+    private static final long RAILGUN_USE_DEBOUNCE_MILLIS = 250L;
+    private static final List<RailgunMaterialRequirement> RAILGUN_ASSEMBLY_REQUIREMENTS = List.of(
+            new RailgunMaterialRequirement(Material.HONEY_BLOCK, 12),
+            new RailgunMaterialRequirement(Material.SLIME_BLOCK, 24),
+            new RailgunMaterialRequirement(Material.CHEST, 1),
+            new RailgunMaterialRequirement(Material.MUSIC_DISC_PRECIPICE, 1),
+            new RailgunMaterialRequirement(Material.OBSIDIAN, 10),
+            new RailgunMaterialRequirement(Material.FLINT_AND_STEEL, 1),
+            new RailgunMaterialRequirement(Material.DISPENSER, 24),
+            new RailgunMaterialRequirement(Material.NOTE_BLOCK, 4),
+            new RailgunMaterialRequirement(Material.PISTON, 12),
+            new RailgunMaterialRequirement(Material.STONE_PRESSURE_PLATE, 1),
+            new RailgunMaterialRequirement(Material.TNT, 32),
+            new RailgunMaterialRequirement(Material.REDSTONE, 42),
+            new RailgunMaterialRequirement(Material.REDSTONE_BLOCK, 12),
+            new RailgunMaterialRequirement(Material.REDSTONE_TORCH, 8),
+            new RailgunMaterialRequirement(Material.SCULK_SENSOR, 2),
+            new RailgunMaterialRequirement(Material.REPEATER, 12),
+            new RailgunMaterialRequirement(Material.TRIPWIRE_HOOK, 2),
+            new RailgunMaterialRequirement(Material.STRING, 1),
+            new RailgunMaterialRequirement(Material.OBSERVER, 24),
+            new RailgunMaterialRequirement(Material.TNT_MINECART, 3),
+            new RailgunMaterialRequirement(Material.HOPPER, 12),
+            new RailgunMaterialRequirement(Material.TARGET, 4),
+            new RailgunMaterialRequirement(Material.LECTERN, 1),
+            new RailgunMaterialRequirement(Material.WRITABLE_BOOK, 1)
+    );
     private static final String RAILGUN_LORE_PREFIX = "§8- §x§F§F§4§4§4§4轨道炮";
     private static final String STORM_SWORD_LINE_PREFIX = "§8- §x§8§8§D§D§F§F风暴";
     private static final String STORM_SWORD_KINETIC_LINE_PREFIX = "§8- §x§B§B§F§F§F§F风暴矛势";
@@ -561,6 +585,7 @@ public class FlashModeManager {
     private final NamespacedKey dragonBreathWeaponKey;
     private final NamespacedKey railgunLevelKey;
     private final NamespacedKey railgunChargeSecondsKey;
+    private final NamespacedKey railgunChargeProgressKey;
     private final NamespacedKey railgunChargedKey;
     private final NamespacedKey railgunIdKey;
     private final NamespacedKey railgunVisualTntKey;
@@ -634,6 +659,7 @@ public class FlashModeManager {
     private final Map<UUID, Integer> dispenserChargeFeedbackStages = new HashMap<>();
     private final Map<UUID, Long> dispenserLauncherCooldowns = new HashMap<>();
     private final Map<UUID, DispenserFireballData> dispenserFireballs = new HashMap<>();
+    private DispenserFireballExplosionContext activeDispenserFireballExplosion;
     private final Map<UUID, Integer> unstableMaceSmashCounts = new HashMap<>();
     private final Map<UUID, Double> unstableMaceNextReboundChances = new HashMap<>();
     private final Map<UUID, Long> unstableMaceDisplacementLocks = new HashMap<>();
@@ -699,9 +725,8 @@ public class FlashModeManager {
     private final Set<UUID> standaloneFlashUsers = new HashSet<>();
     private final Set<UUID> spyglassFocusMonitors = new HashSet<>();
     private final Map<UUID, Long> heroTrialCooldowns = new HashMap<>();
-    private final Map<UUID, RailgunStrike> activeRailgunStrikes = new LinkedHashMap<>();
+    private final Map<UUID, Long> railgunUseDebounce = new HashMap<>();
     private BukkitTask railgunChargeTask;
-    private BukkitTask railgunAnimationTask;
 
     public FlashModeManager(GameFunXiao plugin) {
         this.plugin = plugin;
@@ -755,6 +780,7 @@ public class FlashModeManager {
         this.dragonBreathWeaponKey = new NamespacedKey(plugin, "flash_dragon_breath_weapon");
         this.railgunLevelKey = new NamespacedKey(plugin, "flash_railgun_level");
         this.railgunChargeSecondsKey = new NamespacedKey(plugin, "flash_railgun_charge_seconds");
+        this.railgunChargeProgressKey = new NamespacedKey(plugin, "flash_railgun_charge_progress");
         this.railgunChargedKey = new NamespacedKey(plugin, "flash_railgun_charged");
         this.railgunIdKey = new NamespacedKey(plugin, "flash_railgun_id");
         this.railgunVisualTntKey = new NamespacedKey(plugin, "flash_railgun_visual_tnt");
@@ -2588,7 +2614,10 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(77, "风暴剑甲", "剑首次需2强化风弹/盔甲需1个", "右键接入风暴路线。", "按实际数量消耗", "无", "矛势最高I且伤害降低60%；每件风暴盔甲减免12.5%，四件最高50%。"));
         pages.add(guideBookQuickPage(78, "权限速查", "权限节点", "按服务器权限系统配置。", "无", "无", "玩家: gamefunxiao.use / wiki / flashmusic；管理: gamefunxiao.admin。"));
         pages.add(guideBookQuickPage(79, "其它细节", "闪光书/背包/乐魂", "需要时翻对应页确认。", "无", "无", "手册可丢弃，重要发放会尝试进末影箱。"));
-        pages.add(guideBookQuickPage(80, "轨道炮", "钓鱼竿+32红石粉", "手持10秒充能，右键选择区块后呼叫环形TNT轰击。", "不消耗TNT", "每次只能存1发", "二级需16红石块，三级需8侦测器；范围3x3/5x5/9x5。"));
+        pages.add(guideBookQuickPage(80, "轨道炮装配一", "蜂蜜块12、粘液块24、箱子1、Precipice唱片1", "黑曜石10、打火石1、发射器24", "音符盒4、活塞12、任意压力板1", "无", "材料必须同时放在背包中。"));
+        pages.add(guideBookQuickPage(81, "轨道炮装配二", "TNT32、红石粉42、红石块12、红石火把8", "幽匿感测体2、红石中继器12", "绊线钩2、线1、侦测器24", "无", "组装会一次扣除完整材料。"));
+        pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "完整装配材料", "无", "材料齐全后，用装配材料右键背包中的钓鱼竿。"));
+        pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "放在主手或副手，每10秒充能1格；32格充满后右键锁定准星方块。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定距离300格，目标上方40格生成32个真实TNT，引信3秒。"));
         return pages;
     }
 
@@ -5460,47 +5489,48 @@ public class FlashModeManager {
     }
 
     public boolean handleRailgunInfusion(InventoryClickEvent event, Player player, GameRoom room) {
-        if (!isFlashCombatAvailable(player, room) || !event.getClick().isRightClick()) {
+        if (event == null || player == null || event.isCancelled()
+                || !isFlashCombatAvailable(player, room) || !event.getClick().isRightClick()) {
             return false;
         }
-        if (event.getClickedInventory() == null || event.getClickedInventory().getHolder() != player) {
+        if (!(event.getClickedInventory() instanceof PlayerInventory playerInventory)
+                || playerInventory.getHolder() != player) {
             return false;
         }
 
         ItemStack cursor = event.getCursor();
         ItemStack current = event.getCurrentItem();
-        if (isEmpty(cursor) || isEmpty(current)) {
+        boolean rodOnCurrent = isRailgunAssemblyRod(current);
+        boolean rodOnCursor = isRailgunAssemblyRod(cursor);
+        if (rodOnCurrent == rodOnCursor) {
             return false;
         }
 
-        RailgunUpgradeRequirement cursorRequirement = getRailgunUpgradeRequirement(current, cursor.getType());
-        if (cursorRequirement != null) {
-            event.setCancelled(true);
-            if (cursor.getAmount() < cursorRequirement.amount()) {
-                playRailgunInsufficientFeedback(player, cursorRequirement, cursor.getAmount());
-                return true;
-            }
-            ItemStack result = applyRailgunLevel(current, cursorRequirement.nextLevel());
-            event.setCurrentItem(result);
-            consumeCursorAmount(event, cursor, cursorRequirement.amount());
-            playRailgunUpgradeFeedback(player, cursorRequirement.nextLevel());
+        ItemStack suppliedMaterial = rodOnCurrent ? cursor : current;
+        if (isEmpty(suppliedMaterial) || !isRailgunAssemblyMaterial(suppliedMaterial.getType())) {
+            return false;
+        }
+
+        event.setCancelled(true);
+        RailgunMaterialRequirement missing = findMissingRailgunMaterial(playerInventory, cursor, rodOnCurrent);
+        if (missing != null) {
+            int available = countRailgunMaterial(playerInventory, cursor, rodOnCurrent, missing.material());
+            playRailgunAssemblyMissingFeedback(player, missing, Math.max(0, missing.amount() - available));
             return true;
         }
 
-        RailgunUpgradeRequirement currentRequirement = getRailgunUpgradeRequirement(cursor, current.getType());
-        if (currentRequirement != null) {
-            event.setCancelled(true);
-            if (current.getAmount() < currentRequirement.amount()) {
-                playRailgunInsufficientFeedback(player, currentRequirement, current.getAmount());
-                return true;
-            }
-            ItemStack result = applyRailgunLevel(cursor, currentRequirement.nextLevel());
+        consumeRailgunAssemblyMaterials(playerInventory, event, cursor, rodOnCurrent);
+        ItemStack rod = rodOnCurrent ? current : cursor;
+        ItemStack result = applyRailgunLevel(rod, 1);
+        if (rodOnCurrent) {
+            event.setCurrentItem(result);
+        } else {
+            event.setCurrentItem(playerInventory.getItem(event.getSlot()));
             event.setCursor(result);
-            consumeCurrentAmount(event, current, currentRequirement.amount());
-            playRailgunUpgradeFeedback(player, currentRequirement.nextLevel());
-            return true;
         }
-        return false;
+        playRailgunAssemblyFeedback(player);
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+        return true;
     }
 
     public boolean handleRailgunUse(PlayerInteractEvent event) {
@@ -5518,6 +5548,11 @@ public class FlashModeManager {
         event.setUseInteractedBlock(Event.Result.DENY);
         event.setUseItemInHand(Event.Result.DENY);
         Player player = event.getPlayer();
+        long now = System.currentTimeMillis();
+        Long lastUse = railgunUseDebounce.put(player.getUniqueId(), now);
+        if (lastUse != null && now - lastUse < RAILGUN_USE_DEBOUNCE_MILLIS) {
+            return true;
+        }
         if (!isFlashCombatAvailable(player)) {
             sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.inactive"));
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.65F, 0.72F);
@@ -5528,15 +5563,33 @@ public class FlashModeManager {
         if (!isRailgunCharged(railgun)) {
             int seconds = getRailgunChargeSeconds(railgun);
             player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
-                    "§x§F§F§5§5§5§5轨道炮未充满 §8| §f" + seconds + "§7/§f" + RAILGUN_CHARGE_SECONDS + "秒"));
+                    "§x§F§F§5§5§5§5轨道炮未充满 §8| §f" + seconds + "§7/§f" + RAILGUN_CHARGE_UNITS));
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.55F, 0.78F);
             return true;
         }
 
-        String railgunId = getRailgunId(railgun);
-        org.bukkit.Chunk center = player.getLocation().getChunk();
-        new RailgunTargetMenu(plugin, player, level, railgunId, player.getWorld().getUID(),
-                center.getX(), center.getZ(), player.getFacing()).open();
+        RayTraceResult ray = player.getWorld().rayTraceBlocks(
+                player.getEyeLocation(), player.getEyeLocation().getDirection(),
+                RAILGUN_MAX_TARGET_RANGE, FluidCollisionMode.NEVER, true);
+        if (ray == null || ray.getHitBlock() == null) {
+            sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.no_target"));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.65F, 0.85F);
+            return true;
+        }
+
+        Block target = ray.getHitBlock();
+        Location impact = new Location(player.getWorld(),
+                target.getX() + 0.5D, target.getY(), target.getZ() + 0.5D);
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        setRailgunCharge(railgun, 0, false);
+        setRailgunShotDurability(railgun);
+        launchRailgunStrike(player, room, impact);
+        player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
+                "§x§F§F§3§3§3§3轨道炮已发射 §8| §7目标 §f"
+                        + target.getX() + "§8, §f" + target.getY() + "§8, §f" + target.getZ()));
+        player.playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 0.95F, 1.0F);
+        player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.85F, 1.0F);
+        player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.72F, 1.0F);
         return true;
     }
 
@@ -5554,20 +5607,21 @@ public class FlashModeManager {
 
         ItemStack railgun = findHeldRailgun(player, railgunId);
         int level = getRailgunLevel(railgun);
-        if (level <= 0 || level != Math.max(1, Math.min(3, expectedLevel)) || !isRailgunCharged(railgun)) {
+        if (level <= 0 || !isRailgunCharged(railgun)) {
             sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.charged_missing"));
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.65F, 0.85F);
             return false;
         }
 
         setRailgunCharge(railgun, 0, false);
+        setRailgunShotDurability(railgun);
         int blockX = chunkX * 16 + 8;
         int blockZ = chunkZ * 16 + 8;
         int blockY = Math.min(world.getMaxHeight() - 2,
                 Math.max(world.getMinHeight() + 1, world.getHighestBlockYAt(blockX, blockZ) + 1));
         Location impact = new Location(world, blockX + 0.5D, blockY + 0.1D, blockZ + 0.5D);
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
-        launchRailgunStrike(player, room, level, impact);
+        launchRailgunStrike(player, room, impact);
 
         player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
                 "§x§F§F§3§3§3§3轨道炮已发射 §8| §7目标区块 §f" + chunkX + "§8, §f" + chunkZ));
@@ -5582,29 +5636,127 @@ public class FlashModeManager {
             railgunChargeTask.cancel();
             railgunChargeTask = null;
         }
-        if (railgunAnimationTask != null) {
-            railgunAnimationTask.cancel();
-            railgunAnimationTask = null;
-        }
-        activeRailgunStrikes.values().forEach(this::removeRailgunTnts);
-        activeRailgunStrikes.clear();
+        railgunUseDebounce.clear();
     }
 
-    private RailgunUpgradeRequirement getRailgunUpgradeRequirement(ItemStack equipment, Material material) {
-        if (equipment == null || equipment.getType() != Material.FISHING_ROD || material == null) {
-            return null;
+    private boolean isRailgunAssemblyRod(ItemStack item) {
+        return item != null && item.getType() == Material.FISHING_ROD && getRailgunLevel(item) <= 0;
+    }
+
+    private boolean isRailgunAssemblyMaterial(Material material) {
+        if (material == null) {
+            return false;
         }
-        int level = getRailgunLevel(equipment);
-        if (level == 0 && material == Material.REDSTONE) {
-            return new RailgunUpgradeRequirement(Material.REDSTONE, 32, 1);
+        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
+            if (railgunMaterialMatches(material, requirement.material())) {
+                return true;
+            }
         }
-        if (level == 1 && material == Material.REDSTONE_BLOCK) {
-            return new RailgunUpgradeRequirement(Material.REDSTONE_BLOCK, 16, 2);
-        }
-        if (level == 2 && material == Material.OBSERVER) {
-            return new RailgunUpgradeRequirement(Material.OBSERVER, 8, 3);
+        return false;
+    }
+
+    private RailgunMaterialRequirement findMissingRailgunMaterial(PlayerInventory inventory,
+                                                                   ItemStack cursor,
+                                                                   boolean includeCursor) {
+        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
+            int available = countRailgunMaterial(inventory, cursor, includeCursor, requirement.material());
+            if (available < requirement.amount()) {
+                return requirement;
+            }
         }
         return null;
+    }
+
+    private int countRailgunMaterial(PlayerInventory inventory, ItemStack cursor,
+                                     boolean includeCursor, Material material) {
+        int amount = 0;
+        for (ItemStack item : inventory.getStorageContents()) {
+            if (!isEmpty(item) && railgunMaterialMatches(item.getType(), material)) {
+                amount += item.getAmount();
+            }
+        }
+        if (includeCursor && !isEmpty(cursor) && railgunMaterialMatches(cursor.getType(), material)) {
+            amount += cursor.getAmount();
+        }
+        return amount;
+    }
+
+    private boolean railgunMaterialMatches(Material supplied, Material required) {
+        if (supplied == null || required == null) {
+            return false;
+        }
+        if (required == Material.STONE_PRESSURE_PLATE) {
+            return supplied.name().endsWith("_PRESSURE_PLATE");
+        }
+        return supplied == required;
+    }
+
+    private Material findRailgunRequirementMaterial(Material supplied) {
+        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
+            if (railgunMaterialMatches(supplied, requirement.material())) {
+                return requirement.material();
+            }
+        }
+        return null;
+    }
+
+    private void consumeRailgunAssemblyMaterials(PlayerInventory inventory, InventoryClickEvent event,
+                                                 ItemStack cursor, boolean rodOnCurrent) {
+        Map<Material, Integer> remaining = new HashMap<>();
+        for (RailgunMaterialRequirement requirement : RAILGUN_ASSEMBLY_REQUIREMENTS) {
+            remaining.put(requirement.material(), requirement.amount());
+        }
+
+        if (rodOnCurrent && !isEmpty(cursor)) {
+            Material requirementMaterial = findRailgunRequirementMaterial(cursor.getType());
+            int needed = remaining.getOrDefault(requirementMaterial, 0);
+            if (needed > 0) {
+                int consumed = Math.min(needed, cursor.getAmount());
+                remaining.put(requirementMaterial, needed - consumed);
+                ItemStack rest = cursor.clone();
+                rest.setAmount(cursor.getAmount() - consumed);
+                event.setCursor(rest.getAmount() <= 0 ? null : rest);
+            }
+        }
+
+        ItemStack[] storage = inventory.getStorageContents();
+        for (int slot = 0; slot < storage.length; slot++) {
+            ItemStack item = storage[slot];
+            if (isEmpty(item)) {
+                continue;
+            }
+            Material requirementMaterial = findRailgunRequirementMaterial(item.getType());
+            int needed = remaining.getOrDefault(requirementMaterial, 0);
+            if (needed <= 0) {
+                continue;
+            }
+            int consumed = Math.min(needed, item.getAmount());
+            int restAmount = item.getAmount() - consumed;
+            remaining.put(requirementMaterial, needed - consumed);
+            inventory.setItem(slot, restAmount <= 0 ? null : copyWithAmount(item, restAmount));
+        }
+    }
+
+    private ItemStack copyWithAmount(ItemStack item, int amount) {
+        ItemStack copy = item.clone();
+        copy.setAmount(amount);
+        return copy;
+    }
+
+    private void playRailgunAssemblyMissingFeedback(Player player, RailgunMaterialRequirement requirement,
+                                                    int missing) {
+        sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix(
+                "railgun.material_missing",
+                Map.of("missing", String.valueOf(Math.max(1, missing)),
+                        "material", railgunMaterialName(requirement.material()))));
+        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.65F, 1.0F);
+    }
+
+    private void playRailgunAssemblyFeedback(Player player) {
+        sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.assembled"));
+        player.playSound(player.getLocation(), Sound.BLOCK_PISTON_EXTEND, 0.82F, 1.0F);
+        player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.78F, 1.0F);
+        player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.55F, 1.0F);
     }
 
     private ItemStack applyRailgunLevel(ItemStack base, int level) {
@@ -5615,12 +5767,15 @@ public class FlashModeManager {
         if (meta == null) {
             return result;
         }
-        int safeLevel = Math.max(1, Math.min(3, level));
-        meta.getPersistentDataContainer().set(railgunLevelKey, PersistentDataType.INTEGER, safeLevel);
+        meta.getPersistentDataContainer().set(railgunLevelKey, PersistentDataType.INTEGER, 1);
         meta.getPersistentDataContainer().set(railgunChargeSecondsKey, PersistentDataType.INTEGER, 0);
+        meta.getPersistentDataContainer().set(railgunChargeProgressKey, PersistentDataType.INTEGER, 0);
         meta.getPersistentDataContainer().set(railgunChargedKey, PersistentDataType.BYTE, (byte) 0);
         if (!meta.getPersistentDataContainer().has(railgunIdKey, PersistentDataType.STRING)) {
             meta.getPersistentDataContainer().set(railgunIdKey, PersistentDataType.STRING, UUID.randomUUID().toString());
+        }
+        if (meta instanceof Damageable damageable) {
+            damageable.setDamage(0);
         }
         refreshRailgunMeta(result, meta);
         result.setItemMeta(meta);
@@ -5647,27 +5802,31 @@ public class FlashModeManager {
 
     private void refreshRailgunMeta(ItemStack railgun, ItemMeta meta) {
         railgun.setType(Material.FISHING_ROD);
+        meta.getPersistentDataContainer().set(railgunLevelKey, PersistentDataType.INTEGER, 1);
         meta.setItemModel(NamespacedKey.minecraft("fishing_rod"));
         if (meta.hasCustomModelData()) {
             meta.setCustomModelData(null);
         }
-        int level = Math.max(1, Math.min(3, getRailgunLevelFromMeta(meta)));
-        int seconds = Math.max(0, Math.min(RAILGUN_CHARGE_SECONDS,
+        int seconds = Math.max(0, Math.min(RAILGUN_CHARGE_UNITS,
                 getPersistentInteger(meta, railgunChargeSecondsKey, 0)));
         boolean charged = getPersistentByte(meta, railgunChargedKey) != 0;
-        if (charged) {
-            seconds = RAILGUN_CHARGE_SECONDS;
-            meta.getPersistentDataContainer().set(railgunChargeSecondsKey, PersistentDataType.INTEGER, seconds);
+        if (!charged && seconds >= RAILGUN_CHARGE_UNITS) {
+            charged = true;
+            meta.getPersistentDataContainer().set(railgunChargedKey, PersistentDataType.BYTE, (byte) 1);
         }
-        meta.setItemName("§x§F§F§3§3§3§3轨§x§F§F§5§5§3§3道§x§F§F§7§7§3§3炮 §7" + railgunLevelName(level));
+        if (charged) {
+            seconds = RAILGUN_CHARGE_UNITS;
+            meta.getPersistentDataContainer().set(railgunChargeSecondsKey, PersistentDataType.INTEGER, seconds);
+            meta.getPersistentDataContainer().set(railgunChargeProgressKey, PersistentDataType.INTEGER, 0);
+        }
+        meta.setItemName("§x§F§F§3§3§3§3轨§x§F§F§5§5§3§3道§x§F§F§7§7§3§3炮");
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.removeIf(line -> line != null && (line.startsWith(RAILGUN_LORE_PREFIX)
                 || line.contains("轨道炮等级") || line.contains("轨道炮充能")
                 || line.contains("轨道炮锁定") || line.contains("轨道炮阵列")));
-        lore.add(RAILGUN_LORE_PREFIX + "等级：§f" + railgunLevelName(level));
-        lore.add(RAILGUN_LORE_PREFIX + "充能：" + (charged ? "§a已就绪" : "§f" + seconds + "§7/§f10秒"));
-        lore.add(RAILGUN_LORE_PREFIX + "锁定：§f" + railgunTargetShape(level) + "区块§7，当前位置居中");
-        lore.add(RAILGUN_LORE_PREFIX + "阵列：§f" + RAILGUN_TNT_COUNTS[level] + "个真实TNT §8| §7右键锁定");
+        lore.add(RAILGUN_LORE_PREFIX + "充能：" + (charged ? "§a已就绪" : "§f" + seconds + "§7/§f" + RAILGUN_CHARGE_UNITS));
+        lore.add(RAILGUN_LORE_PREFIX + "目标：§f准星300格内方块§7，上方40格");
+        lore.add(RAILGUN_LORE_PREFIX + "阵列：§f" + RAILGUN_SINGLE_TNT_COUNT + "个真实TNT §8| §7右键发射");
         meta.setLore(lore);
     }
 
@@ -5675,7 +5834,7 @@ public class FlashModeManager {
         if (item == null || !item.hasItemMeta()) {
             return 0;
         }
-        return Math.max(0, Math.min(3, getRailgunLevelFromMeta(item.getItemMeta())));
+        return getRailgunLevelFromMeta(item.getItemMeta()) > 0 ? 1 : 0;
     }
 
     private int getRailgunLevelFromMeta(ItemMeta meta) {
@@ -5686,12 +5845,20 @@ public class FlashModeManager {
         if (item == null || !item.hasItemMeta()) {
             return 0;
         }
-        return Math.max(0, Math.min(RAILGUN_CHARGE_SECONDS,
+        return Math.max(0, Math.min(RAILGUN_CHARGE_UNITS,
                 getPersistentInteger(item.getItemMeta(), railgunChargeSecondsKey, 0)));
     }
 
     private boolean isRailgunCharged(ItemStack item) {
         return item != null && item.hasItemMeta() && getPersistentByte(item.getItemMeta(), railgunChargedKey) != 0;
+    }
+
+    private int getRailgunChargeProgress(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return 0;
+        }
+        return Math.max(0, Math.min(RAILGUN_CHARGE_UNIT_SECONDS - 1,
+                getPersistentInteger(item.getItemMeta(), railgunChargeProgressKey, 0)));
     }
 
     private String getRailgunId(ItemStack item) {
@@ -5717,22 +5884,6 @@ public class FlashModeManager {
         return value == null ? 0 : value;
     }
 
-    private String railgunLevelName(int level) {
-        return switch (Math.max(1, Math.min(3, level))) {
-            case 1 -> "I";
-            case 2 -> "II";
-            default -> "III";
-        };
-    }
-
-    private String railgunTargetShape(int level) {
-        return switch (Math.max(1, Math.min(3, level))) {
-            case 1 -> "3x3";
-            case 2 -> "5x5";
-            default -> "9x5";
-        };
-    }
-
     private void setRailgunCharge(ItemStack item, int seconds, boolean charged) {
         if (getRailgunLevel(item) <= 0) {
             return;
@@ -5741,10 +5892,40 @@ public class FlashModeManager {
         if (meta == null) {
             return;
         }
-        int safeSeconds = charged ? RAILGUN_CHARGE_SECONDS : Math.max(0, Math.min(RAILGUN_CHARGE_SECONDS, seconds));
+        int safeSeconds = charged ? RAILGUN_CHARGE_UNITS : Math.max(0, Math.min(RAILGUN_CHARGE_UNITS, seconds));
         meta.getPersistentDataContainer().set(railgunChargeSecondsKey, PersistentDataType.INTEGER, safeSeconds);
         meta.getPersistentDataContainer().set(railgunChargedKey, PersistentDataType.BYTE, charged ? (byte) 1 : (byte) 0);
+        if (charged || safeSeconds == 0) {
+            meta.getPersistentDataContainer().set(railgunChargeProgressKey, PersistentDataType.INTEGER, 0);
+        }
         refreshRailgunMeta(item, meta);
+        item.setItemMeta(meta);
+        forceRailgunVanillaFishingRodModel(item);
+    }
+
+    private void setRailgunShotDurability(ItemStack item) {
+        if (item == null || item.getType() != Material.FISHING_ROD) {
+            return;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (!(meta instanceof Damageable damageable)) {
+            return;
+        }
+        damageable.setDamage(Math.max(0, item.getType().getMaxDurability() - 1));
+        item.setItemMeta(meta);
+        forceRailgunVanillaFishingRodModel(item);
+    }
+
+    private void setRailgunChargeProgress(ItemStack item, int progress) {
+        if (getRailgunLevel(item) <= 0) {
+            return;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+        int safeProgress = Math.max(0, Math.min(RAILGUN_CHARGE_UNIT_SECONDS - 1, progress));
+        meta.getPersistentDataContainer().set(railgunChargeProgressKey, PersistentDataType.INTEGER, safeProgress);
         item.setItemMeta(meta);
         forceRailgunVanillaFishingRodModel(item);
     }
@@ -5767,9 +5948,8 @@ public class FlashModeManager {
     }
 
     private void startRailgunTasks() {
-        railgunChargeTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeldRailguns, 20L, 20L);
-        railgunAnimationTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickRailgunStrikes,
-                RAILGUN_TASK_INTERVAL_TICKS, RAILGUN_TASK_INTERVAL_TICKS);
+        railgunChargeTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickHeldRailguns,
+                RAILGUN_CHARGE_TASK_INTERVAL_TICKS, RAILGUN_CHARGE_TASK_INTERVAL_TICKS);
     }
 
     private void tickHeldRailguns() {
@@ -5787,65 +5967,62 @@ public class FlashModeManager {
             return;
         }
         ensureRailgunIdentityAndLore(item);
-        int nextSeconds = Math.min(RAILGUN_CHARGE_SECONDS, getRailgunChargeSeconds(item) + 1);
-        boolean completed = nextSeconds >= RAILGUN_CHARGE_SECONDS;
+        int progress = getRailgunChargeProgress(item) + 1;
+        if (progress < RAILGUN_CHARGE_UNIT_SECONDS) {
+            setRailgunChargeProgress(item, progress);
+            return;
+        }
+        setRailgunChargeProgress(item, 0);
+        int nextSeconds = Math.min(RAILGUN_CHARGE_UNITS, getRailgunChargeSeconds(item) + 1);
+        boolean completed = nextSeconds >= RAILGUN_CHARGE_UNITS;
         setRailgunCharge(item, nextSeconds, completed);
         player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
-                "§x§F§F§4§4§4§4轨道炮充能 §8| §f" + "■".repeat(nextSeconds)
-                        + "§8" + "□".repeat(RAILGUN_CHARGE_SECONDS - nextSeconds)
-                        + " §7" + nextSeconds + "/" + RAILGUN_CHARGE_SECONDS));
+                "§x§F§F§4§4§4§4轨道炮充能 §8| §f" + nextSeconds + "§7/§f" + RAILGUN_CHARGE_UNITS));
         if (completed) {
-            player.playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.72F, 1.18F);
-            player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.62F, 1.45F);
-            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_CLUSTER_HIT, 0.48F, 0.72F);
+            player.playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.72F, 1.0F);
+            player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.62F, 1.0F);
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_CLUSTER_HIT, 0.48F, 1.0F);
         } else {
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.22F, 0.72F + nextSeconds * 0.045F);
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.22F, 1.0F);
         }
     }
 
-    private void launchRailgunStrike(Player owner, GameRoom room, int level, Location impact) {
-        int safeLevel = Math.max(1, Math.min(3, level));
+    private void launchRailgunStrike(Player owner, GameRoom room, Location impact) {
         World world = impact.getWorld();
         if (world == null) {
             return;
         }
         boolean breakBlocks = canFlashExplosionBreakBlocks(owner, room);
-        int fuseTicks = RAILGUN_TNT_FUSE_TICKS_BY_LEVEL[safeLevel];
-        double circleSpacing = RAILGUN_RING_SPACINGS[safeLevel];
-        double density = RAILGUN_DENSITIES[safeLevel];
-        double flySpeed = RAILGUN_FLY_SPEEDS[safeLevel];
-        double downwardSpeed = RAILGUN_DOWNWARD_SPEEDS[safeLevel];
-        int circleCount = RAILGUN_RING_COUNTS[safeLevel];
-        double spawnY = Math.min(world.getMaxHeight() - 2.0D,
-                Math.max(world.getMinHeight() + 4.0D, impact.getY() + RAILGUN_HEIGHT_OFFSETS[safeLevel]));
-        Location spawnCenter = new Location(world, impact.getX(), spawnY, impact.getZ());
+        Location spawnCenter = impact.clone().add(0.0D, RAILGUN_HEIGHT_OFFSET, 0.0D);
 
-        for (int circle = 0; circle < circleCount; circle++) {
-            double flyDistance = (circle + 1) * circleSpacing;
-            int tntCount = Math.max(1, (int) Math.round(2.0D * Math.PI * flyDistance * density));
+        for (int circle = 0; circle < RAILGUN_SINGLE_RING_COUNT; circle++) {
+            double flyDistance = (circle + 1) * RAILGUN_SINGLE_RING_SPACING;
+            int tntCount = Math.max(1,
+                    (int) Math.round(2.0D * Math.PI * flyDistance * RAILGUN_SINGLE_DENSITY));
             for (int index = 0; index < tntCount; index++) {
                 double angle = Math.PI * 2.0D * index / tntCount;
-                double horizontalSpeed = flyDistance / (fuseTicks * 0.55D) * flySpeed;
+                double horizontalSpeed = flyDistance
+                        / (RAILGUN_SINGLE_FUSE_TICKS * 0.8D) * RAILGUN_SINGLE_FLY_SPEED;
                 Vector velocity = new Vector(
                         Math.cos(angle) * horizontalSpeed,
-                        downwardSpeed,
+                        0.0D,
                         Math.sin(angle) * horizontalSpeed
                 );
-                spawnRailgunTnt(world, owner, spawnCenter, velocity, fuseTicks, safeLevel, breakBlocks);
+                spawnRailgunTnt(world, owner, spawnCenter, velocity,
+                        RAILGUN_SINGLE_FUSE_TICKS, breakBlocks);
             }
         }
 
-        spawnRailgunTnt(world, owner, spawnCenter, new Vector(0.0D, downwardSpeed * 1.18D, 0.0D), fuseTicks, safeLevel, breakBlocks);
-        world.playSound(spawnCenter, Sound.ENTITY_TNT_PRIMED, 2.4F, 0.58F);
-        world.playSound(spawnCenter, Sound.BLOCK_BEACON_ACTIVATE, 1.4F, 0.42F);
-        world.spawnParticle(Particle.ELECTRIC_SPARK, spawnCenter, 72, 1.2D, 1.0D, 1.2D, 0.16D);
+        spawnRailgunTnt(world, owner, spawnCenter, new Vector(0.0D, 0.0D, 0.0D),
+                RAILGUN_SINGLE_FUSE_TICKS, breakBlocks);
+        world.playSound(spawnCenter, Sound.ENTITY_TNT_PRIMED, 2.4F, 1.0F);
     }
 
     private TNTPrimed spawnRailgunTnt(World world, Player owner, Location spawnCenter, Vector velocity,
-                                      int fuseTicks, int level, boolean breakBlocks) {
+                                      int fuseTicks, boolean breakBlocks) {
         return world.spawn(spawnCenter.clone(), TNTPrimed.class, tnt -> {
             tnt.setFuseTicks(fuseTicks);
-            tnt.setYield(RAILGUN_EXPLOSION_POWERS[Math.max(1, Math.min(3, level))]);
+            tnt.setYield(RAILGUN_SINGLE_EXPLOSION_POWER);
             tnt.setIsIncendiary(false);
             tnt.setPersistent(false);
             tnt.setSource(owner);
@@ -5856,108 +6033,32 @@ public class FlashModeManager {
         });
     }
 
-    private void tickRailgunStrikes() {
-        Iterator<Map.Entry<UUID, RailgunStrike>> iterator = activeRailgunStrikes.entrySet().iterator();
-        while (iterator.hasNext()) {
-            RailgunStrike strike = iterator.next().getValue();
-            if (!tickRailgunStrike(strike)) {
-                iterator.remove();
-            }
-        }
-    }
-
-    private boolean tickRailgunStrike(RailgunStrike strike) {
-        Player owner = Bukkit.getPlayer(strike.ownerId());
-        World world = strike.origin().getWorld();
-        if (owner == null || world == null || !isFlashEffectStillActive(owner, strike.room())) {
-            removeRailgunTnts(strike);
-            return false;
-        }
-
-        strike.advance();
-        int step = strike.step();
-        double progress = Math.min(1.0D, step / (double) RAILGUN_ANIMATION_STEPS);
-
-        if (step > 0 && step % 6 == 0 && step <= RAILGUN_ANIMATION_STEPS) {
-            float pitch = 0.58F + (float) progress * 0.82F;
-            world.playSound(strike.impact(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 1.5F, pitch);
-            world.spawnParticle(Particle.ELECTRIC_SPARK,
-                    strike.impact().clone().add(0.0D, 8.0D + 18.0D * (1.0D - progress), 0.0D),
-                    38, 1.6D + progress * 3.0D, 1.2D, 1.6D + progress * 3.0D, 0.12D);
-        }
-
-        if (step < RAILGUN_ANIMATION_STEPS) {
-            return true;
-        }
-        detonateRailgunStrike(owner, strike);
-        return false;
-    }
-
-    private void detonateRailgunStrike(Player owner, RailgunStrike strike) {
-        World world = strike.impact().getWorld();
-        if (world == null) {
-            removeRailgunTnts(strike);
-            return;
-        }
-        int particleStride = Math.max(1, strike.points().size() / 96);
-        for (int index = 0; index < strike.points().size(); index += particleStride) {
-            RailgunTntPoint point = strike.points().get(index);
-            Location burst = new Location(world, point.finalX(), point.finalY(), point.finalZ());
-            world.spawnParticle(Particle.EXPLOSION, burst, 1, 0.1D, 0.1D, 0.1D, 0.0D);
-            world.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, burst, 2, 0.28D, 0.35D, 0.28D, 0.035D);
-        }
-        removeRailgunTnts(strike);
-        world.playSound(strike.impact(), Sound.ENTITY_GENERIC_EXPLODE, 4.0F, 0.46F);
-        world.playSound(strike.impact(), Sound.ENTITY_DRAGON_FIREBALL_EXPLODE, 2.8F, 0.62F);
-        world.playSound(strike.impact(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 2.0F, 0.72F);
-        world.spawnParticle(Particle.EXPLOSION_EMITTER, strike.impact(), 3 + strike.level(),
-                1.8D + strike.level(), 1.0D, 1.8D + strike.level(), 0.0D);
-        boolean breakBlocks = strike.room() != null && canFlashExplosionBreakBlocks(owner, strike.room());
-        world.createExplosion(strike.impact(), RAILGUN_EXPLOSION_POWERS[strike.level()], false, breakBlocks, owner);
-    }
-
-    private void removeRailgunTnts(RailgunStrike strike) {
-        for (RailgunTntPoint point : strike.points()) {
-            if (point.tnt().isValid()) {
-                point.tnt().remove();
-            }
-        }
-    }
-
-    private void consumeCursorAmount(InventoryClickEvent event, ItemStack cursor, int amount) {
-        ItemStack rest = cursor.clone();
-        rest.setAmount(rest.getAmount() - amount);
-        event.setCursor(rest.getAmount() <= 0 ? null : rest);
-    }
-
-    private void consumeCurrentAmount(InventoryClickEvent event, ItemStack current, int amount) {
-        ItemStack rest = current.clone();
-        rest.setAmount(rest.getAmount() - amount);
-        event.setCurrentItem(rest.getAmount() <= 0 ? null : rest);
-    }
-
-    private void playRailgunInsufficientFeedback(Player player, RailgunUpgradeRequirement requirement, int supplied) {
-        int missing = Math.max(0, requirement.amount() - supplied);
-        sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.material_missing",
-                Map.of("missing", String.valueOf(missing), "material", railgunMaterialName(requirement.material()))));
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.65F, 0.82F);
-    }
-
-    private void playRailgunUpgradeFeedback(Player player, int level) {
-        sendFlashMessage(player, plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.upgraded",
-                Map.of("level", railgunLevelName(level))));
-        player.playSound(player.getLocation(), Sound.BLOCK_PISTON_EXTEND, 0.82F, 0.62F);
-        player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.78F, 1.16F);
-        player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.55F, 0.74F);
-        player.getWorld().spawnParticle(Particle.ELECTRIC_SPARK,
-                player.getLocation().add(0.0D, 1.0D, 0.0D), 36, 0.35D, 0.32D, 0.35D, 0.08D);
-    }
-
     private String railgunMaterialName(Material material) {
         return switch (material) {
+            case HONEY_BLOCK -> "蜂蜜块";
+            case SLIME_BLOCK -> "粘液块";
+            case CHEST -> "箱子";
+            case MUSIC_DISC_PRECIPICE -> "Precipice唱片";
+            case OBSIDIAN -> "黑曜石";
+            case FLINT_AND_STEEL -> "打火石";
+            case DISPENSER -> "发射器";
+            case NOTE_BLOCK -> "音符盒";
+            case PISTON -> "活塞";
+            case STONE_PRESSURE_PLATE -> "压力板";
+            case TNT -> "TNT";
             case REDSTONE -> "红石粉";
             case REDSTONE_BLOCK -> "红石块";
+            case REDSTONE_TORCH -> "红石火把";
+            case SCULK_SENSOR -> "幽匿感测体";
+            case REPEATER -> "红石中继器";
+            case TRIPWIRE_HOOK -> "绊线钩";
+            case STRING -> "线";
             case OBSERVER -> "侦测器";
+            case TNT_MINECART -> "TNT矿车";
+            case HOPPER -> "漏斗";
+            case TARGET -> "标靶";
+            case LECTERN -> "讲台";
+            case WRITABLE_BOOK -> "书与笔";
             default -> material.name();
         };
     }
@@ -8142,6 +8243,7 @@ public class FlashModeManager {
         dispenserChargeSessions.put(playerId, new DispenserChargeSession(payloadType, roomId, System.currentTimeMillis(), task,
                 hadConsumable, previousConsumable));
         dispenserChargeFeedbackStages.put(playerId, 0);
+        player.playSound(player.getLocation(), Sound.ITEM_CROSSBOW_LOADING_START, 1.0F, 1.0F);
         try {
             player.startUsingItem(EquipmentSlot.HAND);
         } catch (IllegalArgumentException | IllegalStateException ignored) {
@@ -8481,39 +8583,52 @@ public class FlashModeManager {
             return;
         }
 
-        Set<UUID> damaged = new HashSet<>();
-        if (directHit != null && canFlashNoteHitLiving(shooter, room, directHit)) {
-            damageDispenserFireballTarget(shooter, directHit, data.damage(), hit, true);
-            damaged.add(directHit.getUniqueId());
-        }
-        for (Entity entity : world.getNearbyEntities(hit, data.radius(), data.radius(), data.radius())) {
-            if (!(entity instanceof LivingEntity living) || damaged.contains(entity.getUniqueId()) || !canFlashNoteHitLiving(shooter, room, living)) {
-                continue;
-            }
-            double distance = Math.max(0.0D, living.getLocation().add(0.0D, living.getHeight() * 0.5D, 0.0D).distance(hit));
-            if (distance > data.radius() + 0.25D) {
-                continue;
-            }
-            double falloff = Math.max(0.45D, 1.0D - distance / Math.max(1.0D, data.radius()) * 0.45D);
-            damageDispenserFireballTarget(shooter, living, data.damage() * falloff, hit, false);
+        activeDispenserFireballExplosion = new DispenserFireballExplosionContext(
+                shooter,
+                room,
+                hit.clone(),
+                directHit == null ? null : directHit.getUniqueId(),
+                data.damage(),
+                data.radius(),
+                new HashSet<>()
+        );
+        try {
+            world.createExplosion(hit, DISPENSER_FIREBALL_EXPLOSION_POWER, false,
+                    canFlashExplosionBreakBlocks(shooter, room), shooter);
+        } finally {
+            activeDispenserFireballExplosion = null;
         }
     }
 
-    private void damageDispenserFireballTarget(Player shooter, LivingEntity living, double damage, Location hit, boolean direct) {
-        if (living == null || living.isDead()) {
-            return;
+    public boolean handleDispenserFireballExplosionDamage(EntityDamageEvent event) {
+        DispenserFireballExplosionContext context = activeDispenserFireballExplosion;
+        if (context == null || event == null || !isExplosionDamage(event)) {
+            return false;
         }
-        living.damage(Math.max(1.0D, damage), shooter);
+        if (!(event.getEntity() instanceof LivingEntity living)) {
+            event.setCancelled(true);
+            return true;
+        }
+        if (!context.processedTargets().add(living.getUniqueId())) {
+            return true;
+        }
+        if (event.isCancelled() || !canFlashNoteHitLiving(context.shooter(), context.room(), living)) {
+            event.setCancelled(true);
+            return true;
+        }
+
+        boolean direct = living.getUniqueId().equals(context.directHitId());
+        Location targetCenter = living.getLocation().add(0.0D, living.getHeight() * 0.5D, 0.0D);
+        double distance = Math.max(0.0D, targetCenter.distance(context.hit()));
+        if (!direct && distance > context.radius() + 0.25D) {
+            event.setCancelled(true);
+            return true;
+        }
+        double falloff = direct ? 1.0D
+                : Math.max(0.45D, 1.0D - distance / Math.max(1.0D, context.radius()) * 0.45D);
+        event.setDamage(Math.max(1.0D, context.damage() * falloff));
         living.setFireTicks(Math.max(living.getFireTicks(), direct ? 70 : 42));
-        Vector push = living.getLocation().toVector().subtract(hit.toVector());
-        if (push.lengthSquared() < 0.0001D) {
-            push = shooter.getEyeLocation().getDirection().clone();
-        }
-        if (push.lengthSquared() > 0.0001D) {
-            push.normalize().multiply(direct ? 0.36D : 0.24D);
-            push.setY(Math.max(0.12D, push.getY() + 0.12D));
-            living.setVelocity(living.getVelocity().add(push));
-        }
+        return true;
     }
 
     private void launchDispenserEchoCannon(Player player, GameRoom room, double ratio, String roomId) {
@@ -8539,6 +8654,7 @@ public class FlashModeManager {
         world.playSound(start, Sound.ENTITY_WARDEN_SONIC_BOOM, 1.08f, 1.0f);
         world.playSound(start, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.62f, 0.72f);
         world.playSound(start, Sound.BLOCK_SCULK_SENSOR_CLICKING_STOP, 0.62f, 0.92f);
+        world.playSound(start, Sound.ENTITY_GENERIC_EXPLODE, 0.52f, 1.0f);
         world.spawnParticle(Particle.SONIC_BOOM, start, 1, 0.0D, 0.0D, 0.0D, 0.0D);
         world.spawnParticle(Particle.SCULK_SOUL, start, 26, 0.20D, 0.14D, 0.20D, 0.065D);
 
@@ -23489,68 +23605,11 @@ public class FlashModeManager {
     private record DispenserFireballData(UUID ownerId, String roomId, double damage, double radius, long expireAtMillis) {
     }
 
-    private record RailgunUpgradeRequirement(Material material, int amount, int nextLevel) {
+    private record DispenserFireballExplosionContext(Player shooter, GameRoom room, Location hit, UUID directHitId,
+                                                      double damage, double radius, Set<UUID> processedTargets) {
     }
 
-    private record RailgunTntPoint(TNTPrimed tnt, double finalX, double finalY, double finalZ) {
-    }
-
-    private static final class RailgunStrike {
-        private final UUID id;
-        private final UUID ownerId;
-        private final GameRoom room;
-        private final int level;
-        private final Location origin;
-        private final Location impact;
-        private final List<RailgunTntPoint> points;
-        private int step;
-
-        private RailgunStrike(UUID id, UUID ownerId, GameRoom room, int level, Location origin,
-                             Location impact, List<RailgunTntPoint> points) {
-            this.id = id;
-            this.ownerId = ownerId;
-            this.room = room;
-            this.level = level;
-            this.origin = origin;
-            this.impact = impact;
-            this.points = points;
-        }
-
-        private UUID id() {
-            return id;
-        }
-
-        private UUID ownerId() {
-            return ownerId;
-        }
-
-        private GameRoom room() {
-            return room;
-        }
-
-        private int level() {
-            return level;
-        }
-
-        private Location origin() {
-            return origin;
-        }
-
-        private Location impact() {
-            return impact;
-        }
-
-        private List<RailgunTntPoint> points() {
-            return points;
-        }
-
-        private int step() {
-            return step;
-        }
-
-        private void advance() {
-            step++;
-        }
+    private record RailgunMaterialRequirement(Material material, int amount) {
     }
 
     private record RedstoneStabilizerMatch(String kind, ItemStack result) {
