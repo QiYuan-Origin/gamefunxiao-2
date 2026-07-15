@@ -3644,8 +3644,9 @@ public class FlashModeManager {
         if (isBundle(current) && isFlashBundleUnstackableCandidate(cursor)) {
             ItemStack nextBundle = tryAddUnstackableToBundle(current, cursor);
             if (nextBundle == null) {
+                event.setCancelled(true);
                 player.playSound(player.getLocation(), Sound.ITEM_BUNDLE_INSERT_FAIL, 0.58f, 0.82f);
-                return false;
+                return true;
             }
             event.setCancelled(true);
             event.setCurrentItem(nextBundle);
@@ -3660,8 +3661,9 @@ public class FlashModeManager {
         if (isBundle(cursor) && isFlashBundleUnstackableCandidate(current)) {
             ItemStack nextBundle = tryAddUnstackableToBundle(cursor, current);
             if (nextBundle == null) {
+                event.setCancelled(true);
                 player.playSound(player.getLocation(), Sound.ITEM_BUNDLE_INSERT_FAIL, 0.58f, 0.82f);
-                return false;
+                return true;
             }
             event.setCancelled(true);
             player.setItemOnCursor(nextBundle);
@@ -3673,32 +3675,43 @@ public class FlashModeManager {
             return true;
         }
 
-        if (isBundle(current) && isEmpty(cursor)) {
-            BundleTakeResult result = takeLastItemFromBundle(current);
+        if (isBundle(current) && isFlashBundleStackableCandidate(cursor)
+                && hasFlashBundleUnstackables(current)) {
+            BundleInsertResult result = tryAddStackableToFlashBundle(current, cursor);
             if (result == null) {
-                return false;
+                event.setCancelled(true);
+                player.playSound(player.getLocation(), Sound.ITEM_BUNDLE_INSERT_FAIL, 0.58f, 0.82f);
+                return true;
             }
             event.setCancelled(true);
             event.setCurrentItem(result.bundle());
-            player.setItemOnCursor(result.item());
-            playFlashBundleRemove(player);
+            ItemStack nextCursor = cursor.clone();
+            nextCursor.setAmount(cursor.getAmount() - result.insertedAmount());
+            player.setItemOnCursor(nextCursor.getAmount() <= 0 ? null : nextCursor);
+            playFlashBundleInsert(player);
             Bukkit.getScheduler().runTask(plugin, player::updateInventory);
             return true;
         }
 
-        if (isBundle(cursor) && isEmpty(current)) {
-            BundleTakeResult result = takeLastItemFromBundle(cursor);
+        if (isBundle(cursor) && isFlashBundleStackableCandidate(current)
+                && hasFlashBundleUnstackables(cursor)) {
+            BundleInsertResult result = tryAddStackableToFlashBundle(cursor, current);
             if (result == null) {
-                return false;
+                event.setCancelled(true);
+                player.playSound(player.getLocation(), Sound.ITEM_BUNDLE_INSERT_FAIL, 0.58f, 0.82f);
+                return true;
             }
             event.setCancelled(true);
             player.setItemOnCursor(result.bundle());
-            event.setCurrentItem(result.item());
-            playFlashBundleRemove(player);
+            ItemStack nextCurrent = current.clone();
+            nextCurrent.setAmount(current.getAmount() - result.insertedAmount());
+            event.setCurrentItem(nextCurrent.getAmount() <= 0 ? null : nextCurrent);
+            playFlashBundleInsert(player);
             Bukkit.getScheduler().runTask(plugin, player::updateInventory);
             return true;
         }
 
+        // Vanilla removal keeps the scroll-wheel selection and takes entries in tooltip order.
         return false;
     }
 
@@ -3716,14 +3729,14 @@ public class FlashModeManager {
         }
         ItemStack stored = item.clone();
         stored.setAmount(1);
-        items.add(stored);
+        items.add(0, stored);
         meta.setItems(items);
         result.setItemMeta(meta);
         return result;
     }
 
-    private BundleTakeResult takeLastItemFromBundle(ItemStack bundle) {
-        if (!isBundle(bundle)) {
+    private BundleInsertResult tryAddStackableToFlashBundle(ItemStack bundle, ItemStack item) {
+        if (!isBundle(bundle) || !isFlashBundleStackableCandidate(item)) {
             return null;
         }
         ItemStack result = bundle.clone();
@@ -3731,18 +3744,58 @@ public class FlashModeManager {
             return null;
         }
         List<ItemStack> items = new ArrayList<>(meta.getItems());
-        if (items.isEmpty()) {
+        int insertedAmount = getFlashBundleStackableInsertAmount(items, item);
+        if (insertedAmount <= 0) {
             return null;
         }
-        ItemStack taken = items.remove(items.size() - 1);
-        if (isEmpty(taken)) {
-            return null;
+
+        int similarIndex = -1;
+        for (int i = 0; i < items.size(); i++) {
+            ItemStack stored = items.get(i);
+            if (isFlashBundleStackableCandidate(stored)
+                    && stored.isSimilar(item)
+                    && stored.getAmount() < stored.getMaxStackSize()) {
+                similarIndex = i;
+                break;
+            }
         }
-        ItemStack cursorItem = taken.clone();
-        cursorItem.setAmount(Math.max(1, cursorItem.getAmount()));
+
+        int remaining = insertedAmount;
+        if (similarIndex >= 0) {
+            ItemStack merged = items.remove(similarIndex).clone();
+            int mergedAmount = Math.min(remaining, merged.getMaxStackSize() - merged.getAmount());
+            merged.setAmount(merged.getAmount() + mergedAmount);
+            remaining -= mergedAmount;
+            items.add(0, merged);
+        }
+        if (remaining > 0) {
+            ItemStack stored = item.clone();
+            stored.setAmount(remaining);
+            items.add(0, stored);
+        }
+
         meta.setItems(items);
         result.setItemMeta(meta);
-        return new BundleTakeResult(result, cursorItem);
+        return new BundleInsertResult(result, insertedAmount);
+    }
+
+    private int getFlashBundleStackableInsertAmount(List<ItemStack> items, ItemStack candidate) {
+        double occupied = 0.0D;
+        for (ItemStack stored : items) {
+            if (isFlashBundleStackableCandidate(stored)) {
+                occupied += (double) stored.getAmount() / stored.getMaxStackSize();
+            }
+        }
+        double remaining = Math.max(0.0D, 1.0D - occupied);
+        int capacity = (int) Math.floor(remaining * candidate.getMaxStackSize() + 1.0E-9D);
+        return Math.min(candidate.getAmount(), capacity);
+    }
+
+    private boolean hasFlashBundleUnstackables(ItemStack bundle) {
+        if (!(bundle.getItemMeta() instanceof BundleMeta meta)) {
+            return false;
+        }
+        return countFlashBundleUnstackables(meta.getItems()) > 0;
     }
 
     private int countFlashBundleUnstackables(List<ItemStack> items) {
@@ -3766,16 +3819,14 @@ public class FlashModeManager {
         return !isEmpty(item) && !isBundle(item) && item.getMaxStackSize() <= 1;
     }
 
+    private boolean isFlashBundleStackableCandidate(ItemStack item) {
+        return !isEmpty(item) && !isBundle(item) && item.getMaxStackSize() > 1;
+    }
+
     private void playFlashBundleInsert(Player player) {
         player.swingHand(EquipmentSlot.HAND);
         player.playSound(player.getLocation(), Sound.ITEM_BUNDLE_INSERT, 0.74f, 1.18f);
         player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.28f, 1.62f);
-    }
-
-    private void playFlashBundleRemove(Player player) {
-        player.swingHand(EquipmentSlot.HAND);
-        player.playSound(player.getLocation(), Sound.ITEM_BUNDLE_REMOVE_ONE, 0.72f, 1.08f);
-        player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_HIT, 0.26f, 1.48f);
     }
 
     private ItemStack createFlashAnvilResult(ItemStack first, ItemStack second) {
@@ -23511,7 +23562,7 @@ public class FlashModeManager {
     private record StormEquipmentUpgradeMatch(ItemStack result, String kind, int level, int catalystCost) {
     }
 
-    private record BundleTakeResult(ItemStack bundle, ItemStack item) {
+    private record BundleInsertResult(ItemStack bundle, int insertedAmount) {
     }
 
     private record SwordMaterialUpgrade(double speedBonus, double damagePenalty) {
