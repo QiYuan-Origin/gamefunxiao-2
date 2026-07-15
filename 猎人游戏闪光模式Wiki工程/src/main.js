@@ -3309,15 +3309,14 @@ function renderNavTree(tree, depth = 0) {
     const pageHtml = node.pages.map(page => `
       <a class="sidebar-link" href="#/${page.slug}" data-slug="${page.slug}" data-search-text="${escapeHtml(`${page.group} ${page.title} ${page.desc} ${page.categories.join(' ')}`)}">
         <span>${page.title}</span>
-        <small>${page.status}</small>
       </a>
     `).join('');
 
     return `
       <details class="sidebar-group depth-${depth}" open>
         <summary>
-          <span class="group-caret">›</span>
           <span>${name}</span>
+          <span class="group-caret">›</span>
         </summary>
         <div class="sidebar-group-body">
           ${pageHtml}
@@ -3351,7 +3350,7 @@ function applyTheme(theme) {
 
 function initTheme() {
   const stored = localStorage.getItem('gamefun-doc-theme');
-  applyTheme(stored || 'dark');
+  applyTheme(stored || 'light');
 }
 
 function filterNavigation(keyword) {
@@ -3368,31 +3367,47 @@ function filterNavigation(keyword) {
   });
 }
 
+function setMobileSidebar(open) {
+  document.body.classList.toggle('sidebar-open', open);
+  const toggle = document.querySelector('#mobile-menu-toggle');
+  if (toggle) {
+    toggle.setAttribute('aria-expanded', String(open));
+  }
+}
+
 function renderShell() {
   app.innerHTML = `
     <div class="docs-shell">
       <header class="site-header">
         <div class="header-left">
+          <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="打开目录" aria-expanded="false">
+            <span aria-hidden="true">☰</span><b>目录</b>
+          </button>
           <a class="site-title" href="#/${defaultSlug}" aria-label="返回首页">
-            <span class="site-logo">GF</span>
-            <span class="site-name"><b>GameFunXiao</b><small>笨蛋笔记</small></span>
+            <span class="site-name"><b>GameFunXiao 笨蛋笔记</b></span>
           </a>
-          <nav class="top-nav" id="top-nav">${renderPageNav()}</nav>
         </div>
         <div class="header-actions">
+          <nav class="top-nav" id="top-nav">${renderPageNav()}</nav>
           <label class="doc-search top-search">
             <span>⌕</span>
-            <input id="top-search" placeholder="搜索" autocomplete="off" />
+            <input id="top-search" placeholder="搜索文档" autocomplete="off" />
+            <kbd>Ctrl K</kbd>
           </label>
           <button class="theme-toggle" id="theme-toggle" type="button"></button>
         </div>
       </header>
 
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
       <div class="docs-layout">
         <aside class="left-sidebar" id="left-sidebar">
+          <div class="sidebar-mobile-header">
+            <b>文档目录</b>
+            <button id="sidebar-close" type="button" aria-label="关闭目录">×</button>
+          </div>
           <div class="mobile-site-title">
-            <span class="site-logo">GF</span>
-            <span><b>GameFunXiao</b><small>笨蛋笔记</small></span>
+            <span><b>GameFunXiao 笨蛋笔记</b></span>
           </div>
           <label class="doc-search side-search">
             <span>⌕</span>
@@ -3432,16 +3447,30 @@ function renderShell() {
     const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
   });
+
+  document.querySelector('#mobile-menu-toggle').addEventListener('click', () => {
+    setMobileSidebar(!document.body.classList.contains('sidebar-open'));
+  });
+  document.querySelector('#sidebar-close').addEventListener('click', () => setMobileSidebar(false));
+  document.querySelector('#sidebar-backdrop').addEventListener('click', () => setMobileSidebar(false));
+  document.querySelectorAll('.sidebar-link').forEach(link => {
+    link.addEventListener('click', () => setMobileSidebar(false));
+  });
+  window.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      topSearch.focus();
+    }
+  });
 }
 
 function renderToc(page) {
   const anchor = currentAnchor();
   return `
     <div class="right-sidebar-panel">
-      <h2>本页内容</h2>
+      <h2>总览</h2>
       <nav class="toc-list" aria-label="本页内容">
-        <a href="#/${page.slug}/_top" class="toc-link ${!anchor || anchor === '_top' ? 'active' : ''}">${page.title}</a>
-        ${page.body.map((section, index) => `<a class="toc-link ${anchor === `section-${index}` ? 'active' : ''}" href="#/${page.slug}/section-${index}">${section.title}</a>`).join('')}
+        ${page.body.map((section, index) => `<a class="toc-link ${anchor === `section-${index}` || (!anchor && index === 0) ? 'active' : ''}" href="#/${page.slug}/section-${index}">${section.title}</a>`).join('')}
       </nav>
     </div>
   `;
@@ -3478,18 +3507,11 @@ function renderPage() {
 
   document.querySelector('#article').innerHTML = `
     <header class="article-header">
-      <p class="article-kicker">${page.group}</p>
       <h1 id="_top">${page.title}</h1>
       <p class="article-lead">${page.desc}</p>
-      <div class="article-badges">
-        <span class="sl-badge tip">${page.status}</span>
-        <span class="sl-badge note">适用版本 ${page.version}</span>
-        <span class="sl-badge success">GameFunXiao</span>
-      </div>
     </header>
 
     <div class="sl-markdown-content">
-      <div class="wiki-notice note"><b>插件笔记。</b> 玩法、变量、配置、排查都在左侧目录。</div>
       ${page.body.map((section, index) => `
         <section class="wiki-section" id="section-${index}">
           <div class="sl-heading-wrapper level-h2">
@@ -3510,6 +3532,16 @@ function renderPage() {
     </footer>
   `;
 
+  document.querySelectorAll('#article .wikitable').forEach(table => {
+    if (table.parentElement?.classList.contains('wiki-scroll-table')) {
+      return;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-scroll';
+    table.parentNode.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+
   document.querySelector('#right-sidebar').innerHTML = renderToc(page);
   document.querySelectorAll('[data-slug]').forEach(link => {
     link.classList.toggle('active', link.dataset.slug === page.slug);
@@ -3526,7 +3558,10 @@ function renderPage() {
 
 renderShell();
 renderPage();
-window.addEventListener('hashchange', renderPage);
+window.addEventListener('hashchange', () => {
+  renderPage();
+  setMobileSidebar(false);
+});
 
 
 
