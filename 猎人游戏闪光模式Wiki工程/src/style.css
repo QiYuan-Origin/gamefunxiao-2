@@ -1172,7 +1172,7 @@ pre {
   --sl-shadow-sm: 0 1px 2px rgba(0, 0, 0, .04), 0 1px 2px rgba(0, 0, 0, .06);
   --sl-shadow-md: 0 12px 32px rgba(0, 0, 0, .1), 0 2px 6px rgba(0, 0, 0, .08);
   --doc-header-height: 64px;
-  --doc-sidebar-width: 272px;
+  --doc-sidebar-width: 232px;
   --doc-right-width: 288px;
   letter-spacing: 0;
 }
@@ -1220,7 +1220,7 @@ body,
   height: var(--doc-header-height);
   border-bottom: 1px solid var(--sl-color-border-soft);
   background: var(--sl-color-bg-nav);
-  padding: 0 max(1.5rem, calc((100vw - 1440px) / 2 + 2rem));
+  padding: 0 1.5rem;
   box-shadow: none;
   backdrop-filter: none;
 }
@@ -1360,8 +1360,8 @@ body,
 .docs-layout {
   grid-template-columns: var(--doc-sidebar-width) minmax(0, 1fr) var(--doc-right-width);
   min-height: calc(100vh - var(--doc-header-height));
-  max-width: 1440px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   background: var(--sl-color-bg);
 }
 
