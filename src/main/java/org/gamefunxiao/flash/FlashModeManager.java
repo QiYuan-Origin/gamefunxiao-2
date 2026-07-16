@@ -12361,14 +12361,12 @@ public class FlashModeManager {
     }
 
     public boolean handleFlashCoarseDirtPlace(BlockPlaceEvent event, Player player, GameRoom room) {
-        if (event == null || player == null || event.getBlockPlaced().getType() != Material.COARSE_DIRT) {
+        if (event == null || event.isCancelled() || player == null
+                || event.getBlockPlaced().getType() != Material.COARSE_DIRT) {
             return false;
         }
         if (!isFlashCombatAvailable(player, room)) {
             return false;
-        }
-        if (event.isCancelled()) {
-            event.setCancelled(false);
         }
         Location placed = event.getBlockPlaced().getLocation().clone();
         String roomId = room == null ? "standalone:" + player.getUniqueId() : room.getRoomId();
@@ -12392,7 +12390,8 @@ public class FlashModeManager {
     }
 
     public boolean handleFlashWetFarmlandCropPlace(BlockPlaceEvent event, Player player, GameRoom room) {
-        if (event == null || player == null || !isFlashFarmCrop(event.getBlockPlaced().getType())) {
+        if (event == null || event.isCancelled() || player == null
+                || !isFlashFarmCrop(event.getBlockPlaced().getType())) {
             return false;
         }
         if (!isFlashCombatAvailable(player, room)) {
@@ -12406,9 +12405,6 @@ public class FlashModeManager {
         String currentRoomId = room == null ? "standalone:" + player.getUniqueId() : room.getRoomId();
         if (!farmland.roomId().equals(currentRoomId)) {
             return false;
-        }
-        if (event.isCancelled()) {
-            event.setCancelled(false);
         }
         keepFlashWetFarmlandMoist(below);
         return true;
@@ -13197,14 +13193,13 @@ public class FlashModeManager {
     }
 
     public boolean handleTmtBlockPlace(BlockPlaceEvent event, Player player, GameRoom room) {
-        if (event == null || player == null || event.getBlockPlaced().getType() != Material.TNT || !isTmt(event.getItemInHand())) {
+        if (event == null || event.isCancelled() || player == null
+                || event.getBlockPlaced().getType() != Material.TNT || !isTmt(event.getItemInHand())) {
             return false;
         }
         if (!isFlashCombatAvailable(player, room)) {
             return false;
         }
-        event.setCancelled(false);
-        event.setBuild(true);
         Block placed = event.getBlockPlaced();
         String placedKey = blockKey(placed.getLocation());
         if (placedTmtBlocks.contains(placedKey)) {

@@ -21,11 +21,14 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDismountEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.hanging.HangingPlaceEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
@@ -161,6 +164,12 @@ public class PlayerListener implements Listener {
             case PLAYING -> !room.isGameActuallyStarted();
             default -> false;
         };
+    }
+
+    private boolean shouldLockFlashPreGameWorldModification(GameRoom room) {
+        return room != null
+                && plugin.getFlashModeManager().isFlashMode(room)
+                && shouldLockBlockInteraction(room);
     }
 
     private boolean shouldLockWorldInteraction(Player player, World world, GameRoom room) {
@@ -1998,9 +2007,7 @@ public class PlayerListener implements Listener {
             return;
         }
 
-        if (room != null
-                && plugin.getFlashModeManager().isFlashMode(room)
-                && shouldLockBlockInteraction(room)) {
+        if (shouldLockFlashPreGameWorldModification(room)) {
             cancelBlockBreakAndResync(event, player);
             return;
         }
@@ -2031,6 +2038,11 @@ public class PlayerListener implements Listener {
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
         GameRoom room = resolveManagedRoom(player, event.getBlockPlaced().getWorld());
+
+        if (shouldLockFlashPreGameWorldModification(room)) {
+            cancelBlockPlaceAndResync(event, player);
+            return;
+        }
 
         if (room != null && room.getState() == RoomState.PLAYING && room.getGameMode().isLuckyPillars()
                 && isLuckyPillarsForbiddenPlaceMaterial(event.getBlockPlaced().getType())) {
@@ -2064,6 +2076,10 @@ public class PlayerListener implements Listener {
     public void onPlayerBucketEmpty(PlayerBucketEmptyEvent event) {
         Player player = event.getPlayer();
         GameRoom room = resolveManagedRoom(player, event.getBlock().getWorld());
+        if (shouldLockFlashPreGameWorldModification(room)) {
+            cancelBucketEmptyAndResync(event, player);
+            return;
+        }
         if (room != null && room.getState() == RoomState.PLAYING && room.getGameMode().isStandaloneMiniGame()) {
             cancelBucketEmptyAndResync(event, player);
             return;
@@ -2077,6 +2093,10 @@ public class PlayerListener implements Listener {
     public void onPlayerBucketFill(PlayerBucketFillEvent event) {
         Player player = event.getPlayer();
         GameRoom room = resolveManagedRoom(player, event.getBlock().getWorld());
+        if (shouldLockFlashPreGameWorldModification(room)) {
+            cancelBucketFillAndResync(event, player);
+            return;
+        }
         if (room != null && room.getState() == RoomState.PLAYING && room.getGameMode().isStandaloneMiniGame()) {
             cancelBucketFillAndResync(event, player);
             return;
@@ -2090,7 +2110,51 @@ public class PlayerListener implements Listener {
     public void onSignChange(SignChangeEvent event) {
         Player player = event.getPlayer();
         GameRoom room = resolveManagedRoom(player, event.getBlock().getWorld());
+        if (shouldLockFlashPreGameWorldModification(room)) {
+            event.setCancelled(true);
+            player.updateInventory();
+            return;
+        }
         if (shouldLockWorldInteraction(player, event.getBlock().getWorld(), room)) {
+            event.setCancelled(true);
+            player.updateInventory();
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onBlockIgnite(BlockIgniteEvent event) {
+        Player player = event.getPlayer();
+        if (player == null) {
+            return;
+        }
+        GameRoom room = resolveManagedRoom(player, event.getBlock().getWorld());
+        if (shouldLockFlashPreGameWorldModification(room)) {
+            event.setCancelled(true);
+            player.updateInventory();
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onEntityPlace(EntityPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player == null) {
+            return;
+        }
+        GameRoom room = resolveManagedRoom(player, event.getEntity().getWorld());
+        if (shouldLockFlashPreGameWorldModification(room)) {
+            event.setCancelled(true);
+            player.updateInventory();
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onHangingPlace(HangingPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player == null) {
+            return;
+        }
+        GameRoom room = resolveManagedRoom(player, event.getEntity().getWorld());
+        if (shouldLockFlashPreGameWorldModification(room)) {
             event.setCancelled(true);
             player.updateInventory();
         }
