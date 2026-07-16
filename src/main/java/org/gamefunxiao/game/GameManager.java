@@ -10639,7 +10639,6 @@ public class GameManager {
         if (player == null || target == null || target.getWorld() == null) {
             return;
         }
-        boolean requiresLodestoneTarget = player.getWorld().getEnvironment() != World.Environment.NORMAL;
         if (player.getWorld().equals(target.getWorld())) {
             Location compassTarget = target.clone();
             compassTarget.setX(compassTarget.getBlockX() + 0.5D);
@@ -10653,18 +10652,18 @@ public class GameManager {
                 player.setCompassTarget(compassTarget);
             }
         }
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, target, false,
-                requiresLodestoneTarget);
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, target, false,
-                requiresLodestoneTarget);
+        // Multiverse worlds can report NORMAL while still using a custom dimension key. In those worlds
+        // the player-level compass target may render as the world spawn, so keep the target on the item too.
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, target, false);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, target, false);
     }
 
     private void makeHeldTrackingCompassesSpin(Player player) {
         if (player == null) {
             return;
         }
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, null, true, false);
-        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, null, true, false);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.HAND, null, true);
+        updateTrackingCompassInHand(player, org.bukkit.inventory.EquipmentSlot.OFF_HAND, null, true);
     }
 
     private void clearHeldTrackingCompasses(Player player) {
@@ -10677,7 +10676,7 @@ public class GameManager {
     }
 
     private void updateTrackingCompassInHand(Player player, org.bukkit.inventory.EquipmentSlot hand, Location target,
-                                             boolean spin, boolean requiresLodestoneTarget) {
+                                             boolean spin) {
         if (player == null || hand == null) {
             return;
         }
@@ -10690,9 +10689,7 @@ public class GameManager {
         ItemStack updated = compass.clone();
         boolean changed = spin
                 ? updateTrackingCompassSpinMeta(updated, player)
-                : requiresLodestoneTarget
-                ? updateTrackingCompassLodestoneMeta(updated, target)
-                : clearTrackingCompassMeta(updated);
+                : updateTrackingCompassLodestoneMeta(updated, target);
         if (!changed) {
             return;
         }
