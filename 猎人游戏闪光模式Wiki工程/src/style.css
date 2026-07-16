@@ -1432,7 +1432,7 @@ body,
   min-height: 1.75rem;
   border-radius: 4px;
   color: var(--sl-color-text-soft);
-  padding: .2rem .65rem;
+  padding: .2rem 0;
   font-size: .875rem;
   line-height: 1.45;
 }
