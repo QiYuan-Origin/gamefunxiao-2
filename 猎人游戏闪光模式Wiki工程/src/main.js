@@ -3365,6 +3365,44 @@ function filterNavigation(keyword) {
     group.hidden = Boolean(normalized) && !hasVisibleLink;
     if (hasVisibleLink) group.open = true;
   });
+  updateSidebarIndicator();
+}
+
+let sidebarIndicatorFrame = 0;
+
+function updateSidebarIndicator() {
+  cancelAnimationFrame(sidebarIndicatorFrame);
+  const container = document.querySelector('#sidebar-content');
+  const indicator = document.querySelector('.sidebar-active-indicator');
+  const active = container?.querySelector('.sidebar-link.active:not([hidden])');
+  if (!container || !indicator || !active) {
+    indicator?.classList.remove('visible');
+    return;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const linkRect = active.getBoundingClientRect();
+  if (!linkRect.width || !linkRect.height) {
+    indicator.classList.remove('visible');
+    return;
+  }
+
+  const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const left = linkRect.left - containerRect.left - rootSize * .72;
+  const top = linkRect.top - containerRect.top + rootSize * .35;
+  const height = Math.max(2, linkRect.height - rootSize * .7);
+  const move = () => {
+    indicator.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    indicator.style.height = `${height}px`;
+    indicator.classList.add('visible');
+  };
+
+  if (!indicator.classList.contains('ready')) {
+    move();
+    requestAnimationFrame(() => indicator.classList.add('ready'));
+    return;
+  }
+  sidebarIndicatorFrame = requestAnimationFrame(move);
 }
 
 function setMobileSidebar(open) {
@@ -3384,7 +3422,7 @@ function renderShell() {
             <span aria-hidden="true">☰</span><b>目录</b>
           </button>
           <a class="site-title" href="#/${defaultSlug}" aria-label="返回首页">
-            <span class="site-name"><b>GameFunXiao 笨蛋笔记</b></span>
+            <span class="site-name"><b>GameFunXiao Wiki</b></span>
           </a>
         </div>
         <div class="header-actions">
@@ -3407,7 +3445,7 @@ function renderShell() {
             <button id="sidebar-close" type="button" aria-label="关闭目录">×</button>
           </div>
           <div class="mobile-site-title">
-            <span><b>GameFunXiao 笨蛋笔记</b></span>
+            <span><b>GameFunXiao Wiki</b></span>
           </div>
           <label class="doc-search side-search">
             <span>⌕</span>
@@ -3415,6 +3453,7 @@ function renderShell() {
           </label>
           <nav class="sidebar-content" id="sidebar-content">
             ${renderNavTree(buildNavTree())}
+            <span class="sidebar-active-indicator" aria-hidden="true"></span>
           </nav>
         </aside>
 
@@ -3456,6 +3495,10 @@ function renderShell() {
   document.querySelectorAll('.sidebar-link').forEach(link => {
     link.addEventListener('click', () => setMobileSidebar(false));
   });
+  document.querySelectorAll('.sidebar-group').forEach(group => {
+    group.addEventListener('toggle', updateSidebarIndicator);
+  });
+  window.addEventListener('resize', updateSidebarIndicator);
   window.addEventListener('keydown', event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
@@ -3495,7 +3538,7 @@ function renderPager(page) {
 function renderPage() {
   const page = currentPage();
   const anchor = currentAnchor();
-  document.title = `${page.title} | GameFunXiao 笨蛋笔记`;
+  document.title = `${page.title} | GameFunXiao Wiki`;
   const crumbs = groupCrumbs(page);
 
   document.querySelector('#top-nav').innerHTML = renderPageNav();
@@ -3546,6 +3589,7 @@ function renderPage() {
   document.querySelectorAll('[data-slug]').forEach(link => {
     link.classList.toggle('active', link.dataset.slug === page.slug);
   });
+  updateSidebarIndicator();
   requestAnimationFrame(() => {
     const target = anchor ? document.getElementById(anchor) : null;
     if (target) {
