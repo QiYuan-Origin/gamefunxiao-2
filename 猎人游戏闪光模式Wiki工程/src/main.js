@@ -1,4 +1,5 @@
 import './style.css';
+import { installFlashItemPages } from './flash-items.js';
 
 const pages = [
   {
@@ -3227,6 +3228,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
   }
 ];
 
+installFlashItemPages(pages);
 
 const app = document.querySelector('#app');
 const defaultSlug = 'start';
@@ -3276,7 +3278,7 @@ function groupCrumbs(page) {
 
 function primaryGroups() {
   const groups = [];
-  for (const page of pages) {
+  for (const page of pages.filter(item => !item.navHidden)) {
     const name = firstGroup(page);
     if (!groups.some(group => group.name === name)) {
       groups.push({ name, slug: page.slug });
@@ -3288,6 +3290,9 @@ function primaryGroups() {
 function buildNavTree() {
   const tree = new Map();
   for (const page of pages) {
+    if (page.navHidden) {
+      continue;
+    }
     const parts = groupCrumbs(page);
     let level = tree;
     let node;
@@ -3303,9 +3308,15 @@ function buildNavTree() {
   return tree;
 }
 
+function navNodeContainsSlug(node, slug) {
+  return node.pages.some(page => page.slug === slug)
+    || Array.from(node.children.values()).some(child => navNodeContainsSlug(child, slug));
+}
+
 function renderNavTree(tree, depth = 0) {
   return Array.from(tree.entries()).map(([name, node]) => {
     const childHtml = renderNavTree(node.children, depth + 1);
+    const open = depth === 0 || navNodeContainsSlug(node, currentSlug());
     const pageHtml = node.pages.map(page => `
       <a class="sidebar-link" href="#/${page.slug}" data-slug="${page.slug}" data-search-text="${escapeHtml(`${page.group} ${page.title} ${page.desc} ${page.categories.join(' ')}`)}">
         <span>${page.title}</span>
@@ -3313,7 +3324,7 @@ function renderNavTree(tree, depth = 0) {
     `).join('');
 
     return `
-      <details class="sidebar-group depth-${depth}" open>
+      <details class="sidebar-group depth-${depth}"${open ? ' open' : ''}>
         <summary>
           <span>${name}</span>
           <span class="group-caret">›</span>
@@ -3524,9 +3535,10 @@ function renderCategories(page) {
 }
 
 function renderPager(page) {
-  const index = pages.findIndex(item => item.slug === page.slug);
-  const previous = pages[index - 1];
-  const next = pages[index + 1];
+  const navigablePages = pages.filter(item => !item.navHidden);
+  const index = navigablePages.findIndex(item => item.slug === page.slug);
+  const previous = index > 0 ? navigablePages[index - 1] : null;
+  const next = index >= 0 ? navigablePages[index + 1] : null;
   return `
     <nav class="pagination-links" aria-label="分页">
       ${previous ? `<a class="page-link prev" href="#/${previous.slug}"><small>上一页</small><span>${previous.title}</span></a>` : '<span></span>'}
@@ -3589,6 +3601,14 @@ function renderPage() {
   document.querySelectorAll('[data-slug]').forEach(link => {
     link.classList.toggle('active', link.dataset.slug === page.slug);
   });
+  const activeSidebarLink = document.querySelector(`.sidebar-link[data-slug="${page.slug}"]`);
+  let activeParent = activeSidebarLink?.parentElement;
+  while (activeParent && activeParent.id !== 'sidebar-content') {
+    if (activeParent.matches('details.sidebar-group')) {
+      activeParent.open = true;
+    }
+    activeParent = activeParent.parentElement;
+  }
   updateSidebarIndicator();
   requestAnimationFrame(() => {
     const target = anchor ? document.getElementById(anchor) : null;
