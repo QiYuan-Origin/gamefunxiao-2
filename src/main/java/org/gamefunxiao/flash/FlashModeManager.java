@@ -190,6 +190,11 @@ public class FlashModeManager {
     private static final double WAVE_PARTICLE_FRAME_SPACING = 2.65D;
     private static final double WAVE_PARTICLE_SAMPLE_STEP = 0.24D;
     private static final double FLASH_EXPLOSION_BLOCK_DROP_KEEP_RATE = 0.12D;
+    private static final double SWORD_WAVE_DAMAGE_MULTIPLIER = 1.70D;
+    private static final double CROSSBOW_SWORD_DAMAGE_MULTIPLIER = 1.55D;
+    private static final double SWORD_WAVE_EXPLOSION_DAMAGE_MULTIPLIER = 3.50D;
+    private static final double CROSSBOW_SWORD_EXPLOSION_DAMAGE_MULTIPLIER = 3.00D;
+    private static final double EXPLOSIVE_SWORD_BLOCK_RADIUS_MULTIPLIER = 0.50D;
     private static final String MATERIAL_AXE_SPEED_LINE_PREFIX = "§8- §x§F§F§8§8§5§5攻击速度已降低：";
     private static final String DRAGON_BREATH_WEAPON_LINE = "§8- §x§B§B§8§8§F§F龙息强化：箭矢更快更痛";
     private static final double DRAGON_BREATH_ARROW_MULTIPLIER = 1.25D;
@@ -1002,6 +1007,15 @@ public class FlashModeManager {
 
     public boolean isFlashTournamentMode(GameRoom room) {
         return room != null && room.getGameMode().isFlashTournament();
+    }
+
+    public boolean isFlashPreGameInteractionLocked(Player player, GameRoom room) {
+        return player != null
+                && isFlashMode(room)
+                && room.getState() == RoomState.PLAYING
+                && !room.isGameActuallyStarted()
+                && room.getAllPlayerUUIDs().contains(player.getUniqueId())
+                && !room.isSpectator(player.getUniqueId());
     }
 
     public boolean handleFlashCompassBackpackInteract(PlayerInteractEvent event, Player player, GameRoom room, ItemStack item) {
@@ -2849,10 +2863,10 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(36, "烟花TNT弩", "烟花弩+副手TNT", "发射时把烟花替换为TNT弹。", "消耗TNT", "弩本身", "TMT不再兼容该路线，只能放置。"));
         pages.add(guideBookQuickPage(37, "激流三叉戟弩", "弩+激流三叉戟", "装填后发射并推进玩家。", "不消耗三叉戟", "约1.85秒", "上次修复后不会卡住闪光物品发射冷却。"));
         pages.add(guideBookQuickPage(38, "食物弩弹", "弩+食物", "装填食物后发射给自己补给。", "消耗食物", "弩本身", "金苹果会额外给再生和吸收。"));
-        pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "伤害跟随剑材质和锋利等附魔。"));
+        pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "弩剑伤害+55%；爆炸剑弩装填爆炸伤害+200%。"));
         pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；碰到方块或实体会爆炸并造成范围伤害，FlashUse不破坏方块，游戏中和FlashSMP会破坏方块。"));
         pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度再次强化、伤害+74%，命中追加20%破甲伤害。"));
-        pages.add(guideBookQuickPage(42, "Q丢剑气", "任意剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "剑不只是近战，也可构筑远程路线。"));
+        pages.add(guideBookQuickPage(42, "Q丢剑气", "任意剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "剑气伤害+70%；爆炸剑剑气爆炸伤害+250%，方块破坏半径-50%。"));
         pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "敌人踩中后触发并消失，适合封路。"));
         pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "不同材质决定伤害和控制。", "同上", "同上", "金偏失明，钻偏漂浮，合金偏黑暗和强拉。"));
         pages.add(guideBookQuickPage(45, "矿车雷锄", "锄头+TNT矿车", "按Q放雷，踩中延迟爆炸。", "消耗材料", "触发一次", "TMT不再能打到锄头上。"));
@@ -7475,7 +7489,9 @@ public class FlashModeManager {
         WaveMotion motion = createWaveMotion(sword);
         double maxDistance = motion.maxDistance();
         double stepDistance = motion.stepDistance() * getJukeboxSwordFlightSpeedMultiplier(owner);
-        double damage = getWaveDamage(sword) * getJukeboxSwordDamageMultiplier(owner);
+        double damage = getWaveDamage(sword)
+                * SWORD_WAVE_DAMAGE_MULTIPLIER
+                * getJukeboxSwordDamageMultiplier(owner);
         int basePierce = 1 + Math.max(0, sword.getEnchantmentLevel(Enchantment.PIERCING));
         boolean explosive = isUpgradeApplied(sword) && sword.getEnchantmentLevel(Enchantment.BLAST_PROTECTION) > 0;
         int blastLevel = sword.getEnchantmentLevel(Enchantment.BLAST_PROTECTION);
@@ -7508,7 +7524,9 @@ public class FlashModeManager {
                     Location blockCollision = findWaveBlockCollision(current, collisionForward, travelled);
                     if (blockCollision != null) {
                         if (explosive) {
-                            triggerExplosionBurst(owner, room, blockCollision.clone().add(0, 0.2, 0), blastLevel, 2.4D + blastLevel * 1.8D, null, collisionForward);
+                            triggerExplosionBurst(owner, room, blockCollision.clone().add(0, 0.2, 0), blastLevel,
+                                    (2.4D + blastLevel * 1.8D) * SWORD_WAVE_EXPLOSION_DAMAGE_MULTIPLIER,
+                                    null, collisionForward);
                         }
                         cancel();
                         return;
@@ -7523,7 +7541,9 @@ public class FlashModeManager {
                         hitEntities.add(living.getUniqueId());
                         damageFromWave(living, damage, owner);
                         if (explosive) {
-                            triggerExplosionBurst(owner, room, living.getLocation().clone().add(0, 0.55, 0), blastLevel, 1.9D + blastLevel * 1.5D, living, collisionForward);
+                            triggerExplosionBurst(owner, room, living.getLocation().clone().add(0, 0.55, 0), blastLevel,
+                                    (1.9D + blastLevel * 1.5D) * SWORD_WAVE_EXPLOSION_DAMAGE_MULTIPLIER,
+                                    living, collisionForward);
                         }
                         if (remainingPierce <= 0) {
                             cancel();
@@ -7590,7 +7610,7 @@ public class FlashModeManager {
         world.playSound(center, Sound.ENTITY_GENERIC_EXPLODE, 1.05f, 0.92f);
 
         if (canFlashExplosionBreakBlocks(owner, room)) {
-            destroyBlocksAround(center, blastLevel, radius);
+            destroyBlocksAround(center, blastLevel, radius * EXPLOSIVE_SWORD_BLOCK_RADIUS_MULTIPLIER);
         }
 
         for (Entity nearby : world.getNearbyEntities(center, radius + 0.6D, radius + 0.6D, radius + 0.6D)) {
@@ -9664,7 +9684,7 @@ public class FlashModeManager {
         block.getWorld().playSound(start, Sound.ITEM_TRIDENT_THROW, 0.68f, 1.38f);
         block.getWorld().spawnParticle(Particle.ITEM, start, 12, 0.14D, 0.10D, 0.14D, 0.02D, sword);
         block.getWorld().spawnParticle(Particle.ENCHANT, start, 12, 0.16D, 0.10D, 0.16D, 0.02D);
-        launchFlyingSwordDisplay(null, room, sword, start, direction);
+        launchFlyingSwordDisplay(null, room, sword, start, direction, false);
         return true;
     }
 
@@ -18578,10 +18598,11 @@ public class FlashModeManager {
         player.getWorld().spawnParticle(Particle.ENCHANT, start, 16, 0.18, 0.12, 0.18, 0.02);
         player.playSound(player.getLocation(), Sound.ITEM_CROSSBOW_SHOOT, 0.86f, 1.25f);
         player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_THROW, 0.7f, 1.38f);
-        launchFlyingSwordDisplay(player, room, sword, start, direction);
+        launchFlyingSwordDisplay(player, room, sword, start, direction, true);
     }
 
-    private void launchFlyingSwordDisplay(Player owner, GameRoom room, ItemStack sword, Location start, Vector direction) {
+    private void launchFlyingSwordDisplay(Player owner, GameRoom room, ItemStack sword, Location start, Vector direction,
+                                          boolean crossbowSwordPayload) {
         World world = start.getWorld();
         if (world == null || sword == null || sword.getType() == Material.AIR) {
             return;
@@ -18599,7 +18620,10 @@ public class FlashModeManager {
         double speedPerTick = Math.max(0.62D, motion.stepDistance() * motion.stepsPerTick() * 1.08D)
                 * getJukeboxSwordFlightSpeedMultiplier(owner);
         double maxDistance = motion.maxDistance();
+        double sourceDamageMultiplier = crossbowSwordPayload ? CROSSBOW_SWORD_DAMAGE_MULTIPLIER : 1.0D;
+        double sourceExplosionMultiplier = crossbowSwordPayload ? CROSSBOW_SWORD_EXPLOSION_DAMAGE_MULTIPLIER : 1.0D;
         double damage = (getWaveDamage(flyingSword) + flyingSword.getEnchantmentLevel(Enchantment.SHARPNESS) * 0.35D)
+                * sourceDamageMultiplier
                 * getJukeboxSwordDamageMultiplier(owner);
         int maxPierceHits = Math.max(1, 1 + flyingSword.getEnchantmentLevel(Enchantment.PIERCING));
         int blastLevel = flyingSword.getEnchantmentLevel(Enchantment.BLAST_PROTECTION);
@@ -18647,7 +18671,9 @@ public class FlashModeManager {
                     if (blockHit != null) {
                         display.remove();
                         if (explosive) {
-                            triggerExplosionBurst(owner, room, blockHit.clone().add(0.0D, 0.18D, 0.0D), blastLevel, 2.4D + blastLevel * 1.8D, null, flightForward);
+                            triggerExplosionBurst(owner, room, blockHit.clone().add(0.0D, 0.18D, 0.0D), blastLevel,
+                                    (2.4D + blastLevel * 1.8D) * sourceExplosionMultiplier,
+                                    null, flightForward);
                         }
                         dropFlyingSwordForPickup(owner, flyingSword, blockHit, flightForward);
                         cancel();
@@ -18662,7 +18688,9 @@ public class FlashModeManager {
                         world.spawnParticle(Particle.ENCHANTED_HIT, hit, 10, 0.16D, 0.16D, 0.16D, 0.02D);
                         world.playSound(hit, Sound.ITEM_TRIDENT_HIT, 0.74f, 1.25f);
                         if (explosive) {
-                            triggerExplosionBurst(owner, room, hit, blastLevel, 1.9D + blastLevel * 1.45D, target, flightForward);
+                            triggerExplosionBurst(owner, room, hit, blastLevel,
+                                    (1.9D + blastLevel * 1.45D) * sourceExplosionMultiplier,
+                                    target, flightForward);
                         }
                         hitsLeft--;
                         if (hitsLeft < 0) {
@@ -22717,27 +22745,14 @@ public class FlashModeManager {
         return room == null && isStandaloneFlashContext(player);
     }
 
-    public boolean isEndFlashStartupFeatureAvailable(Player player, GameRoom room) {
-        if (player == null || room == null || room.getGameMode() != GameMode.END_FLASH
-                || room.getState() != RoomState.PLAYING || room.isGameActuallyStarted()
-                || room.isSpectator(player.getUniqueId())) {
-            return false;
-        }
-        World gameWorld = room.getGameWorld();
-        return gameWorld != null && gameWorld.equals(player.getWorld());
-    }
-
     private boolean isFlashPlayerFeaturePhase(Player player, GameRoom room) {
-        if (!isFlashRoomFeaturePhase(room) || room.isSpectator(player.getUniqueId())) {
-            return false;
-        }
-        return room.isGameActuallyStarted() || isEndFlashStartupFeatureAvailable(player, room);
+        return isFlashRoomFeaturePhase(room) && !room.isSpectator(player.getUniqueId());
     }
 
     private boolean isFlashRoomFeaturePhase(GameRoom room) {
         return isFlashMode(room)
                 && room.getState() == RoomState.PLAYING
-                && (room.isGameActuallyStarted() || room.getGameMode() == GameMode.END_FLASH);
+                && room.isGameActuallyStarted();
     }
 
     private boolean isStandaloneFlashContext(Player player) {

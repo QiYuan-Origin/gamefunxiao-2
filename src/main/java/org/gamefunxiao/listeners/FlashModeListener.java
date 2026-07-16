@@ -62,6 +62,11 @@ public class FlashModeListener implements Listener {
         this.plugin = plugin;
     }
 
+    private boolean isFlashPreGameInteractionLocked(Player player) {
+        return player != null && plugin.getFlashModeManager().isFlashPreGameInteractionLocked(player,
+                plugin.getRoomManager().getPlayerRoom(player.getUniqueId()));
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPrepareAnvil(PrepareAnvilEvent event) {
         plugin.getFlashModeManager().prepareAnvilResult(event);
@@ -80,6 +85,9 @@ public class FlashModeListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onInventoryClick(InventoryClickEvent event) {
         if (event.getWhoClicked() instanceof Player player) {
+            if (isFlashPreGameInteractionLocked(player)) {
+                return;
+            }
             org.bukkit.Bukkit.getScheduler().runTask(plugin,
                     () -> plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(player));
             var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
@@ -117,6 +125,9 @@ public class FlashModeListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onInventoryDrag(InventoryDragEvent event) {
         if (event.getWhoClicked() instanceof Player player) {
+            if (isFlashPreGameInteractionLocked(player)) {
+                return;
+            }
             var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
             if (plugin.getFlashModeManager().handleFlashRoomGuideBookDrag(event, player, room)) {
                 return;
@@ -127,12 +138,21 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onHangingPlace(HangingPlaceEvent event) {
+        if (event.getPlayer() != null && isFlashPreGameInteractionLocked(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleInvisibleItemFramePlace(event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerSwapHandItems(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
+        if (isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            plugin.getFlashModeManager().cancelDispenserLauncherCharge(player, false);
+            return;
+        }
         if (plugin.getFlashModeManager().handleFlashRoomGuideBookSwap(player,
                 plugin.getRoomManager().getPlayerRoom(player.getUniqueId()))) {
             event.setCancelled(true);
@@ -173,6 +193,13 @@ public class FlashModeListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+        if (isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+            event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+            plugin.getFlashModeManager().cancelDispenserLauncherCharge(player, false);
+            return;
+        }
         if (plugin.getFlashModeManager().handleFlashRoomGuideBookUse(event, player,
                 plugin.getRoomManager().getPlayerRoom(player.getUniqueId()))) {
             return;
@@ -249,11 +276,19 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
+        if (isFlashPreGameInteractionLocked(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleFlashTamedEntityInteract(event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerItemConsume(PlayerItemConsumeEvent event) {
+        if (isFlashPreGameInteractionLocked(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleFlashFoodConsume(event);
     }
 
@@ -265,6 +300,10 @@ public class FlashModeListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerDropItem(PlayerDropItemEvent event) {
         Player player = event.getPlayer();
+        if (isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            return;
+        }
         if (plugin.getFlashModeManager().handleFlashRoomGuideBookDrop(event, player,
                 plugin.getRoomManager().getPlayerRoom(player.getUniqueId()))) {
             return;
@@ -290,6 +329,10 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityShootBow(EntityShootBowEvent event) {
+        if (event.getEntity() instanceof Player player && isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            return;
+        }
         if (plugin.getFlashModeManager().handleFlashGlobalMobBowShoot(event)) {
             return;
         }
@@ -298,6 +341,10 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityLoadCrossbow(EntityLoadCrossbowEvent event) {
+        if (event.getEntity() instanceof Player player && isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleFlashCrossbowLoad(event);
     }
 
@@ -308,6 +355,10 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        if (event.getEntity().getShooter() instanceof Player player && isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleProjectileLaunch(event);
     }
 
@@ -318,12 +369,20 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onCondensedSlimeBlockBreak(BlockBreakEvent event) {
+        if (isFlashPreGameInteractionLocked(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleCondensedSlimeBlockBreak(event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onTmtBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
+        if (isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            return;
+        }
         var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (plugin.getFlashModeManager().handleTmtBlockBreak(event, player, room)) {
             return;
@@ -336,11 +395,19 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onCoalPickaxeBlockBreak(BlockBreakEvent event) {
+        if (isFlashPreGameInteractionLocked(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleCoalPickaxeBreak(event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onBlockDamage(BlockDamageEvent event) {
+        if (isFlashPreGameInteractionLocked(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleFlashCustomBlockDamage(event);
     }
 
@@ -353,6 +420,10 @@ public class FlashModeListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
+        if (isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            return;
+        }
         var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (plugin.getFlashModeManager().handleTmtBlockPlace(event, player, room)) {
             return;
@@ -388,6 +459,12 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        Player preGameAttacker = resolveAttackingPlayer(event.getDamager());
+        if (isFlashPreGameInteractionLocked(preGameAttacker)
+                || (event.getEntity() instanceof Player player && isFlashPreGameInteractionLocked(player))) {
+            event.setCancelled(true);
+            return;
+        }
         if (plugin.getFlashModeManager().handleDispenserFireballExplosionDamage(event)) {
             return;
         }
@@ -425,6 +502,11 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityDamage(EntityDamageEvent event) {
+        if (event.getEntity() instanceof Player player && isFlashPreGameInteractionLocked(player)) {
+            event.setCancelled(true);
+            player.setFallDistance(0.0F);
+            return;
+        }
         plugin.getFlashModeManager().handleDispenserFireballExplosionDamage(event);
         plugin.getFlashModeManager().handleFlashEnderDragonDamage(event);
         plugin.getFlashModeManager().handleHappyGhastChestplateDamage(event);
@@ -486,6 +568,10 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerFish(PlayerFishEvent event) {
+        if (isFlashPreGameInteractionLocked(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
         plugin.getFlashModeManager().handleFishingRodLength(event);
     }
 

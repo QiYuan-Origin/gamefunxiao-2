@@ -177,17 +177,10 @@ public class PlayerListener implements Listener {
     }
 
     private boolean shouldLockWorldInteraction(Player player, World world, GameRoom room, Location interactionLocation) {
-        if (shouldLockBlockInteraction(room) && !isEndFlashStartupInteractionAllowed(player, world, room)) {
+        if (shouldLockBlockInteraction(room)) {
             return true;
         }
         return shouldProtectLobbyLikeWorld(player, world, interactionLocation);
-    }
-
-    private boolean isEndFlashStartupInteractionAllowed(Player player, World world, GameRoom room) {
-        return player != null
-                && world != null
-                && world.equals(player.getWorld())
-                && plugin.getFlashModeManager().isEndFlashStartupFeatureAvailable(player, room);
     }
 
     private boolean shouldProtectLobbyLikeWorld(Player player, World world, Location interactionLocation) {
@@ -354,48 +347,62 @@ public class PlayerListener implements Listener {
         return true;
     }
 
-    private boolean isPlayerOwnInventoryView(Inventory topInventory, Player player) {
-        if (topInventory == null) {
-            return false;
-        }
-        return topInventory.getType() == InventoryType.CRAFTING
-                || topInventory.getType() == InventoryType.CREATIVE
-                || topInventory.getHolder() == player;
-    }
-
-    private boolean canEditEndFlashStartupInventory(InventoryClickEvent event, Player player) {
-        Inventory clickedInventory = event.getClickedInventory();
-        if (clickedInventory == null) {
-            return false;
-        }
-
-        Inventory topInventory = event.getView().getTopInventory();
-        if (!isPlayerOwnInventoryView(topInventory, player)) {
-            return false;
-        }
-
-        // 终章·闪光开局发完 Kit 后，允许整理自己的快捷栏、背包、盔甲、副手和原版合成格。
-        // 外部容器 / 自定义菜单不是玩家自己的背包视图，这里继续交给锁定逻辑或 MenuListener 处理。
-        return clickedInventory.equals(player.getInventory()) || clickedInventory.equals(topInventory);
-    }
-
-    private boolean canDragEndFlashStartupInventory(InventoryDragEvent event, Player player) {
-        Inventory topInventory = event.getView().getTopInventory();
-        if (isPlayerOwnInventoryView(topInventory, player)) {
-            return true;
-        }
-
-        // 如果玩家碰巧打开了外部容器，只允许拖动不涉及顶部容器的玩家背包槽位，避免开局搬容器物品。
-        int topSize = topInventory == null ? 0 : topInventory.getSize();
-        return event.getRawSlots().stream().noneMatch(rawSlot -> rawSlot < topSize);
-    }
-
     private boolean isCraftingView(Inventory topInventory) {
         if (topInventory == null) {
             return false;
         }
         InventoryType type = topInventory.getType();
         return type == InventoryType.CRAFTING || type == InventoryType.WORKBENCH;
+    }
+
+    private boolean isFlashPreGameInteractionLocked(Player player, GameRoom room) {
+        return plugin.getFlashModeManager().isFlashPreGameInteractionLocked(player, room);
+    }
+
+    private boolean isFlashPreGameCraftingClick(InventoryClickEvent event, Player player, GameRoom room) {
+        if (!isFlashPreGameInteractionLocked(player, room) || !isCraftingView(event.getView().getTopInventory())) {
+            return false;
+        }
+        Inventory clickedInventory = event.getClickedInventory();
+        if (clickedInventory == null
+                || (!clickedInventory.equals(event.getView().getTopInventory())
+                && !clickedInventory.equals(player.getInventory()))) {
+            return false;
+        }
+        return switch (event.getAction()) {
+            case PICKUP_ALL, PICKUP_HALF, PICKUP_ONE, PICKUP_SOME,
+                    PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR,
+                    MOVE_TO_OTHER_INVENTORY, HOTBAR_SWAP, HOTBAR_MOVE_AND_READD,
+                    COLLECT_TO_CURSOR -> true;
+            default -> false;
+        };
+    }
+
+    private boolean isFlashPreGameCraftingDrag(InventoryDragEvent event, Player player, GameRoom room) {
+        return isFlashPreGameInteractionLocked(player, room)
+                && isCraftingView(event.getView().getTopInventory());
+    }
+
+    private boolean openFlashPreGameCraftingTable(PlayerInteractEvent event, Player player, GameRoom room) {
+        if (!isFlashPreGameInteractionLocked(player, room)
+                || event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND
+                || event.getAction() != Action.RIGHT_CLICK_BLOCK
+                || event.getClickedBlock() == null
+                || event.getClickedBlock().getType() != Material.CRAFTING_TABLE) {
+            return false;
+        }
+
+        cancelProtectedBlockInteract(event);
+        plugin.getRoomManager().ensurePlayerRecipesAvailable(player);
+        Location workbenchLocation = event.getClickedBlock().getLocation();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            GameRoom currentRoom = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+            if (player.isOnline() && isFlashPreGameInteractionLocked(player, currentRoom)) {
+                plugin.getRoomManager().ensurePlayerRecipesAvailable(player);
+                player.openWorkbench(workbenchLocation, true);
+            }
+        });
+        return true;
     }
 
     private boolean isMountedActiveGame(Player player, GameRoom room) {
@@ -603,6 +610,26 @@ public class PlayerListener implements Listener {
             return;
         }
 
+        if (openFlashPreGameCraftingTable(event, player, room)) {
+            return;
+        }
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            ItemStack preGameItem = event.getItem();
+            int preGameModelData = 0;
+            if (preGameItem != null && preGameItem.hasItemMeta()
+                    && preGameItem.getItemMeta().hasCustomModelData()) {
+                preGameModelData = preGameItem.getItemMeta().getCustomModelData();
+            }
+            if ((action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK)
+                    && handleGameItem(player, room,
+                    preGameItem == null ? Material.AIR : preGameItem.getType(), preGameModelData)) {
+                cancelProtectedBlockInteract(event);
+                return;
+            }
+            cancelProtectedBlockInteract(event);
+            return;
+        }
+
         if (isSwapHoldingPlayer(room, player)) {
             event.setCancelled(true);
             event.setUseInteractedBlock(Event.Result.DENY);
@@ -718,6 +745,9 @@ public class PlayerListener implements Listener {
         if (room == null) {
             return;
         }
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            return;
+        }
 
         World world = player.getWorld();
         if (plugin.getWorldManager().getRoomIdByWorld(world) == null) {
@@ -753,6 +783,9 @@ public class PlayerListener implements Listener {
         Player player = event.getPlayer();
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null) {
+            return;
+        }
+        if (isFlashPreGameInteractionLocked(player, room)) {
             return;
         }
 
@@ -1064,6 +1097,11 @@ public class PlayerListener implements Listener {
             return;
         }
 
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            event.setCancelled(true);
+            return;
+        }
+
         if (isSwapHoldingPlayer(room, player)) {
             event.setCancelled(true);
             return;
@@ -1161,6 +1199,10 @@ public class PlayerListener implements Listener {
     public void onPlayerAttemptPickupItem(PlayerAttemptPickupItemEvent event) {
         Player player = event.getPlayer();
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            event.setCancelled(true);
+            return;
+        }
         if (isSwapHoldingPlayer(room, player)) {
             event.setCancelled(true);
             return;
@@ -1180,6 +1222,11 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerItemConsume(PlayerItemConsumeEvent event) {
         Player player = event.getPlayer();
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            event.setCancelled(true);
+            return;
+        }
         ItemStack item = event.getItem();
         if (item == null || item.getType() != Material.RECOVERY_COMPASS) {
             return;
@@ -1194,7 +1241,6 @@ public class PlayerListener implements Listener {
         }
 
         stopRandomCompassEating(player);
-        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room != null) {
             plugin.getGameManager().consumeRandomCompass(player, room);
         }
@@ -2251,6 +2297,10 @@ public class PlayerListener implements Listener {
     public void onPrePlayerAttackEntity(PrePlayerAttackEntityEvent event) {
         Player player = event.getPlayer();
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            event.setCancelled(true);
+            return;
+        }
         rememberHunterGameQuickSwapAttack(player, room);
         plugin.getFlashModeManager().prepareSpearKineticThreshold(player, room);
     }
@@ -2314,6 +2364,20 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         Player attacker = resolveAttackingPlayer(event.getDamager());
+        GameRoom attackerPreGameRoom = attacker == null
+                ? null
+                : plugin.getRoomManager().getPlayerRoom(attacker.getUniqueId());
+        if (attacker != null && isFlashPreGameInteractionLocked(attacker, attackerPreGameRoom)) {
+            event.setCancelled(true);
+            return;
+        }
+        if (event.getEntity() instanceof Player damagedPlayer) {
+            GameRoom damagedRoom = plugin.getRoomManager().getPlayerRoom(damagedPlayer.getUniqueId());
+            if (isFlashPreGameInteractionLocked(damagedPlayer, damagedRoom)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
         if (attacker != null && !(event.getEntity() instanceof Player)) {
             if (shouldProtectLobbyEntity(attacker, event.getEntity().getWorld())) {
                 event.setCancelled(true);
@@ -2580,6 +2644,12 @@ public class PlayerListener implements Listener {
 
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null) return;
+
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            event.setCancelled(true);
+            player.setFallDistance(0.0F);
+            return;
+        }
 
         if (room.getGameMode() == GameMode.END_FLASH && room.isHunter(player.getUniqueId())
                 && isEndFlashHunterRespawnWaiting(player.getUniqueId())) {
@@ -2870,6 +2940,11 @@ public class PlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(event.getPlayer().getUniqueId());
+        if (isFlashPreGameInteractionLocked(event.getPlayer(), room)) {
+            event.setCancelled(true);
+            return;
+        }
         if (shouldCancelProtectedEntityInteract(event.getPlayer(), event.getRightClicked())) {
             event.setCancelled(true);
         }
@@ -2877,6 +2952,11 @@ public class PlayerListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(event.getPlayer().getUniqueId());
+        if (isFlashPreGameInteractionLocked(event.getPlayer(), room)) {
+            event.setCancelled(true);
+            return;
+        }
         if (shouldCancelProtectedEntityInteract(event.getPlayer(), event.getRightClicked())) {
             event.setCancelled(true);
         }
@@ -2960,6 +3040,16 @@ public class PlayerListener implements Listener {
             return;
         }
 
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            if (isFlashPreGameCraftingClick(event, player, room)) {
+                event.setCancelled(false);
+                plugin.getRoomManager().ensurePlayerRecipesAvailable(player);
+            } else {
+                event.setCancelled(true);
+            }
+            return;
+        }
+
         if (plugin.getFlashModeManager().handleFlashBackpackInventoryClick(event, player, room)) {
             return;
         }
@@ -3020,11 +3110,6 @@ public class PlayerListener implements Listener {
         // 在游戏开始阶段（PLAYING状态但游戏还没正式开始），禁止所有人移动物品
         if (room.getState() == RoomState.PLAYING) {
             if (!room.isGameActuallyStarted()) {
-                if (plugin.getFlashModeManager().isEndFlashStartupFeatureAvailable(player, room)
-                        && canEditEndFlashStartupInventory(event, player)) {
-                    return;
-                }
-                // 其他模式仍保持锁定；终章·闪光入场后放行玩家自己的背包装备整理。
                 event.setCancelled(true);
             }
             // 游戏正式开始后，允许所有玩家移动物品
@@ -3063,6 +3148,16 @@ public class PlayerListener implements Listener {
             return;
         }
 
+        if (isFlashPreGameInteractionLocked(player, room)) {
+            if (isFlashPreGameCraftingDrag(event, player, room)) {
+                event.setCancelled(false);
+                plugin.getRoomManager().ensurePlayerRecipesAvailable(player);
+            } else {
+                event.setCancelled(true);
+            }
+            return;
+        }
+
         if (plugin.getFlashModeManager().handleFlashBackpackInventoryDrag(event, player, room)) {
             return;
         }
@@ -3083,10 +3178,6 @@ public class PlayerListener implements Listener {
         }
 
         if (room.getState() == RoomState.PLAYING && !room.isGameActuallyStarted()) {
-            if (plugin.getFlashModeManager().isEndFlashStartupFeatureAvailable(player, room)
-                    && canDragEndFlashStartupInventory(event, player)) {
-                return;
-            }
             event.setCancelled(true);
             return;
         }
