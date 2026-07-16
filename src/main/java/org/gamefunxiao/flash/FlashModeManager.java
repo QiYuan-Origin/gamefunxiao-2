@@ -472,7 +472,7 @@ public class FlashModeManager {
     private static final int ENHANCED_WIND_CHARGE_MAX_STACK = 8;
     private static final String ENHANCED_WIND_CHARGE_NAME = "§x§B§B§F§F§F§F强§x§A§8§F§4§F§F化§x§9§5§E§9§F§F风§x§8§2§D§E§F§F弹";
     private static final int RAILGUN_SINGLE_RING_COUNT = 7;
-    private static final double RAILGUN_SINGLE_RING_SPACING = 3.0D;
+    private static final double RAILGUN_SINGLE_RING_SPACING = 8.0D;
     private static final double RAILGUN_SINGLE_DENSITY = 0.725D;
     private static final int RAILGUN_SINGLE_TNT_COUNT = calculateRailgunTntCount();
     private static final int RAILGUN_CHARGE_UNITS = RAILGUN_SINGLE_TNT_COUNT;
@@ -2849,7 +2849,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(80, "轨道炮装配一", "蜂蜜块12、粘液块24、箱子1、Precipice唱片1", "黑曜石10、打火石1、发射器24", "音符盒4、活塞12、任意压力板1", "无", "材料可以分多次投入，不必一次放齐。"));
         pages.add(guideBookQuickPage(81, "轨道炮装配二", "TNT32、红石粉42、红石块12、红石火把8", "幽匿感测体2、红石中继器12", "绊线钩2、线1、侦测器24", "无", "每次只扣当前拿着的材料，多出的数量会留在手上。"));
         pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "逐项投入", "无", "拿着当前材料打开背包右键钓鱼竿，只消耗当前手上的材料并保存进度。"));
-        pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "放在主手或副手，每10秒充能1格；" + RAILGUN_CHARGE_UNITS + "格充满后右键锁定准星方块。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定距离300格，目标上方40格生成" + RAILGUN_SINGLE_RING_COUNT + "圈高密度真实TNT（共" + RAILGUN_SINGLE_TNT_COUNT + "个，含中心一枚），只给向外动量并自然下落，引信3秒；FlashUse保护方块，游戏中和FlashSMP正常爆炸。"));
+        pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "主手或副手每10秒充1格，共" + RAILGUN_CHARGE_UNITS + "格；充能按百分比显示并同步钓鱼竿耐久。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定300格内方块，上方40格生成" + RAILGUN_SINGLE_RING_COUNT + "圈TNT（间隔8格、共" + RAILGUN_SINGLE_TNT_COUNT + "个，含中心一枚），自然下落且引信3秒；FlashUse保护方块。"));
         return pages;
     }
 
@@ -5818,9 +5818,8 @@ public class FlashModeManager {
 
         ensureRailgunIdentityAndLore(railgun);
         if (!isRailgunCharged(railgun)) {
-            int seconds = getRailgunChargeSeconds(railgun);
             player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
-                    "§x§F§F§5§5§5§5轨道炮未充满 §8| §f" + seconds + "§7/§f" + RAILGUN_CHARGE_UNITS));
+                    "§x§F§F§5§5§5§5轨道炮未充满 §8| §f" + getRailgunChargePercentage(railgun)));
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.55F, 0.78F);
             return true;
         }
@@ -6074,12 +6073,14 @@ public class FlashModeManager {
             meta.getPersistentDataContainer().set(railgunChargeSecondsKey, PersistentDataType.INTEGER, seconds);
             meta.getPersistentDataContainer().set(railgunChargeProgressKey, PersistentDataType.INTEGER, 0);
         }
+        updateRailgunDurability(meta, seconds, charged);
         meta.setItemName("§x§F§F§3§3§3§3轨§x§F§F§5§5§3§3道§x§F§F§7§7§3§3炮");
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.removeIf(line -> line != null && (line.startsWith(RAILGUN_LORE_PREFIX)
                 || line.contains("轨道炮等级") || line.contains("轨道炮充能")
                 || line.contains("轨道炮锁定") || line.contains("轨道炮阵列")));
-        lore.add(RAILGUN_LORE_PREFIX + "充能：" + (charged ? "§a已就绪" : "§f" + seconds + "§7/§f" + RAILGUN_CHARGE_UNITS));
+        lore.add(RAILGUN_LORE_PREFIX + "充能：" + (charged ? "§a" : "§f")
+                + formatRailgunChargePercentage(seconds, charged) + (charged ? " §8| §7已就绪" : ""));
         lore.add(RAILGUN_LORE_PREFIX + "目标：§f准星300格内方块§7，上方40格");
         lore.add(RAILGUN_LORE_PREFIX + "阵列：§f" + RAILGUN_SINGLE_RING_COUNT + "圈 / "
                 + RAILGUN_SINGLE_TNT_COUNT + "个真实TNT §8| §7右键发射");
@@ -6107,6 +6108,32 @@ public class FlashModeManager {
 
     private boolean isRailgunCharged(ItemStack item) {
         return item != null && item.hasItemMeta() && getPersistentByte(item.getItemMeta(), railgunChargedKey) != 0;
+    }
+
+    private String getRailgunChargePercentage(ItemStack item) {
+        return formatRailgunChargePercentage(getRailgunChargeSeconds(item), isRailgunCharged(item));
+    }
+
+    private static String formatRailgunChargePercentage(int units, boolean charged) {
+        if (charged || units >= RAILGUN_CHARGE_UNITS) {
+            return "100%";
+        }
+        if (units <= 0) {
+            return "0%";
+        }
+        double percentage = units * 100.0D / RAILGUN_CHARGE_UNITS;
+        return String.format(Locale.ROOT, "%.1f%%", percentage);
+    }
+
+    private static void updateRailgunDurability(ItemMeta meta, int units, boolean charged) {
+        if (!(meta instanceof Damageable damageable)) {
+            return;
+        }
+        damageable.setMaxDamage(RAILGUN_CHARGE_UNITS);
+        int durability = charged
+                ? RAILGUN_CHARGE_UNITS
+                : Math.max(1, Math.min(RAILGUN_CHARGE_UNITS, units));
+        damageable.setDamage(RAILGUN_CHARGE_UNITS - durability);
     }
 
     private int getRailgunChargeProgress(ItemStack item) {
@@ -6167,7 +6194,8 @@ public class FlashModeManager {
         if (!(meta instanceof Damageable damageable)) {
             return;
         }
-        damageable.setDamage(Math.max(0, item.getType().getMaxDurability() - 1));
+        damageable.setMaxDamage(RAILGUN_CHARGE_UNITS);
+        damageable.setDamage(RAILGUN_CHARGE_UNITS - 1);
         item.setItemMeta(meta);
         forceRailgunVanillaFishingRodModel(item);
     }
@@ -6233,7 +6261,8 @@ public class FlashModeManager {
         boolean completed = nextSeconds >= RAILGUN_CHARGE_UNITS;
         setRailgunCharge(item, nextSeconds, completed);
         player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
-                "§x§F§F§4§4§4§4轨道炮充能 §8| §f" + nextSeconds + "§7/§f" + RAILGUN_CHARGE_UNITS));
+                "§x§F§F§4§4§4§4轨道炮充能 §8| §f"
+                        + formatRailgunChargePercentage(nextSeconds, completed)));
         if (completed) {
             player.playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.72F, 1.0F);
             player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.62F, 1.0F);
