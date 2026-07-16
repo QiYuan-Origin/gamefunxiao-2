@@ -725,7 +725,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
     group: '闪光模式 / 轨道炮',
     slug: 'flash-railgun',
     title: '轨道炮',
-    desc: '用红石结构逐项装配钓鱼竿，充满后向准星方块投放一圈真实 TNT。',
+    desc: '用红石结构逐项装配钓鱼竿，充满后向准星方块投放七圈高密度真实 TNT。',
     icon: '钓鱼竿',
     status: '重型武器',
     version: '1.0.6',
@@ -757,8 +757,8 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
         html: `
           <ul>
             <li>轨道炮必须拿在主手或副手，只有手持时才会充能。</li>
-            <li>每 <b>10 秒</b>充能 1 格，最多 <b>32 格</b>；充满后右键才可以发射。</li>
-            <li>一次发射固定生成 <b>32 个真实 TNT</b>，不消耗背包里的 TNT；发射后充能归零，钓鱼竿耐久变为 1，必须重新充能。</li>
+            <li>每 <b>10 秒</b>充能 1 格，最多 <b>265 格</b>；充满后右键才可以发射。</li>
+            <li>一次发射生成 <b>7 圈高密度真实 TNT</b>，共 <b>265 个</b>（含中心 1 个），不消耗背包里的 TNT；发射后充能归零，钓鱼竿耐久变为 1，必须重新充能。</li>
             <li>准星会检测视角前方 <b>300 格</b>内的方块，TNT 在目标位置上方 <b>40 格</b>生成；不强行传送 TNT，只给水平方向向外的动量，让它自然下落。</li>
             <li>引信为 <b>3 秒</b>，中心也会生成一枚 TNT；发射时使用物品碎裂声。</li>
           </ul>
