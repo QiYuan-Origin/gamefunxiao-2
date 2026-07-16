@@ -4171,6 +4171,7 @@ public class GameManager {
         }
 
         room.setState(RoomState.SELECTING);
+        removeFlashWaitingRoomGuideBooks(room);
 
         // 猎物已确定，给所有玩家设置头顶职业前缀
         plugin.getRoomManager().applyRoleNameTags(room);
@@ -5016,11 +5017,27 @@ public class GameManager {
         return compass;
     }
 
+    private void removeFlashWaitingRoomGuideBooks(GameRoom room) {
+        if (room == null || !plugin.getFlashModeManager().isFlashMode(room)) {
+            return;
+        }
+
+        Set<UUID> players = new LinkedHashSet<>(room.getAllPlayerUUIDs());
+        players.addAll(room.getSpectators());
+        for (UUID uuid : players) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
+                plugin.getFlashModeManager().removeFlashRoomGuideBooks(player);
+            }
+        }
+    }
+
     public void confirmWorldAndStart(GameRoom room) {
         cancelDualPreyDecisionTask(room);
         room.clearDualPreyProposal();
         room.setWorldSelectionConfirmed(false);
         room.setState(RoomState.PLAYING);
+        removeFlashWaitingRoomGuideBooks(room);
         if (room.getGameMode().isFlashLike()) {
             room.setEndFlashDragonDefeated(false);
         }
@@ -9402,6 +9419,9 @@ public class GameManager {
         for (UUID uuid : room.getAllPlayerUUIDs()) {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
+                if (flashMode) {
+                    plugin.getFlashModeManager().removeFlashRoomGuideBooks(p);
+                }
                 if (room.isSpectator(uuid)) {
                     keepSpectatorModeForGameStart(room, p);
                     continue;
@@ -9446,9 +9466,6 @@ public class GameManager {
                     giveHunterItems(p, room);
                 }
 
-                if (flashMode) {
-                    giveFlashStartGuideBook(p, room);
-                }
             }
         }
 
@@ -9646,25 +9663,6 @@ public class GameManager {
             compass.setItemMeta(meta);
         }
         prey.getInventory().addItem(compass);
-    }
-
-    private void giveFlashStartGuideBook(Player player, GameRoom room) {
-        if (player == null || !player.isOnline()) {
-            return;
-        }
-        if (room == null
-                || !plugin.getFlashModeManager().isFlashMode(room)
-                || room.getState() != RoomState.PLAYING
-                || !room.isGameActuallyStarted()
-                || (!room.getAllPlayerUUIDs().contains(player.getUniqueId())
-                && !room.isSpectator(player.getUniqueId()))) {
-            return;
-        }
-        boolean inserted = plugin.getFlashModeManager().ensureFlashRoomGuideBook(player, room);
-        if (inserted && !isTournamentSilent(room)) {
-            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.58f, 1.18f);
-            player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.34f, 1.58f);
-        }
     }
 
     private void giveFlashPreyStartCondensedEnderPearl(Player prey, GameRoom room) {

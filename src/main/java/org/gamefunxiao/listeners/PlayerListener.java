@@ -1998,6 +1998,13 @@ public class PlayerListener implements Listener {
             return;
         }
 
+        if (room != null
+                && plugin.getFlashModeManager().isFlashMode(room)
+                && shouldLockBlockInteraction(room)) {
+            cancelBlockBreakAndResync(event, player);
+            return;
+        }
+
         if (room != null && room.getState() == RoomState.PLAYING && room.getGameMode().isStandaloneMiniGame()) {
             cancelBlockBreakAndResync(event, player);
             return;

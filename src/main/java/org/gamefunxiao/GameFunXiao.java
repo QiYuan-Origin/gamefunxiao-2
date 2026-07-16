@@ -106,7 +106,7 @@ public final class GameFunXiao extends JavaPlugin {
                 flashModeManager.syncFlashItemLore(player);
             }
         }), 60L);
-        // 房间内闪光书是固定工具：应对套装刷新、复活和跨服恢复造成的背包重建。
+        // 等待大厅内的闪光书固定在第二格；离开等待阶段后同步任务会清理残留副本。
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             if (flashModeManager == null || roomManager == null) {
                 return;

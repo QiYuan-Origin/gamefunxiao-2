@@ -2278,7 +2278,7 @@ public class FlashModeManager {
     }
 
     /**
-     * Creates the copy reserved for the second hotbar slot while a player is in a flash room.
+     * Creates the copy reserved for the second hotbar slot while a player waits in a flash room.
      * The marker is deliberately separate from ordinary /flashwiki books so those books remain
      * movable outside the reserved room slot.
      */
@@ -2304,11 +2304,12 @@ public class FlashModeManager {
     }
 
     /**
-     * Keeps the room guide in PlayerInventory slot 1. Room entry snapshots the original inventory
-     * before this method is called, so the existing RoomManager restore path remains authoritative.
+     * Keeps the waiting-room guide in PlayerInventory slot 1. Room entry snapshots the original
+     * inventory before this method is called, so the existing RoomManager restore path remains authoritative.
      */
     public boolean ensureFlashRoomGuideBook(Player player, GameRoom room) {
         if (!isFlashRoomGuideContext(player, room)) {
+            removeFlashRoomGuideBooks(player);
             return false;
         }
 
@@ -2357,6 +2358,48 @@ public class FlashModeManager {
             changed = true;
         }
 
+        if (changed) {
+            player.updateInventory();
+        }
+        return changed;
+    }
+
+    public boolean removeFlashRoomGuideBooks(Player player) {
+        if (player == null) {
+            return false;
+        }
+
+        PlayerInventory inventory = player.getInventory();
+        boolean changed = false;
+        for (int slot = 0; slot < 36; slot++) {
+            if (isFlashRoomGuideBook(inventory.getItem(slot))) {
+                inventory.setItem(slot, null);
+                changed = true;
+            }
+        }
+        if (isFlashRoomGuideBook(inventory.getItemInOffHand())) {
+            inventory.setItemInOffHand(null);
+            changed = true;
+        }
+
+        ItemStack[] armor = inventory.getArmorContents();
+        boolean armorChanged = false;
+        for (int index = 0; index < armor.length; index++) {
+            if (isFlashRoomGuideBook(armor[index])) {
+                armor[index] = null;
+                armorChanged = true;
+            }
+        }
+        if (armorChanged) {
+            inventory.setArmorContents(armor);
+            changed = true;
+        }
+        if (isFlashRoomGuideBook(player.getItemOnCursor())) {
+            player.setItemOnCursor(null);
+            changed = true;
+        }
+
+        flashGuideBookOpenDebounce.remove(player.getUniqueId());
         if (changed) {
             player.updateInventory();
         }
@@ -2477,7 +2520,8 @@ public class FlashModeManager {
     }
 
     private boolean isFlashRoomGuideContext(Player player, GameRoom room) {
-        if (player == null || room == null || !isFlashMode(room) || room.getState() == RoomState.ENDED) {
+        if (player == null || room == null || !isFlashMode(room)
+                || (room.getState() != RoomState.WAITING && room.getState() != RoomState.STARTING)) {
             return false;
         }
         UUID uuid = player.getUniqueId();
@@ -12104,7 +12148,7 @@ public class FlashModeManager {
     }
 
     public boolean handlePseudoPoisonPotatoCropBreak(BlockBreakEvent event, Player player, GameRoom room) {
-        if (event == null || player == null) {
+        if (event == null || event.isCancelled() || player == null) {
             return false;
         }
         String key = blockKey(event.getBlock().getLocation());
