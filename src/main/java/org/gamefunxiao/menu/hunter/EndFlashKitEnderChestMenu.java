@@ -15,14 +15,21 @@ public class EndFlashKitEnderChestMenu extends BaseMenu {
     private final EndFlashKitManager.Role role;
     private final String kitId;
     private final int backPage;
+    private final EndFlashKitDetailMenu returnMenu;
     private int editSize;
     private ItemStack[] contents;
 
     public EndFlashKitEnderChestMenu(GameFunXiao plugin, Player player, EndFlashKitManager.Role role, String kitId, int backPage) {
+        this(plugin, player, role, kitId, backPage, null);
+    }
+
+    EndFlashKitEnderChestMenu(GameFunXiao plugin, Player player, EndFlashKitManager.Role role, String kitId,
+                              int backPage, EndFlashKitDetailMenu returnMenu) {
         super(plugin, player, resolveTitle(plugin, kitId), 54);
         this.role = role;
         this.kitId = kitId;
         this.backPage = Math.max(0, backPage);
+        this.returnMenu = returnMenu;
     }
 
     private static String resolveTitle(GameFunXiao plugin, String kitId) {
@@ -88,7 +95,11 @@ public class EndFlashKitEnderChestMenu extends BaseMenu {
         switch (slot) {
             case 45 -> {
                 playPageTurnSound();
-                new EndFlashKitDetailMenu(plugin, player, role, kitId, backPage).open();
+                if (returnMenu == null) {
+                    new EndFlashKitDetailMenu(plugin, player, role, kitId, backPage).open();
+                } else {
+                    returnMenu.open();
+                }
             }
             case 47 -> changeSize(-9);
             case 49 -> saveContents();

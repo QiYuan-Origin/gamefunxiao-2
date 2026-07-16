@@ -5,8 +5,8 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.gamefunxiao.GameFunXiao;
@@ -14,6 +14,7 @@ import org.gamefunxiao.game.EndFlashKitManager;
 import org.gamefunxiao.menu.base.BaseMenu;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -112,22 +113,19 @@ public class EndFlashKitDetailMenu extends BaseMenu {
     private void renderStorageRows() {
         for (int slot = 0; slot < 36; slot++) {
             ItemStack item = slot < storageContents.length ? storageContents[slot] : null;
-            if (item != null && item.getType() != Material.AIR) {
-                String section = slot < 9 ? "快捷栏" : "背包";
-                inventory.setItem(slot, createPreviewItem(item, section + "槽位 " + (slot < 9 ? slot + 1 : slot - 8)));
-            }
+            inventory.setItem(slot, cloneOrNull(item));
         }
     }
 
     private void renderArmorAndOffhandRow() {
-        for (int slot = 36; slot <= 44; slot++) {
+        inventory.setItem(36, cloneOrNull(getArmorItem(3)));
+        inventory.setItem(37, cloneOrNull(getArmorItem(2)));
+        inventory.setItem(38, cloneOrNull(getArmorItem(1)));
+        inventory.setItem(39, cloneOrNull(getArmorItem(0)));
+        inventory.setItem(40, cloneOrNull(offHandItem));
+        for (int slot = 41; slot <= 44; slot++) {
             inventory.setItem(slot, createGlassPane());
         }
-        inventory.setItem(36, createEquipmentSlotItem(getArmorItem(3), "头盔"));
-        inventory.setItem(37, createEquipmentSlotItem(getArmorItem(2), "胸甲"));
-        inventory.setItem(38, createEquipmentSlotItem(getArmorItem(1), "护腿"));
-        inventory.setItem(39, createEquipmentSlotItem(getArmorItem(0), "靴子"));
-        inventory.setItem(40, createEquipmentSlotItem(offHandItem, "副手"));
     }
 
     private void renderButtons(EndFlashKitManager.Kit kit) {
@@ -149,31 +147,8 @@ public class EndFlashKitDetailMenu extends BaseMenu {
         return armorContents[index];
     }
 
-    private ItemStack createPreviewItem(ItemStack source, String label) {
-        ItemStack item = source.clone();
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            List<String> lore = meta.hasLore() && meta.getLore() != null
-                    ? new ArrayList<>(meta.getLore())
-                    : new ArrayList<>();
-            lore.add("§8· · · · · · · · · · · · · ·");
-            lore.add("§f- §b区域: §e" + label);
-            lore.add("§f- §7这是 Kit 预览物品，不能拿下");
-            meta.setLore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-    private ItemStack createEquipmentSlotItem(ItemStack source, String label) {
-        if (source == null || source.getType() == Material.AIR) {
-            return createItem(Material.LIGHT_GRAY_STAINED_GLASS_PANE,
-                    "   §8[§7" + label + "为空§8]",
-                    "§8· · · · · · · · · · · · · ·",
-                    "§f- §7这个 Kit 没有设置" + label,
-                    "§8· · · · · · · · · · · · · ·");
-        }
-        return createPreviewItem(source, label);
+    private ItemStack cloneOrNull(ItemStack source) {
+        return source == null || source.getType() == Material.AIR ? null : source.clone();
     }
 
     private ItemStack createGlassPane() {
@@ -199,7 +174,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
                 "   §8[§x§5§5§F§F§A§A保存Kit§8]",
                 "§8· · · · · · · · · · · · · ·",
                 "§f- §a保存当前界面里的快捷栏、背包、盔甲和副手",
-                importedButNotSaved ? "§f- §e状态: §6已导入，等待保存" : "§f- §e状态: §a已显示当前 Kit",
+                importedButNotSaved ? "§f- §e状态: §6已修改，等待保存" : "§f- §e状态: §a已显示当前 Kit",
                 kit == null ? "§f- §b创建者: §7未知" : "§f- §b创建者: §a" + kit.creatorName() + " §8/ §7" + kit.createdAtText(),
                 kit == null ? "§f- §d最后编辑: §7未知" : "§f- §d最后编辑: §f" + kit.lastEditorName() + " §8/ §e" + kit.lastEditedAtText(),
                 "§8· · · · · · · · · · · · · ·",
@@ -289,6 +264,11 @@ public class EndFlashKitDetailMenu extends BaseMenu {
     }
 
     @Override
+    public boolean isEditableTopInventorySlot(int rawSlot) {
+        return rawSlot >= 0 && rawSlot <= 40;
+    }
+
+    @Override
     public void handleClick(InventoryClickEvent event) {
         int slot = event.getRawSlot();
         if (slot < 0 || slot >= inventory.getSize()) {
@@ -308,12 +288,14 @@ public class EndFlashKitDetailMenu extends BaseMenu {
             return;
         }
 
+        collectEditedLayout();
+
         switch (slot) {
             case RENAME_SLOT -> startRenameInput(kit);
             case SAVE_SLOT -> openSaveConfirmMenu();
             case ENDER_SLOT -> {
                 playClickSound();
-                new EndFlashKitEnderChestMenu(plugin, player, role, kit.id(), backPage).open();
+                new EndFlashKitEnderChestMenu(plugin, player, role, kit.id(), backPage, this).open();
             }
             case IMPORT_SLOT -> importCurrentPlayerLayout();
             case GUIDE_SLOT -> {
@@ -332,8 +314,45 @@ public class EndFlashKitDetailMenu extends BaseMenu {
     }
 
     private void openSaveConfirmMenu() {
+        collectEditedLayout();
         playClickSound();
         new EndFlashKitSaveConfirmMenu(plugin, player, role, kitId, backPage,
+                storageContents, armorContents, offHandItem, importedButNotSaved).open();
+    }
+
+    @Override
+    public void onClose(InventoryCloseEvent event) {
+        if (player.getItemOnCursor() != null && player.getItemOnCursor().getType() != Material.AIR) {
+            Bukkit.getScheduler().runTask(plugin, () -> player.setItemOnCursor(new ItemStack(Material.AIR)));
+        }
+    }
+
+    private void collectEditedLayout() {
+        ItemStack[] nextStorage = new ItemStack[36];
+        for (int slot = 0; slot < nextStorage.length; slot++) {
+            nextStorage[slot] = cloneOrNull(inventory.getItem(slot));
+        }
+
+        ItemStack[] nextArmor = new ItemStack[4];
+        nextArmor[3] = cloneOrNull(inventory.getItem(36));
+        nextArmor[2] = cloneOrNull(inventory.getItem(37));
+        nextArmor[1] = cloneOrNull(inventory.getItem(38));
+        nextArmor[0] = cloneOrNull(inventory.getItem(39));
+        ItemStack nextOffHand = cloneOrNull(inventory.getItem(40));
+
+        EndFlashKitManager.KitLayout next = new EndFlashKitManager.KitLayout(nextStorage, nextArmor, nextOffHand);
+        if (!Arrays.equals(storageContents, next.storageContents())
+                || !Arrays.equals(armorContents, next.armorContents())
+                || !java.util.Objects.equals(offHandItem, next.offHandItem())) {
+            importedButNotSaved = true;
+        }
+        storageContents = next.storageContents();
+        armorContents = next.armorContents();
+        offHandItem = next.offHandItem();
+    }
+
+    private void reopenWithCurrentLayout(Player target) {
+        new EndFlashKitDetailMenu(plugin, target, role, kitId, backPage,
                 storageContents, armorContents, offHandItem, importedButNotSaved).open();
     }
 
@@ -360,7 +379,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
             online.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
                     + "§x§F§F§B§B§6§6⌛ §e终章闪光 Kit 改名输入超时，已经取消。");
             online.playSound(online.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.78f);
-            new EndFlashKitDetailMenu(plugin, online, role, kitId, backPage).open();
+            reopenWithCurrentLayout(online);
         }, 30 * 20L);
     }
 
@@ -390,7 +409,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
             online.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
                     + "§x§F§F§B§B§6§6⌛ §e终章闪光 Kit 教学输入超时，已经取消。");
             online.playSound(online.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.78f);
-            new EndFlashKitDetailMenu(plugin, online, role, kitId, backPage).open();
+            reopenWithCurrentLayout(online);
         }, 30 * 20L);
     }
 
@@ -488,7 +507,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
             player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
                     + "§x§F§F§B§B§6§6⌑ §e已取消修改终章闪光 Kit 名字。");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.82f);
-            new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+            menu.reopenWithCurrentLayout(player);
             return true;
         }
 
@@ -497,7 +516,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
             player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
                     + "§x§F§F§8§8§8§8⚠ §c名字不能为空，已经取消本次修改。");
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.72f, 0.82f);
-            new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+            menu.reopenWithCurrentLayout(player);
             return true;
         }
         if (newName.length() > 48) {
@@ -516,7 +535,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
                 + "§x§5§5§F§F§A§A✔ §a已把终章闪光 Kit 名字修改为：§r" + newName);
         player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.72f, 1.65f);
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.42f, 1.35f);
-        new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+        menu.reopenWithCurrentLayout(player);
         return true;
     }
 
@@ -532,7 +551,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
             player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
                     + "§x§F§F§B§B§6§6⌑ §e已取消修改终章闪光 Kit 开局教学。");
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.82f);
-            new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+            menu.reopenWithCurrentLayout(player);
             return true;
         }
 
@@ -548,7 +567,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
             player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
                     + "§x§F§F§8§8§8§8⚠ §c教学内容不能为空，想清空请输入 §e无§c。");
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.72f, 0.82f);
-            new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+            menu.reopenWithCurrentLayout(player);
             return true;
         }
         if (!clear && guide.length() > 500) {
@@ -569,7 +588,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
                 : "§x§5§5§F§F§A§A✔ §a已保存这个终章闪光 Kit 的开局教学。"));
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.62f, 1.45f);
         player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.62f, 1.65f);
-        new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+        menu.reopenWithCurrentLayout(player);
         return true;
     }
 
@@ -583,7 +602,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
                 + "§x§F§F§B§B§6§6⌑ §e已取消修改终章闪光 Kit 名字。");
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.82f);
         if (reopenMenu) {
-            new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+            menu.reopenWithCurrentLayout(player);
         }
         return true;
     }
@@ -598,7 +617,7 @@ public class EndFlashKitDetailMenu extends BaseMenu {
                 + "§x§F§F§B§B§6§6⌑ §e已取消修改终章闪光 Kit 开局教学。");
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.82f);
         if (reopenMenu) {
-            new EndFlashKitDetailMenu(plugin, player, menu.role, menu.kitId, menu.backPage).open();
+            menu.reopenWithCurrentLayout(player);
         }
         return true;
     }

@@ -75,7 +75,8 @@ public abstract class BaseMenu implements InventoryHolder {
 
         return switch (event.getAction()) {
             case PICKUP_ALL, PICKUP_HALF, PICKUP_ONE, PICKUP_SOME,
-                    PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR -> true;
+                    PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR,
+                    MOVE_TO_OTHER_INVENTORY -> true;
             default -> false;
         };
     }
