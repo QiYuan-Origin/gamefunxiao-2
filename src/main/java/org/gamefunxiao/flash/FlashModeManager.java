@@ -473,7 +473,7 @@ public class FlashModeManager {
     private static final String ENHANCED_WIND_CHARGE_NAME = "§x§B§B§F§F§F§F强§x§A§8§F§4§F§F化§x§9§5§E§9§F§F风§x§8§2§D§E§F§F弹";
     private static final int RAILGUN_SINGLE_RING_COUNT = 7;
     private static final double RAILGUN_SINGLE_RING_SPACING = 3.0D;
-    private static final double RAILGUN_SINGLE_DENSITY = 0.5D;
+    private static final double RAILGUN_SINGLE_DENSITY = 0.725D;
     private static final int RAILGUN_SINGLE_TNT_COUNT = calculateRailgunTntCount();
     private static final int RAILGUN_CHARGE_UNITS = RAILGUN_SINGLE_TNT_COUNT;
     private static final int RAILGUN_CHARGE_UNIT_SECONDS = 10;
