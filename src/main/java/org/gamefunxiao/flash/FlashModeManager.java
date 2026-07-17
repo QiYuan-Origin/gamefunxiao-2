@@ -476,10 +476,10 @@ public class FlashModeManager {
     private static final String FLASH_FISHING_BAIT_NAME = "§x§5§5§D§D§F§F潮§x§6§8§E§5§F§F汐§x§7§B§E§D§F§F鱼§x§8§E§F§5§F§F饵";
     private static final int ENHANCED_WIND_CHARGE_MAX_STACK = 8;
     private static final String ENHANCED_WIND_CHARGE_NAME = "§x§B§B§F§F§F§F强§x§A§8§F§4§F§F化§x§9§5§E§9§F§F风§x§8§2§D§E§F§F弹";
-    private static final int RAILGUN_SINGLE_RING_COUNT = 7;
-    private static final double RAILGUN_SINGLE_RING_SPACING = 8.0D;
-    private static final double RAILGUN_SINGLE_DENSITY = 0.725D;
-    private static final int RAILGUN_SINGLE_TNT_COUNT = calculateRailgunTntCount();
+    private static final int RAILGUN_SPIRAL_TURN_COUNT = 13;
+    private static final double RAILGUN_SPIRAL_RADIUS = 56.0D;
+    private static final int RAILGUN_SPIRAL_TNT_COUNT = 1020;
+    private static final int RAILGUN_SINGLE_TNT_COUNT = RAILGUN_SPIRAL_TNT_COUNT + 1;
     private static final int RAILGUN_CHARGE_UNITS = RAILGUN_SINGLE_TNT_COUNT;
     private static final int RAILGUN_CHARGE_UNIT_SECONDS = 10;
     private static final long RAILGUN_CHARGE_TASK_INTERVAL_TICKS = 20L;
@@ -2907,7 +2907,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(80, "轨道炮装配一", "蜂蜜块12、粘液块24、箱子1、Precipice唱片1", "黑曜石10、打火石1、发射器24", "音符盒4、活塞12、任意压力板1", "无", "材料可以分多次投入，不必一次放齐。"));
         pages.add(guideBookQuickPage(81, "轨道炮装配二", "TNT32、红石粉42、红石块12、红石火把8", "幽匿感测体2、红石中继器12", "绊线钩2、线1、侦测器24", "无", "每次只扣当前拿着的材料，多出的数量会留在手上。"));
         pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "逐项投入", "无", "拿着当前材料打开背包右键钓鱼竿，只消耗当前手上的材料并保存进度。"));
-        pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "主手或副手每10秒充1格，共" + RAILGUN_CHARGE_UNITS + "格；充能按百分比显示并同步钓鱼竿耐久。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定300格内方块，上方40格生成" + RAILGUN_SINGLE_RING_COUNT + "圈TNT（间隔8格、共" + RAILGUN_SINGLE_TNT_COUNT + "个，含中心一枚），自然下落且引信3秒；FlashUse保护方块。"));
+        pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "主手或副手每10秒充1格，共" + RAILGUN_CHARGE_UNITS + "格；充能按百分比显示并同步钓鱼竿耐久。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定300格内方块，上方40格生成连续" + RAILGUN_SPIRAL_TURN_COUNT + "匝单臂螺旋TNT（外半径56格、共" + RAILGUN_SINGLE_TNT_COUNT + "个，含中心一枚），自然下落且引信3秒；FlashUse保护方块。"));
         return pages;
     }
 
@@ -6140,7 +6140,7 @@ public class FlashModeManager {
         lore.add(RAILGUN_LORE_PREFIX + "充能：" + (charged ? "§a" : "§f")
                 + formatRailgunChargePercentage(seconds, charged) + (charged ? " §8| §7已就绪" : ""));
         lore.add(RAILGUN_LORE_PREFIX + "目标：§f准星300格内方块§7，上方40格");
-        lore.add(RAILGUN_LORE_PREFIX + "阵列：§f" + RAILGUN_SINGLE_RING_COUNT + "圈 / "
+        lore.add(RAILGUN_LORE_PREFIX + "阵列：§f" + RAILGUN_SPIRAL_TURN_COUNT + "匝单臂螺旋 / "
                 + RAILGUN_SINGLE_TNT_COUNT + "个真实TNT §8| §7右键发射");
         meta.setLore(lore);
     }
@@ -6338,39 +6338,24 @@ public class FlashModeManager {
         boolean breakBlocks = canFlashExplosionBreakBlocks(owner, room);
         Location spawnCenter = impact.clone().add(0.0D, RAILGUN_HEIGHT_OFFSET, 0.0D);
 
-        for (int circle = 0; circle < RAILGUN_SINGLE_RING_COUNT; circle++) {
-            double flyDistance = (circle + 1) * RAILGUN_SINGLE_RING_SPACING;
-            int tntCount = getRailgunRingTntCount(circle);
-            for (int index = 0; index < tntCount; index++) {
-                double angle = Math.PI * 2.0D * index / tntCount;
-                double horizontalSpeed = flyDistance
-                        / (RAILGUN_SINGLE_FUSE_TICKS * 0.8D) * RAILGUN_SINGLE_FLY_SPEED;
-                Vector velocity = new Vector(
-                        Math.cos(angle) * horizontalSpeed,
-                        0.0D,
-                        Math.sin(angle) * horizontalSpeed
-                );
-                spawnRailgunTnt(world, owner, spawnCenter, velocity,
-                        RAILGUN_SINGLE_FUSE_TICKS, breakBlocks);
-            }
+        for (int index = 0; index < RAILGUN_SPIRAL_TNT_COUNT; index++) {
+            double progress = (index + 1.0D) / RAILGUN_SPIRAL_TNT_COUNT;
+            double flyDistance = RAILGUN_SPIRAL_RADIUS * progress;
+            double angle = Math.PI * 2.0D * RAILGUN_SPIRAL_TURN_COUNT * progress;
+            double horizontalSpeed = flyDistance
+                    / (RAILGUN_SINGLE_FUSE_TICKS * 0.8D) * RAILGUN_SINGLE_FLY_SPEED;
+            Vector velocity = new Vector(
+                    Math.cos(angle) * horizontalSpeed,
+                    0.0D,
+                    Math.sin(angle) * horizontalSpeed
+            );
+            spawnRailgunTnt(world, owner, spawnCenter, velocity,
+                    RAILGUN_SINGLE_FUSE_TICKS, breakBlocks);
         }
 
         spawnRailgunTnt(world, owner, spawnCenter, new Vector(0.0D, 0.0D, 0.0D),
                 RAILGUN_SINGLE_FUSE_TICKS, breakBlocks);
         world.playSound(spawnCenter, Sound.ENTITY_TNT_PRIMED, 2.4F, 1.0F);
-    }
-
-    private static int calculateRailgunTntCount() {
-        int total = 1;
-        for (int circle = 0; circle < RAILGUN_SINGLE_RING_COUNT; circle++) {
-            total += getRailgunRingTntCount(circle);
-        }
-        return total;
-    }
-
-    private static int getRailgunRingTntCount(int circle) {
-        double radius = (circle + 1) * RAILGUN_SINGLE_RING_SPACING;
-        return Math.max(1, (int) Math.round(2.0D * Math.PI * radius * RAILGUN_SINGLE_DENSITY));
     }
 
     private TNTPrimed spawnRailgunTnt(World world, Player owner, Location spawnCenter, Vector velocity,
