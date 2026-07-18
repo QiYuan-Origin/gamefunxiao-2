@@ -56,6 +56,11 @@ public enum GameMode {
             END_FLASH
     );
 
+    private static final EnumSet<GameMode> FLASH_DIFFICULTY_MODES = EnumSet.of(
+            FLASH,
+            END_FLASH
+    );
+
     private static final EnumSet<GameMode> WORLD_SELECTION_MODES = EnumSet.of(
             CLASSIC,
             RANDOM_COMPASS,
@@ -184,6 +189,10 @@ public enum GameMode {
 
     public boolean isFlashTournament() {
         return isEnabledInBuild() && this == FLASH_TOURNAMENT;
+    }
+
+    public boolean supportsFlashDifficultyVote() {
+        return isEnabledInBuild() && FLASH_DIFFICULTY_MODES.contains(this);
     }
 
     public boolean isLegacyRemovedMode() {

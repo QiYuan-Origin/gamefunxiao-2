@@ -786,7 +786,7 @@ public class WorldManager {
         }
 
         setRule(world, "keepInventory", false);
-        setRule(world, "announceAdvancements", false);
+        setRule(world, "announceAdvancements", true);
         setRule(world, "doImmediateRespawn", true);
         setRule(world, "showDeathMessages", true);
         setLocatorBarEnabled(world, true);

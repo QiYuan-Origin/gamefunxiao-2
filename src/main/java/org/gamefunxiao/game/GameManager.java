@@ -36,6 +36,8 @@ import org.bukkit.inventory.meta.CompassMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.permissions.PermissionAttachment;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.gamefunxiao.GameFunXiao;
@@ -51,6 +53,8 @@ import java.util.concurrent.ThreadLocalRandom;
 public class GameManager {
 
     private final GameFunXiao plugin;
+    private final NamespacedKey countdownSpeedVoteKey;
+    private final NamespacedKey flashDifficultyVoteKey;
     private final Map<String, BukkitTask> countdownTasks = new HashMap<>();
     private final Map<String, BukkitTask> gameTasks = new HashMap<>();
     private final Map<String, BukkitTask> preGameCountdownTasks = new HashMap<>();
@@ -66,11 +70,17 @@ public class GameManager {
     private final Map<String, TntRunMapConfig> tntRunRuntimes = new HashMap<>();
     private final Map<String, BlockPartyRuntime> blockPartyRuntimes = new HashMap<>();
     private final Set<String> thunderStormAppliedRooms = new HashSet<>();
+    private final Map<UUID, PermissionAttachment> swapTimerLimitExemptions = new HashMap<>();
+    private boolean grimPermissionRefreshFailureLogged;
     private static final int RANDOM_COMPASS_INTERVAL_SECONDS = 5 * 60;
     private static final int RANDOM_COMPASS_GLOW_TICKS = 15 * 20;
     private static final int RANDOM_COMPASS_SLOW_TICKS = 10 * 20;
     private static final int RANDOM_COMPASS_HUNGER_TICKS = 15 * 20;
     private static final int SWAP_INTERVAL_SECONDS = 60;
+    private static final String GRIM_TIMER_LIMIT_EXEMPT_PERMISSION = "grim.exempt.timerlimit";
+    private static final int COUNTDOWN_SPEED_VOTE_SECONDS = 30;
+    private static final int COUNTDOWN_SPEED_VOTE_MIN_PLAYERS = 4;
+    private static final int COUNTDOWN_SPEED_VOTE_PERFORMANCE = 40;
     private static final int NETHER_SCENARIO_VOTE_COMPASS_MODEL = 10011;
     private static final int NETHER_SCENARIO_VOTE_BONUS = 30;
     private static final int DOUBLE_PREY_VOTE_MODEL = 10012;
@@ -172,14 +182,16 @@ public class GameManager {
 
     public GameManager(GameFunXiao plugin) {
         this.plugin = plugin;
+        this.countdownSpeedVoteKey = new NamespacedKey(plugin, "countdown_speed_vote");
+        this.flashDifficultyVoteKey = new NamespacedKey(plugin, "flash_difficulty_vote");
     }
 
     private boolean isTournamentSilent(GameRoom room) {
         return room != null && room.getGameMode().isFlashTournament();
     }
 
-    private void setTournamentAdvancementAnnouncements(GameRoom room, boolean enabled) {
-        if (!isTournamentSilent(room)) {
+    private void setRoomAdvancementAnnouncements(GameRoom room, boolean enabled) {
+        if (room == null) {
             return;
         }
         for (World world : Bukkit.getWorlds()) {
@@ -308,6 +320,10 @@ public class GameManager {
             player.getInventory().setItem(2, createFlashTriplePreyVoteItem(room, player));
         }
 
+        if (!player.isOp() && shouldOfferCountdownSpeedVote(room)) {
+            player.getInventory().setItem(4, createCountdownSpeedVoteItem(room, player));
+        }
+
         // 中间：管理员强制开始（如果是管理员）
         if (player.hasPermission("gamefunxiao.admin") && !room.isAdminForceStartUsed()) {
             ItemStack forceStart = new ItemStack(Material.PAPER);
@@ -327,8 +343,13 @@ public class GameManager {
             player.getInventory().setItem(4, forceStart);
         }
 
-        // 猎人玩法第一格有投票物品，宣传房间放倒数第2格。
-        player.getInventory().setItem(7, createAdvertiseRoomItem("§f- §e右键发送宣传消息", "§f- §7冷却时间: 30秒"));
+        // 普通闪光和终章闪光第8格固定为难度投票；赛事明确不提供该投票。
+        if (room.getGameMode().supportsFlashDifficultyVote()) {
+            player.getInventory().setItem(6, createAdvertiseRoomItem("§f- §e右键发送宣传消息", "§f- §7冷却时间: 30秒"));
+            player.getInventory().setItem(7, createFlashDifficultyVoteItem(room, player));
+        } else {
+            player.getInventory().setItem(7, createAdvertiseRoomItem("§f- §e右键发送宣传消息", "§f- §7冷却时间: 30秒"));
+        }
 
         // 最后一格：退出游戏
         ItemStack quit = new ItemStack(Material.PAPER);
@@ -346,6 +367,249 @@ public class GameManager {
         }
         player.getInventory().setItem(8, quit);
         plugin.getFlashModeManager().ensureFlashRoomGuideBook(player, room);
+    }
+
+    private ItemStack createFlashDifficultyVoteItem(GameRoom room, Player viewer) {
+        int normalVotes = room.getFlashDifficultyVoteCount(FlashDifficulty.NORMAL);
+        int easyVotes = room.getFlashDifficultyVoteCount(FlashDifficulty.EASY);
+        FlashDifficulty ownVote = viewer == null ? null : room.getFlashDifficultyVote(viewer.getUniqueId());
+
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return item;
+        }
+        meta.displayName(nonItalicItemText("§x§F§F§D§7§0§0闪§x§F§F§B§B§3§3光§x§F§F§9§9§6§6难§x§F§F§7§7§9§9度§x§F§F§5§5§C§C投§x§F§F§3§3§F§F票"));
+        meta.setItemModel(NamespacedKey.minecraft("comparator"));
+        meta.getPersistentDataContainer().set(flashDifficultyVoteKey,
+                org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+        meta.lore(List.of(
+                nonItalicItemText("§8· · · · · · · · · · · · · ·"),
+                nonItalicItemText("§f- §b正常难度: §e" + normalVotes + " §7票"),
+                nonItalicItemText("§f- §a简单难度: §e" + easyVotes + " §7票"),
+                nonItalicItemText(ownVote == null
+                        ? "§f- §d右键打开本局闪光难度投票"
+                        : "§f- §6你当前选择: §f" + ownVote.getDisplayName()),
+                nonItalicItemText("§f- §7票数相同时按正常难度开始"),
+                nonItalicItemText("§8· · · · · · · · · · · · · ·")
+        ));
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public boolean isFlashDifficultyVoteItem(ItemStack item) {
+        if (item == null || item.getType() != Material.PAPER || !item.hasItemMeta()) {
+            return false;
+        }
+        Byte marker = item.getItemMeta().getPersistentDataContainer().get(
+                flashDifficultyVoteKey, org.bukkit.persistence.PersistentDataType.BYTE);
+        return marker != null && marker == (byte) 1;
+    }
+
+    public boolean canVoteFlashDifficulty(GameRoom room) {
+        return room != null
+                && room.getGameMode().supportsFlashDifficultyVote()
+                && !room.isFlashDifficultyFinalized()
+                && (room.getState() == RoomState.WAITING || room.getState() == RoomState.STARTING);
+    }
+
+    public void handleFlashDifficultyVote(Player voter, GameRoom room, FlashDifficulty difficulty) {
+        if (voter == null || difficulty == null || !canVoteFlashDifficulty(room)
+                || !room.getAllPlayerUUIDs().contains(voter.getUniqueId())) {
+            if (voter != null) {
+                voter.playSound(voter.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.82f, 1.12f);
+                voter.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_difficulty_vote_unavailable"));
+            }
+            return;
+        }
+        if (!room.voteFlashDifficulty(voter.getUniqueId(), difficulty)) {
+            voter.playSound(voter.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.62f, 0.82f);
+            voter.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_difficulty_vote_same"));
+            return;
+        }
+
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("player", voter.getName());
+        placeholders.put("difficulty", difficulty.getDisplayName());
+        placeholders.put("normal", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.NORMAL)));
+        placeholders.put("easy", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.EASY)));
+        room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_difficulty_voted", placeholders));
+        voter.playSound(voter.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.72f,
+                difficulty == FlashDifficulty.EASY ? 1.5f : 1.12f);
+        refreshLobbyItems(room);
+    }
+
+    private void finalizeFlashDifficulty(GameRoom room) {
+        if (room == null || !room.getGameMode().supportsFlashDifficultyVote()
+                || room.isFlashDifficultyFinalized()) {
+            return;
+        }
+        FlashDifficulty selected = room.finalizeFlashDifficulty();
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("difficulty", selected.getDisplayName());
+        placeholders.put("normal", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.NORMAL)));
+        placeholders.put("easy", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.EASY)));
+        room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_difficulty_selected", placeholders));
+    }
+
+    private ItemStack createCountdownSpeedVoteItem(GameRoom room, Player viewer) {
+        int currentVotes = getOrdinaryCountdownSpeedVotes(room);
+        int ordinaryPlayers = getOrdinaryLobbyPlayers(room).size();
+        int requiredVotes = getCountdownSpeedRequiredVotes(room);
+        int highPerformancePlayers = getHighPerformanceLobbyPlayers(room).size();
+        int highPerformanceVotes = getHighPerformanceCountdownSpeedVotes(room);
+
+        ItemStack voteItem = new ItemStack(Material.PAPER);
+        ItemMeta meta = voteItem.getItemMeta();
+        if (meta == null) {
+            return voteItem;
+        }
+
+        meta.displayName(nonItalicItemText("§x§F§F§4§4§4§4投§x§F§F§6§6§5§5票§x§F§F§8§8§6§6开§x§F§F§A§A§7§7始 §7<§a"
+                + currentVotes + "§7/§e" + ordinaryPlayers + "§7>"));
+        meta.setItemModel(NamespacedKey.minecraft("redstone"));
+        meta.getPersistentDataContainer().set(countdownSpeedVoteKey,
+                org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(nonItalicItemText("§8· · · · · · · · · · · · · ·"));
+        lore.add(nonItalicItemText("§f- §e右键投票将等待时间跳至 §c30秒"));
+        lore.add(nonItalicItemText("§f- §b常规通过需要 §f" + requiredVotes + " §b票"));
+        if (highPerformancePlayers >= 2) {
+            lore.add(nonItalicItemText("§f- §d40+表现玩家同意 §f" + highPerformanceVotes + "§7/§f2 §d也可通过"));
+        }
+        lore.add(nonItalicItemText(viewer != null && room.hasVotedSpeedUp(viewer.getUniqueId())
+                ? "§f- §6你已经投过这一票了"
+                : "§f- §a拿在手上按右键投票"));
+        lore.add(nonItalicItemText("§8· · · · · · · · · · · · · ·"));
+        meta.lore(lore);
+        voteItem.setItemMeta(meta);
+        return voteItem;
+    }
+
+    private Component nonItalicItemText(String legacyText) {
+        return LegacyComponentSerializer.legacySection().deserialize(legacyText)
+                .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
+    }
+
+    public boolean isCountdownSpeedVoteItem(ItemStack item) {
+        if (item == null || item.getType() != Material.PAPER || !item.hasItemMeta()) {
+            return false;
+        }
+        Byte marker = item.getItemMeta().getPersistentDataContainer().get(
+                countdownSpeedVoteKey, org.bukkit.persistence.PersistentDataType.BYTE);
+        return marker != null && marker == (byte) 1;
+    }
+
+    public boolean shouldOfferCountdownSpeedVote(GameRoom room) {
+        if (room == null || !usesLobbyVoteItems(room)
+                || room.getGameMode().isFlashTournament()
+                || (room.getState() != RoomState.WAITING && room.getState() != RoomState.STARTING)) {
+            return false;
+        }
+        if (room.getState() == RoomState.STARTING && room.getCountdown() <= COUNTDOWN_SPEED_VOTE_SECONDS) {
+            return false;
+        }
+        int ordinaryPlayers = getOrdinaryLobbyPlayers(room).size();
+        return ordinaryPlayers >= COUNTDOWN_SPEED_VOTE_MIN_PLAYERS
+                || getHighPerformanceLobbyPlayers(room).size() >= 2;
+    }
+
+    public void handleCountdownSpeedVote(Player voter, GameRoom room) {
+        if (voter == null || room == null) {
+            return;
+        }
+        if (voter.isOp() || !shouldOfferCountdownSpeedVote(room)
+                || !room.getAllPlayerUUIDs().contains(voter.getUniqueId())) {
+            voter.playSound(voter.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.85f, 1.1f);
+            voter.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.countdown_vote_unavailable"));
+            refreshLobbyItems(room);
+            return;
+        }
+        if (!room.voteSpeedUp(voter.getUniqueId())) {
+            voter.playSound(voter.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.85f, 1.18f);
+            voter.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.countdown_vote_same"));
+            return;
+        }
+
+        int currentVotes = getOrdinaryCountdownSpeedVotes(room);
+        int ordinaryPlayers = getOrdinaryLobbyPlayers(room).size();
+        int requiredVotes = getCountdownSpeedRequiredVotes(room);
+        int highPerformanceVotes = getHighPerformanceCountdownSpeedVotes(room);
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("player", voter.getName());
+        placeholders.put("current", String.valueOf(currentVotes));
+        placeholders.put("total", String.valueOf(ordinaryPlayers));
+        placeholders.put("required", String.valueOf(requiredVotes));
+        placeholders.put("high_current", String.valueOf(highPerformanceVotes));
+        room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.countdown_vote_progress", placeholders));
+        voter.playSound(voter.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.72f, 1.55f);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (voter.isOnline()) {
+                voter.playSound(voter.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.55f, 1.7f);
+            }
+        }, 4L);
+
+        boolean regularPassed = currentVotes >= requiredVotes;
+        boolean highPerformancePassed = getHighPerformanceLobbyPlayers(room).size() >= 2
+                && highPerformanceVotes >= 2;
+        if (regularPassed || highPerformancePassed) {
+            if (room.getCountdown() <= 0 || room.getCountdown() > COUNTDOWN_SPEED_VOTE_SECONDS) {
+                room.setCountdown(COUNTDOWN_SPEED_VOTE_SECONDS);
+            }
+            if (room.getState() == RoomState.WAITING) {
+                startCountdown(room);
+            }
+            room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.countdown_vote_passed"));
+            for (UUID uuid : room.getAllPlayerUUIDs()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null) {
+                    player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.68f, 1.45f);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (player.isOnline()) {
+                            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.72f, 1.35f);
+                        }
+                    }, 6L);
+                }
+            }
+        }
+        refreshLobbyItems(room);
+    }
+
+    private List<UUID> getOrdinaryLobbyPlayers(GameRoom room) {
+        if (room == null) {
+            return List.of();
+        }
+        return room.getAllPlayerUUIDs().stream()
+                .filter(uuid -> !Bukkit.getOfflinePlayer(uuid).isOp())
+                .toList();
+    }
+
+    private List<UUID> getHighPerformanceLobbyPlayers(GameRoom room) {
+        return getOrdinaryLobbyPlayers(room).stream()
+                .filter(this::hasCountdownVotePerformance)
+                .toList();
+    }
+
+    private boolean hasCountdownVotePerformance(UUID uuid) {
+        var data = plugin.getPlayerDataManager().getPlayerData(uuid);
+        return data != null && Math.max(data.getHunterPointsTotal(), data.getPreyPointsTotal())
+                >= COUNTDOWN_SPEED_VOTE_PERFORMANCE;
+    }
+
+    private int getOrdinaryCountdownSpeedVotes(GameRoom room) {
+        Set<UUID> ordinaryPlayers = new HashSet<>(getOrdinaryLobbyPlayers(room));
+        return (int) room.getSpeedUpVotes().stream().filter(ordinaryPlayers::contains).count();
+    }
+
+    private int getHighPerformanceCountdownSpeedVotes(GameRoom room) {
+        Set<UUID> highPerformancePlayers = new HashSet<>(getHighPerformanceLobbyPlayers(room));
+        return (int) room.getSpeedUpVotes().stream().filter(highPerformancePlayers::contains).count();
+    }
+
+    private int getCountdownSpeedRequiredVotes(GameRoom room) {
+        int ordinaryPlayers = getOrdinaryLobbyPlayers(room).size();
+        return Math.max(1, (ordinaryPlayers * 3 + 3) / 4);
     }
 
     private void giveStandaloneMiniGameLobbyItems(Player player, GameRoom room) {
@@ -744,6 +1008,7 @@ public class GameManager {
                 }
 
                 if (countdown <= 0) {
+                    finalizeFlashDifficulty(room);
                     if (usesPreySelection(room)) {
                         ensurePreysSelected(room);
                     }
@@ -9394,7 +9659,7 @@ public class GameManager {
         room.setGameActuallyStarted(true);
         room.setGameStartCountdown(false);
         room.setPreyStartCountdownSeconds(0);
-        setTournamentAdvancementAnnouncements(room, true);
+        setRoomAdvancementAnnouncements(room, true);
         room.setDualPreyStackLocked(false);
         plugin.getPlayerListener().resetCompassTpState(room);
         plugin.getPlayerListener().primeFlashStartCompassCooldown(room);
@@ -9569,12 +9834,23 @@ public class GameManager {
             plugin.getWorldManager().keepLobbyWeatherClear();
             return;
         }
+        if (isEasyFlashDifficulty(room)) {
+            world.setGameRule(GameRule.DO_WEATHER_CYCLE, true);
+            return;
+        }
         applyStorm(world, true);
         plugin.getWorldManager().keepLobbyWeatherClear();
     }
 
     private void updateFlashModeStorm(GameRoom room) {
         if (room == null || !plugin.getFlashModeManager().isFlashMode(room) || !room.isGameActuallyStarted()) {
+            return;
+        }
+        if (isEasyFlashDifficulty(room)) {
+            World world = room.getGameWorld();
+            if (world != null && plugin.getWorldManager().isPrimaryGameWorld(room.getRoomId(), world)) {
+                world.setGameRule(GameRule.DO_WEATHER_CYCLE, true);
+            }
             return;
         }
         if (System.currentTimeMillis() - room.getGameStartTime() < FLASH_STORM_DELAY_MILLIS) {
@@ -9589,6 +9865,13 @@ public class GameManager {
             return;
         }
         World world = room.getGameWorld();
+        if (isEasyFlashDifficulty(room)) {
+            if (world != null && plugin.getWorldManager().isPrimaryGameWorld(room.getRoomId(), world)) {
+                world.setGameRule(GameRule.DO_WEATHER_CYCLE, true);
+            }
+            plugin.getWorldManager().keepLobbyWeatherClear();
+            return;
+        }
         if (world != null
                 && !plugin.getWorldManager().isLobbyLikeWorld(world)
                 && plugin.getWorldManager().isPrimaryGameWorld(room.getRoomId(), world)) {
@@ -9596,6 +9879,12 @@ public class GameManager {
             clearStorm(world);
         }
         plugin.getWorldManager().keepLobbyWeatherClear();
+    }
+
+    private boolean isEasyFlashDifficulty(GameRoom room) {
+        return room != null
+                && room.getGameMode().supportsFlashDifficultyVote()
+                && room.getFlashDifficulty() == FlashDifficulty.EASY;
     }
 
     public void giveHunterItems(Player hunter, GameRoom room) {
@@ -10336,9 +10625,11 @@ public class GameManager {
         Player countdownPrey = Bukkit.getPlayer(countdownUuid);
 
         if (activePrey != null) {
+            ensureSwapTimerLimitExemption(activePrey);
             releaseSwapActiveState(activePrey);
         }
         if (countdownPrey != null) {
+            ensureSwapTimerLimitExemption(countdownPrey);
             applySwapCountdownState(countdownPrey, room);
         }
 
@@ -10357,6 +10648,8 @@ public class GameManager {
         if (countdownPrey == null || !countdownPrey.isOnline()) {
             return;
         }
+        ensureSwapTimerLimitExemption(Bukkit.getPlayer(activeUuid));
+        ensureSwapTimerLimitExemption(countdownPrey);
         keepSwapCountdownState(countdownPrey, room);
 
         int timeLeft = room.getSwapCountdownSeconds();
@@ -10470,6 +10763,98 @@ public class GameManager {
         player.setInvulnerable(false);
         player.setCollidable(true);
         player.resetCooldown();
+    }
+
+    private void ensureSwapTimerLimitExemption(Player player) {
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        PermissionAttachment existing = swapTimerLimitExemptions.get(uuid);
+        if (existing != null && existing.getPermissible() == player) {
+            if (!existing.getPermissions().getOrDefault(GRIM_TIMER_LIMIT_EXEMPT_PERMISSION, false)) {
+                existing.setPermission(GRIM_TIMER_LIMIT_EXEMPT_PERMISSION, true);
+                player.recalculatePermissions();
+                refreshGrimPermissions(uuid);
+            }
+            return;
+        }
+        if (existing != null) {
+            try {
+                existing.remove();
+            } catch (IllegalArgumentException ignored) {
+                // 旧 Player 对象的 attachment 已被 Bukkit 移除。
+            }
+        }
+        PermissionAttachment attachment = player.addAttachment(plugin);
+        attachment.setPermission(GRIM_TIMER_LIMIT_EXEMPT_PERMISSION, true);
+        swapTimerLimitExemptions.put(uuid, attachment);
+        player.recalculatePermissions();
+        refreshGrimPermissions(uuid);
+    }
+
+    public void clearSwapTimerLimitExemption(Player player) {
+        if (player != null) {
+            clearSwapTimerLimitExemption(player.getUniqueId());
+        }
+    }
+
+    public void clearSwapTimerLimitExemption(UUID uuid) {
+        if (uuid == null) {
+            return;
+        }
+        PermissionAttachment attachment = swapTimerLimitExemptions.remove(uuid);
+        if (attachment == null) {
+            return;
+        }
+        try {
+            attachment.remove();
+        } catch (IllegalArgumentException ignored) {
+            // Bukkit 可能已在玩家断开时移除 attachment。
+        }
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null && player.isOnline()) {
+            player.recalculatePermissions();
+            refreshGrimPermissions(uuid);
+        }
+    }
+
+    public void clearSwapTimerLimitExemptions(GameRoom room) {
+        if (room == null || room.getGameMode() != GameMode.SWAP) {
+            return;
+        }
+        Set<UUID> players = new HashSet<>(room.getAllPlayerUUIDs());
+        players.addAll(room.getSpectators());
+        players.forEach(this::clearSwapTimerLimitExemption);
+    }
+
+    private void clearAllSwapTimerLimitExemptions() {
+        new ArrayList<>(swapTimerLimitExemptions.keySet()).forEach(this::clearSwapTimerLimitExemption);
+    }
+
+    private void refreshGrimPermissions(UUID uuid) {
+        Plugin grimPlugin = Bukkit.getPluginManager().getPlugin("GrimAC");
+        if (grimPlugin == null || !grimPlugin.isEnabled()) {
+            return;
+        }
+        try {
+            ClassLoader loader = grimPlugin.getClass().getClassLoader();
+            Class<?> apiClass = Class.forName("ac.grim.grimac.GrimAPI", false, loader);
+            Object api = apiClass.getField("INSTANCE").get(null);
+            Object playerDataManager = apiClass.getMethod("getPlayerDataManager").invoke(api);
+            Object grimPlayer = playerDataManager.getClass().getMethod("getPlayer", UUID.class)
+                    .invoke(playerDataManager, uuid);
+            if (grimPlayer != null) {
+                grimPlayer.getClass().getMethod("updatePermissions").invoke(grimPlayer);
+            }
+            grimPermissionRefreshFailureLogged = false;
+        } catch (ReflectiveOperationException | LinkageError exception) {
+            if (!grimPermissionRefreshFailureLogged) {
+                grimPermissionRefreshFailureLogged = true;
+                plugin.getLogger().warning("无法立即刷新 Grim 权限缓存，临时权限仍已写入 Bukkit: "
+                        + exception.getClass().getSimpleName() + ": " + exception.getMessage());
+            }
+        }
     }
 
     private Location getSwapHoldingLocation(GameRoom room) {
@@ -10821,7 +11206,7 @@ public class GameManager {
         room.setState(RoomState.ENDED);
         room.setPreyWon(preyWin);
         scheduleEndedRoomClosure(room, preyWin ? 20 : 10);
-        setTournamentAdvancementAnnouncements(room, false);
+        setRoomAdvancementAnnouncements(room, false);
         cleanupRandomCompassMode(room.getRoomId());
         cleanupSurvivalMode(room.getRoomId());
         cleanupThunderStormWeather(room);
@@ -10894,7 +11279,7 @@ public class GameManager {
         room.setState(RoomState.ENDED);
         room.setPreyWon(!room.isPreyQuit());
         scheduleEndedRoomClosure(room, 10);
-        setTournamentAdvancementAnnouncements(room, false);
+        setRoomAdvancementAnnouncements(room, false);
         cleanupRandomCompassMode(room.getRoomId());
         cleanupSurvivalMode(room.getRoomId());
         cleanupThunderStormWeather(room);
@@ -11517,6 +11902,7 @@ public class GameManager {
     }
 
     public void shutdown() {
+        clearAllSwapTimerLimitExemptions();
         // 取消所有任务
         for (BukkitTask task : countdownTasks.values()) {
             task.cancel();
@@ -11724,7 +12110,8 @@ public class GameManager {
             }
             case THUNDER_MARK -> {
                 world.spawnParticle(Particle.ELECTRIC_SPARK, center, 36, 0.45D, 0.5D, 0.45D, 0.08D);
-                world.spawnParticle(Particle.FLASH, center, 1);
+                world.spawnParticle(Particle.FLASH, center, 1,
+                        0.0D, 0.0D, 0.0D, 0.0D, Color.fromRGB(190, 225, 255));
                 playKillEffectNearbySound(center, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.45f, 1.35f, 20.0D);
             }
             case BLOOD_BLOOM -> {
@@ -11749,12 +12136,14 @@ public class GameManager {
                 world.spawnParticle(Particle.FLAME, center, 40, 0.4D, 0.35D, 0.4D, 0.02D);
                 world.spawnParticle(Particle.DUST, center, 28, 0.36D, 0.24D, 0.36D,
                         new Particle.DustOptions(Color.fromRGB(255, 184, 52), 1.75f));
-                world.spawnParticle(Particle.FLASH, center, 1);
+                world.spawnParticle(Particle.FLASH, center, 1,
+                        0.0D, 0.0D, 0.0D, 0.0D, Color.fromRGB(255, 176, 72));
                 playKillEffectNearbySound(center, Sound.ITEM_FIRECHARGE_USE, 0.82f, 1.28f, 18.0D);
             }
             case WITCH_CURSE -> {
                 world.spawnParticle(Particle.WITCH, center, 36, 0.38D, 0.36D, 0.38D, 0.02D);
-                world.spawnParticle(Particle.ENTITY_EFFECT, center, 24, 0.3D, 0.3D, 0.3D, 0.0D);
+                world.spawnParticle(Particle.ENTITY_EFFECT, center, 24,
+                        0.3D, 0.3D, 0.3D, 0.0D, Color.fromRGB(190, 72, 255));
                 playKillEffectNearbySound(center, Sound.ENTITY_WITCH_CELEBRATE, 0.62f, 1.08f, 18.0D);
             }
             case CHORUS_SHATTER -> {
@@ -11814,7 +12203,8 @@ public class GameManager {
             public void run() {
                 if (tick > 100) {
                     world.playSound(center, Sound.ENTITY_GENERIC_EXPLODE, 0.8f, 0.7f);
-                    world.spawnParticle(Particle.FLASH, center, 1);
+                    world.spawnParticle(Particle.FLASH, center, 1,
+                            0.0D, 0.0D, 0.0D, 0.0D, Color.fromRGB(104, 72, 168));
                     cancel();
                     return;
                 }
@@ -11872,7 +12262,8 @@ public class GameManager {
                 for (int i = 0; i < 36; i++) {
                     double angle = Math.toRadians(i * 10 + tick * 4);
                     Location p = center.clone().add(Math.cos(angle) * radius, 0.6 + Math.sin(angle * 2) * 0.35, Math.sin(angle) * radius);
-                    world.spawnParticle(Particle.DRAGON_BREATH, p, 2, 0.05, 0.05, 0.05, 0.01);
+                    world.spawnParticle(Particle.DRAGON_BREATH, p,
+                            2, 0.05, 0.05, 0.05, 0.01, 1.0F);
                 }
                 world.spawnParticle(Particle.DUST, center.clone().add(0, 1, 0), 12, 1.0, 0.6, 1.0,
                         new Particle.DustOptions(Color.PURPLE, 1.8f));

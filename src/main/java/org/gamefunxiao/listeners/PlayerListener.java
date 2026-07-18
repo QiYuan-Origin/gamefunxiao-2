@@ -49,6 +49,7 @@ import org.gamefunxiao.menu.hunter.InvitePlayerMenu;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -675,7 +676,7 @@ public class PlayerListener implements Listener {
                 }
                 return;
             }
-            if (handleLobbyItem(player, room, type, modelData, state)) {
+            if (handleLobbyItem(player, room, item, type, modelData, state)) {
                 event.setCancelled(true);
                 return;
             }
@@ -810,7 +811,22 @@ public class PlayerListener implements Listener {
         world.createExplosion(explodeLoc.getX(), explodeLoc.getY(), explodeLoc.getZ(), 5.0F, true, true);
     }
 
-    private boolean handleLobbyItem(Player player, GameRoom room, Material type, int modelData, RoomState state) {
+    private boolean handleLobbyItem(Player player, GameRoom room, ItemStack item, Material type, int modelData, RoomState state) {
+        if (plugin.getGameManager().isFlashDifficultyVoteItem(item)) {
+            if (!plugin.getGameManager().canVoteFlashDifficulty(room)) {
+                player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.82f, 1.12f);
+                player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_difficulty_vote_unavailable"));
+                return true;
+            }
+            new org.gamefunxiao.menu.hunter.FlashDifficultyVoteMenu(plugin, player, room).open();
+            return true;
+        }
+
+        if (plugin.getGameManager().isCountdownSpeedVoteItem(item)) {
+            plugin.getGameManager().handleCountdownSpeedVote(player, room);
+            return true;
+        }
+
         // 使用CustomModelData识别物品
         if (modelData > 0) {
             switch (modelData) {
@@ -1391,7 +1407,9 @@ public class PlayerListener implements Listener {
         }
 
         if (room.isPrey(player.getUniqueId())) {
-            boolean keepPreyInventory = !room.getGameMode().isFlashTournament()
+            boolean swapMode = room.getGameMode() == GameMode.SWAP;
+            boolean keepPreyInventory = !swapMode
+                    && !room.getGameMode().isFlashTournament()
                     && room.hasModifier("PreyRespawn")
                     && room.canUsePreyRespawn(player.getUniqueId());
             event.setKeepInventory(keepPreyInventory);
@@ -1418,7 +1436,8 @@ public class PlayerListener implements Listener {
                 // 发送击杀消息和播放雷击音效
                 killer.playSound(killer.getLocation(), org.bukkit.Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.5f, 1.2f);
                 if (!tournament) {
-                    boolean finalKill = !keepPreyInventory && room.getPreyUUIDs().size() <= 1;
+                    boolean finalKill = !keepPreyInventory
+                            && (swapMode || room.getPreyUUIDs().size() <= 1);
                     plugin.getGameManager().recordHunterKillPreyPerformance(room, killer, player, finalKill);
                 }
                 // 击杀特效已在死亡事件入口统一播放，避免终章闪光/普通分支漏播或重复播。
@@ -1440,7 +1459,16 @@ public class PlayerListener implements Listener {
                     } catch (Exception ignored) {}
                 }, 1L);
 
-                if (room.getPreyUUIDs().size() > 1) {
+                if (swapMode) {
+                    if (killer != null && room.isHunter(killer.getUniqueId())) {
+                        room.setVictoryEffectTrigger(killer.getUniqueId(), player.getLocation().clone());
+                    }
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (room.getState() == RoomState.PLAYING) {
+                            plugin.getGameManager().endGame(room, false);
+                        }
+                    }, 1L);
+                } else if (room.getPreyUUIDs().size() > 1) {
                     Bukkit.getScheduler().runTaskLater(plugin, () -> convertDefeatedPreyToSpectator(player, room), 5L);
                 } else {
                     if (killer != null && room.isHunter(killer.getUniqueId())) {
@@ -1836,8 +1864,19 @@ public class PlayerListener implements Listener {
             return;
         }
 
-        // 所有 GameFun 模式里都不显示成就提示：不走全服公告，也不转播到房间。
+        Component advancementMessage = event.message();
+        if (advancementMessage == null) {
+            return;
+        }
+
+        // 阻止跨房间公告，只把原版成就提示转播给当前房间。
         event.message(null);
+        Component roomMessage = room.getGameMode().isFlashTournament()
+                ? advancementMessage
+                : room.getGameMode().isLuckyPillars()
+                ? withLuckyPillarsPrefix(advancementMessage)
+                : withHunterGamePrefix(advancementMessage);
+        broadcastRoomComponent(room, roomMessage);
     }
 
     private Component withHunterGamePrefix(Component message) {
@@ -4216,6 +4255,12 @@ public class PlayerListener implements Listener {
         String baseCommand = rawParts[0].toLowerCase();
         GameRoom senderRoom = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
 
+        if (isEndFlashEnderChestCommand(baseCommand, senderRoom)) {
+            event.setCancelled(true);
+            plugin.getGameFunCommand().executeRegisteredCommand(player, "endflashender", new String[0]);
+            return;
+        }
+
         if (isFlashWikiCommand(baseCommand)) {
             event.setCancelled(true);
             giveFlashWikiBook(player);
@@ -4313,6 +4358,20 @@ public class PlayerListener implements Listener {
                 || normalized.equals("gamefunwiki")
                 || normalized.equals("闪光手册")
                 || normalized.equals("书wiki");
+    }
+
+    private boolean isEndFlashEnderChestCommand(String baseCommand, GameRoom room) {
+        if (baseCommand == null || room == null || room.getGameMode() != GameMode.END_FLASH) {
+            return false;
+        }
+        String normalized = baseCommand.toLowerCase(Locale.ROOT);
+        int namespaceIndex = normalized.lastIndexOf(':');
+        if (namespaceIndex >= 0 && namespaceIndex < normalized.length() - 1) {
+            normalized = normalized.substring(namespaceIndex + 1);
+        }
+        return normalized.equals("ec")
+                || normalized.equals("enderchest")
+                || normalized.equals("endflashender");
     }
 
     private void giveFlashWikiBook(Player player) {

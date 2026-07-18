@@ -30,6 +30,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
+import org.bukkit.event.inventory.PrepareSmithingEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
@@ -73,6 +74,11 @@ public class FlashModeListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onPrepareSmithing(PrepareSmithingEvent event) {
+        plugin.getFlashModeManager().prepareStableSwordSmithingResult(event);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPrepareItemCraft(PrepareItemCraftEvent event) {
         plugin.getFlashModeManager().handleFlashCraftPrepare(event);
     }
@@ -91,6 +97,9 @@ public class FlashModeListener implements Listener {
             org.bukkit.Bukkit.getScheduler().runTask(plugin,
                     () -> plugin.getFlashModeManager().normalizeUnstableCoreShieldBlockingDelay(player));
             var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+            if (plugin.getFlashModeManager().handleStableSwordSmithingTake(event, player, room)) {
+                return;
+            }
             if (plugin.getFlashModeManager().handleFlashRoomGuideBookClick(event, player, room)) {
                 return;
             }
@@ -471,6 +480,7 @@ public class FlashModeListener implements Listener {
         if (plugin.getFlashModeManager().handleDispenserLauncherFireballDamage(event)) {
             return;
         }
+        plugin.getFlashModeManager().handleFlashGlobalSkeletonPayloadDamage(event);
         if (plugin.getFlashModeManager().handleTntMinecartHoeHit(event)) {
             return;
         }

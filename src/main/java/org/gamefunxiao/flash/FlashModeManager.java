@@ -29,6 +29,7 @@ import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.SoundGroup;
+import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.attribute.Attribute;
@@ -102,6 +103,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
+import org.bukkit.event.inventory.PrepareSmithingEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketEvent;
@@ -123,8 +125,11 @@ import org.bukkit.inventory.EquipmentSlotGroup;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.ShapelessRecipe;
+import org.bukkit.inventory.SmithingInventory;
+import org.bukkit.inventory.SmithingTransformRecipe;
 import org.bukkit.inventory.meta.CrossbowMeta;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
@@ -143,6 +148,7 @@ import org.bukkit.util.Vector;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
 import org.gamefunxiao.GameFunXiao;
+import org.gamefunxiao.game.FlashDifficulty;
 import org.gamefunxiao.game.GameMode;
 import org.gamefunxiao.game.GameRoom;
 import org.gamefunxiao.game.RoomState;
@@ -158,11 +164,14 @@ import java.nio.file.StandardCopyOption;
 
 import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.List;
@@ -207,10 +216,21 @@ public class FlashModeManager {
     private static final String SWORD_MATERIAL_PREFIX = "§8- §x§A§8§F§F§C§8剑材料强化：";
     private static final String REDSTONE_STABILIZER_LINE = "§8- §x§F§F§5§5§5§5红石稳定器：攻击速度 +10%";
     private static final double REDSTONE_STABILIZER_ATTACK_SPEED_BONUS = 0.10D;
+    private static final String STABLE_SWORD_LINE_PREFIX = "§8- §x§F§F§D§7§7§7稳定锻造：";
+    private static final String STABLE_CROSSBOW_SWORD_LINE_PREFIX = "§8- §x§B§B§F§F§F§F稳定弩剑：";
+    private static final double STABLE_SWORD_NORMAL_DAMAGE_BONUS = 0.30D;
+    private static final double STABLE_SWORD_EASY_DAMAGE_BONUS = 0.20D;
+    private static final double STABLE_SWORD_ATTACK_SPEED_BONUS = 0.10D;
+    private static final double STABLE_SWORD_NORMAL_CROSSBOW_DISTANCE_MULTIPLIER = 2.0D;
+    private static final double STABLE_SWORD_EASY_CROSSBOW_DISTANCE_MULTIPLIER = 1.5D;
+    private static final double STABLE_SWORD_CROSSBOW_SPEED_MULTIPLIER = 1.15D;
+    private static final int STABLE_SWORD_NORMAL_GHAST_TEAR_COST = 8;
+    private static final int STABLE_SWORD_EASY_GHAST_TEAR_COST = 1;
     private static final String SWORD_MATERIAL_DAMAGE_LINE_PREFIX = "§8- §x§F§F§9§6§8§8攻击伤害已降低：";
     private static final String AXE_MATERIAL_PREFIX = "§8- §x§F§F§B§B§6§6斧头材料强化：";
     private static final String ARMOR_MATERIAL_LINE_PREFIX = "§8- §x§8§8§D§D§F§F材料护层：";
     private static final double MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE = 0.025D;
+    private static final double MATERIAL_ARMOR_AXE_BONUS_REDUCTION_PER_PIECE = 0.175D;
     private static final String TNT_ARMOR_LINE_PREFIX = "§8- §x§F§F§5§5§3§3TMT材料强化：";
     private static final int TNT_ARMOR_MAX_LAYERS = 40;
     private static final double TNT_ARMOR_EXPLOSION_IMMUNITY_PER_LAYER = 0.005D;
@@ -388,7 +408,11 @@ public class FlashModeManager {
             "风暴剑甲",
             "权限速查",
             "其它细节",
-            "轨道炮",
+            "轨道炮装配一",
+            "轨道炮装配二",
+            "轨道炮装配三",
+            "轨道炮使用",
+            "稳定锻造",
     };
     private static final int FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE = 9;
     private static final int FLASH_GUIDE_VOLUME_MAIN = 0;
@@ -398,7 +422,7 @@ public class FlashModeManager {
             "宠物乐魂", "通关农耕", "沉重爆破", "完整目录"
     };
     private static final int[] FLASH_GUIDE_VOLUME_STARTS = {0, 1, 13, 30, 42, 56, 63, 70, 1};
-    private static final int[] FLASH_GUIDE_VOLUME_ENDS = {0, 12, 34, 41, 55, 62, 69, 79, 79};
+    private static final int[] FLASH_GUIDE_VOLUME_ENDS = {0, 12, 34, 41, 55, 62, 69, 79, 84};
     private static final String[] FLASH_GUIDE_VOLUME_HEADERS = {
             "§x§9§8§D§D§F§F§l主 §8§l· §x§F§4§C§3§F§F§l闪光书",
             "§b§l基础规则", "§6§l铁砧强化", "§9§l风弹装填", "§c§l战斗机关",
@@ -416,6 +440,10 @@ public class FlashModeManager {
     private static final double TAME_DAMAGE_BOOST_MULTIPLIER = 1.35D;
     private static final long AXE_SHIELD_BREAK_MACE_COMBO_WINDOW_MS = 3200L;
     private static final float MACE_SMASH_MIN_FALL_DISTANCE = 1.50F;
+    private static final double NORMAL_MACE_SMASH_MULTIPLIER = 1.25D;
+    private static final double EASY_MACE_SMASH_MULTIPLIER = 1.05D;
+    private static final double EASY_MACE_SHIELD_COMBO_MULTIPLIER = 1.25D;
+    private static final double EASY_MACE_SHATTER_MULTIPLIER = 1.30D;
     private static final int UNSTABLE_MACE_MAX_LEVEL = 10;
     private static final double UNSTABLE_MACE_DAMAGE_BONUS_PER_LEVEL = 0.35D;
     private static final double UNSTABLE_MACE_AMBUSH_DAMAGE_BONUS = 1.50D;
@@ -551,6 +579,8 @@ public class FlashModeManager {
     private final NamespacedKey pseudoPoisonPotatoRecipeKey;
     private final NamespacedKey tmtRecipeKey;
     private final NamespacedKey flashFishingBaitRecipeKey;
+    private final NamespacedKey stableSwordNormalSmithingRecipeKey;
+    private final NamespacedKey stableSwordEasySmithingRecipeKey;
     private final NamespacedKey upgradeEnchantmentKey;
     private final NamespacedKey featherQuillKey;
     private final NamespacedKey magicBrushBaseKey;
@@ -621,6 +651,13 @@ public class FlashModeManager {
     private final NamespacedKey materialSwordDamageModifierKey;
     private final NamespacedKey redstoneStabilizerKey;
     private final NamespacedKey redstoneStabilizerAttackSpeedModifierKey;
+    private final NamespacedKey stableSwordKey;
+    private final NamespacedKey stableSwordDamageBonusKey;
+    private final NamespacedKey stableSwordAttackSpeedBonusKey;
+    private final NamespacedKey stableSwordCrossbowDistanceMultiplierKey;
+    private final NamespacedKey stableSwordCrossbowSpeedMultiplierKey;
+    private final NamespacedKey stableSwordAttackDamageModifierKey;
+    private final NamespacedKey stableSwordAttackSpeedModifierKey;
     private final NamespacedKey materialAxeDamageBonusKey;
     private final NamespacedKey materialAxeCooldownIncreaseKey;
     private final NamespacedKey materialAxeAttackSpeedModifierKey;
@@ -657,6 +694,10 @@ public class FlashModeManager {
     private final NamespacedKey turtleShellSpeedModifierKey;
     private final NamespacedKey flashGlobalMobGearKey;
     private final NamespacedKey flashGlobalMobMinerKey;
+    private final NamespacedKey flashGlobalSkeletonCrossbowDataKey;
+    private final NamespacedKey flashGlobalSkeletonPayloadTypeKey;
+    private final NamespacedKey flashGlobalSkeletonPayloadDataKey;
+    private final NamespacedKey flashGlobalSkeletonDamageMultiplierKey;
     private final Map<UUID, Long> bucketSwordCooldowns = new HashMap<>();
     private final Map<UUID, Integer> spyglassFocusTicks = new HashMap<>();
     private final Map<UUID, String> spyglassFocusTargets = new HashMap<>();
@@ -673,6 +714,8 @@ public class FlashModeManager {
     private final Map<UUID, Double> unstableMaceNextReboundChances = new HashMap<>();
     private final Map<UUID, Long> unstableMaceDisplacementLocks = new HashMap<>();
     private final Set<UUID> unstableMaceSpecialDamageGuards = new HashSet<>();
+    private final Set<EntityDamageByEntityEvent> processedEasyMaceDamageEvents =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<UUID, PendingMaceShieldBreak> pendingMaceShieldBreaks = new HashMap<>();
     private final Map<UUID, UnstableMacePearlTrigger> unstableMacePearlTriggers = new HashMap<>();
     private final Map<UUID, UnstableMacePearlTrigger> unstableMaceLoadedPearls = new HashMap<>();
@@ -750,6 +793,8 @@ public class FlashModeManager {
         this.pseudoPoisonPotatoRecipeKey = new NamespacedKey(plugin, "flash_pseudo_poison_potato_recipe");
         this.tmtRecipeKey = new NamespacedKey(plugin, "flash_tmt_recipe");
         this.flashFishingBaitRecipeKey = new NamespacedKey(plugin, "flash_fishing_bait_recipe");
+        this.stableSwordNormalSmithingRecipeKey = new NamespacedKey(plugin, "flash_stable_sword_smithing_normal");
+        this.stableSwordEasySmithingRecipeKey = new NamespacedKey(plugin, "flash_stable_sword_smithing_easy");
         this.upgradeEnchantmentKey = FlashModeKeys.createUpgradeEnchantmentKey(plugin);
         this.featherQuillKey = new NamespacedKey(plugin, "flash_feather_quill");
         this.magicBrushBaseKey = new NamespacedKey(plugin, "flash_magic_brush_base");
@@ -820,6 +865,13 @@ public class FlashModeManager {
         this.materialSwordDamageModifierKey = new NamespacedKey(plugin, "flash_material_sword_damage");
         this.redstoneStabilizerKey = new NamespacedKey(plugin, "flash_redstone_stabilizer");
         this.redstoneStabilizerAttackSpeedModifierKey = new NamespacedKey(plugin, "flash_redstone_stabilizer_attack_speed");
+        this.stableSwordKey = new NamespacedKey(plugin, "flash_stable_sword");
+        this.stableSwordDamageBonusKey = new NamespacedKey(plugin, "flash_stable_sword_damage_bonus");
+        this.stableSwordAttackSpeedBonusKey = new NamespacedKey(plugin, "flash_stable_sword_attack_speed_bonus");
+        this.stableSwordCrossbowDistanceMultiplierKey = new NamespacedKey(plugin, "flash_stable_sword_crossbow_distance_multiplier");
+        this.stableSwordCrossbowSpeedMultiplierKey = new NamespacedKey(plugin, "flash_stable_sword_crossbow_speed_multiplier");
+        this.stableSwordAttackDamageModifierKey = new NamespacedKey(plugin, "flash_stable_sword_attack_damage");
+        this.stableSwordAttackSpeedModifierKey = new NamespacedKey(plugin, "flash_stable_sword_attack_speed");
         this.materialAxeDamageBonusKey = new NamespacedKey(plugin, "flash_material_axe_damage_bonus");
         this.materialAxeCooldownIncreaseKey = new NamespacedKey(plugin, "flash_material_axe_cooldown_increase");
         this.materialAxeAttackSpeedModifierKey = new NamespacedKey(plugin, "flash_material_axe_attack_speed");
@@ -856,8 +908,13 @@ public class FlashModeManager {
         this.turtleShellSpeedModifierKey = new NamespacedKey(plugin, "flash_turtle_shell_speed");
         this.flashGlobalMobGearKey = new NamespacedKey(plugin, "flash_global_mob_gear");
         this.flashGlobalMobMinerKey = new NamespacedKey(plugin, "flash_global_mob_miner");
+        this.flashGlobalSkeletonCrossbowDataKey = new NamespacedKey(plugin, "flash_global_skeleton_crossbow_data");
+        this.flashGlobalSkeletonPayloadTypeKey = new NamespacedKey(plugin, "flash_global_skeleton_payload_type");
+        this.flashGlobalSkeletonPayloadDataKey = new NamespacedKey(plugin, "flash_global_skeleton_payload_data");
+        this.flashGlobalSkeletonDamageMultiplierKey = new NamespacedKey(plugin, "flash_global_skeleton_damage_multiplier");
         // Resolve every payload during enable so an incomplete runtime package fails before a match starts.
         CrossbowPayload.values();
+        startFlashGlobalSkeletonTask();
         startRailgunTasks();
     }
 
@@ -957,6 +1014,8 @@ public class FlashModeManager {
         Bukkit.removeRecipe(pseudoPoisonPotatoRecipeKey);
         Bukkit.removeRecipe(tmtRecipeKey);
         Bukkit.removeRecipe(flashFishingBaitRecipeKey);
+        Bukkit.removeRecipe(stableSwordNormalSmithingRecipeKey);
+        Bukkit.removeRecipe(stableSwordEasySmithingRecipeKey);
         startJukeboxAuraTask();
         startHoeTrapTask();
         startTurtleShellSpeedTask();
@@ -999,10 +1058,44 @@ public class FlashModeManager {
         fishingBaitRecipe.addIngredient(Material.KELP);
         fishingBaitRecipe.addIngredient(Material.COD);
         Bukkit.addRecipe(fishingBaitRecipe);
+
+        registerStableSwordSmithingRecipes();
+    }
+
+    private void registerStableSwordSmithingRecipes() {
+        List<Material> swordMaterials = Arrays.stream(Material.values())
+                .filter(material -> material.isItem() && material.name().endsWith("_SWORD"))
+                .toList();
+        if (swordMaterials.isEmpty()) {
+            plugin.getLogger().warning("未找到可用于稳定锻造的剑物品，锻造配方未注册。");
+            return;
+        }
+
+        ItemStack placeholderResult = new ItemStack(swordMaterials.get(0));
+        SmithingTransformRecipe normalRecipe = new SmithingTransformRecipe(
+                stableSwordNormalSmithingRecipeKey,
+                placeholderResult,
+                new RecipeChoice.MaterialChoice(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE),
+                new RecipeChoice.MaterialChoice(swordMaterials),
+                new RecipeChoice.MaterialChoice(Material.GHAST_TEAR));
+        SmithingTransformRecipe easyRecipe = new SmithingTransformRecipe(
+                stableSwordEasySmithingRecipeKey,
+                placeholderResult,
+                RecipeChoice.empty(),
+                new RecipeChoice.MaterialChoice(swordMaterials),
+                new RecipeChoice.MaterialChoice(Material.GHAST_TEAR));
+        Bukkit.addRecipe(normalRecipe);
+        Bukkit.addRecipe(easyRecipe);
     }
 
     public boolean isFlashMode(GameRoom room) {
         return room != null && room.getGameMode().isFlashLike();
+    }
+
+    private boolean isEasyFlashDifficulty(GameRoom room) {
+        return room != null
+                && room.getGameMode().supportsFlashDifficultyVote()
+                && room.getFlashDifficulty() == FlashDifficulty.EASY;
     }
 
     public boolean isFlashTournamentMode(GameRoom room) {
@@ -1889,6 +1982,9 @@ public class FlashModeManager {
             applyRedstoneStabilizerAttackSpeedModifier(meta, item.getType());
             refreshRedstoneStabilizerLore(meta);
         }
+        if (isStableSword(item)) {
+            refreshStableSwordLoreAndAttributes(item, meta);
+        }
         if (hasPersistentByte(item, materialArmorLayerKey) && isArmor(item)) {
             refreshMaterialArmorLore(item, meta);
         }
@@ -2025,11 +2121,125 @@ public class FlashModeManager {
         meta.setLore(lore);
     }
 
+    private void refreshStableSwordLoreAndAttributes(ItemStack sword, ItemMeta meta) {
+        if (!isSword(sword) || meta == null || !hasPersistentByteMeta(meta, stableSwordKey)) {
+            return;
+        }
+        double damageBonus = clampStableBonus(meta.getPersistentDataContainer().getOrDefault(
+                stableSwordDamageBonusKey, PersistentDataType.DOUBLE, STABLE_SWORD_NORMAL_DAMAGE_BONUS));
+        double attackSpeedBonus = clampStableBonus(meta.getPersistentDataContainer().getOrDefault(
+                stableSwordAttackSpeedBonusKey, PersistentDataType.DOUBLE, STABLE_SWORD_ATTACK_SPEED_BONUS));
+        double distanceMultiplier = Math.max(1.0D, meta.getPersistentDataContainer().getOrDefault(
+                stableSwordCrossbowDistanceMultiplierKey, PersistentDataType.DOUBLE,
+                STABLE_SWORD_NORMAL_CROSSBOW_DISTANCE_MULTIPLIER));
+        double speedMultiplier = Math.max(1.0D, meta.getPersistentDataContainer().getOrDefault(
+                stableSwordCrossbowSpeedMultiplierKey, PersistentDataType.DOUBLE,
+                STABLE_SWORD_CROSSBOW_SPEED_MULTIPLIER));
+
+        meta.getPersistentDataContainer().set(stableSwordDamageBonusKey, PersistentDataType.DOUBLE, damageBonus);
+        meta.getPersistentDataContainer().set(stableSwordAttackSpeedBonusKey, PersistentDataType.DOUBLE, attackSpeedBonus);
+        meta.getPersistentDataContainer().set(stableSwordCrossbowDistanceMultiplierKey, PersistentDataType.DOUBLE, distanceMultiplier);
+        meta.getPersistentDataContainer().set(stableSwordCrossbowSpeedMultiplierKey, PersistentDataType.DOUBLE, speedMultiplier);
+        applyStableSwordAttributeModifiers(meta, sword.getType(), damageBonus, attackSpeedBonus);
+
+        List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+        lore.removeIf(line -> line != null && (line.startsWith(STABLE_SWORD_LINE_PREFIX)
+                || line.startsWith(STABLE_CROSSBOW_SWORD_LINE_PREFIX)));
+        lore.add(STABLE_SWORD_LINE_PREFIX + "§f伤害 +" + formatPercent(damageBonus)
+                + "§8 / §f攻击速度 +" + formatPercent(attackSpeedBonus));
+        lore.add(STABLE_CROSSBOW_SWORD_LINE_PREFIX + "§f距离 +" + formatPercent(distanceMultiplier - 1.0D)
+                + "§8 / §f速度 +" + formatPercent(speedMultiplier - 1.0D));
+        meta.setLore(lore);
+    }
+
+    private double clampStableBonus(double value) {
+        return Math.max(0.0D, Math.min(2.0D, value));
+    }
+
+    private void applyStableSwordAttributeModifiers(ItemMeta meta, Material swordType,
+                                                    double damageBonus, double attackSpeedBonus) {
+        removeAttributeModifierByKey(meta, Attribute.ATTACK_DAMAGE, stableSwordAttackDamageModifierKey);
+        removeAttributeModifierByKey(meta, Attribute.ATTACK_SPEED, stableSwordAttackSpeedModifierKey);
+
+        double baseAttackDamage = getDefaultMainHandAttributeAmount(swordType, Attribute.ATTACK_DAMAGE, 1.0D);
+        Double materialPenalty = meta.getPersistentDataContainer().get(materialSwordDamagePenaltyKey, PersistentDataType.DOUBLE);
+        double currentAttackDamage = materialPenalty == null
+                ? baseAttackDamage
+                : Math.max(1.0D, baseAttackDamage * (1.0D - Math.max(0.0D, Math.min(0.85D, materialPenalty))));
+        double damageModifierAmount = materialPenalty == null
+                ? currentAttackDamage * (1.0D + damageBonus) - 1.0D
+                : currentAttackDamage * damageBonus;
+        meta.addAttributeModifier(Attribute.ATTACK_DAMAGE, new AttributeModifier(
+                stableSwordAttackDamageModifierKey,
+                Math.max(0.0D, damageModifierAmount),
+                AttributeModifier.Operation.ADD_NUMBER,
+                EquipmentSlotGroup.MAINHAND
+        ));
+
+        double baseAttackSpeed = getDefaultMainHandAttributeAmount(
+                swordType, Attribute.ATTACK_SPEED, getFallbackMainHandAttackSpeed(swordType));
+        boolean hasExistingSpeed = hasAttackSpeedModifierExceptStable(meta);
+        double currentAttackSpeed = hasExistingSpeed
+                ? getAttackSpeedAfterModifiersExceptStable(meta, baseAttackSpeed)
+                : baseAttackSpeed;
+        double speedModifierAmount = hasExistingSpeed
+                ? currentAttackSpeed * attackSpeedBonus
+                : currentAttackSpeed * (1.0D + attackSpeedBonus) - 4.0D;
+        meta.addAttributeModifier(Attribute.ATTACK_SPEED, new AttributeModifier(
+                stableSwordAttackSpeedModifierKey,
+                speedModifierAmount,
+                AttributeModifier.Operation.ADD_NUMBER,
+                EquipmentSlotGroup.MAINHAND
+        ));
+    }
+
+    private boolean hasAttackSpeedModifierExceptStable(ItemMeta meta) {
+        if (meta == null) {
+            return false;
+        }
+        Collection<AttributeModifier> modifiers = meta.getAttributeModifiers(Attribute.ATTACK_SPEED);
+        if (modifiers == null) {
+            return false;
+        }
+        return modifiers.stream().anyMatch(modifier -> !modifier.getKey().equals(stableSwordAttackSpeedModifierKey));
+    }
+
+    private double getAttackSpeedAfterModifiersExceptStable(ItemMeta meta, double fallback) {
+        Collection<AttributeModifier> modifiers = meta == null ? null : meta.getAttributeModifiers(Attribute.ATTACK_SPEED);
+        if (modifiers == null || modifiers.isEmpty()) {
+            return fallback;
+        }
+        double value = 4.0D;
+        double addScalar = 0.0D;
+        double multiplyScalar = 1.0D;
+        boolean found = false;
+        for (AttributeModifier modifier : modifiers) {
+            if (modifier.getKey().equals(stableSwordAttackSpeedModifierKey)) {
+                continue;
+            }
+            found = true;
+            if (modifier.getOperation() == AttributeModifier.Operation.ADD_NUMBER) {
+                value += modifier.getAmount();
+            } else if (modifier.getOperation() == AttributeModifier.Operation.ADD_SCALAR) {
+                addScalar += modifier.getAmount();
+            } else if (modifier.getOperation() == AttributeModifier.Operation.MULTIPLY_SCALAR_1) {
+                multiplyScalar *= 1.0D + modifier.getAmount();
+            }
+        }
+        if (!found) {
+            return fallback;
+        }
+        value += value * addScalar;
+        return Math.max(0.1D, value * multiplyScalar);
+    }
+
     private void refreshMaterialArmorLore(ItemStack item, ItemMeta meta) {
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.removeIf(line -> line != null && line.startsWith(ARMOR_MATERIAL_LINE_PREFIX));
-        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f完全免疫斧头强化增伤"
-                + "§8 / §f通用免伤 +" + formatPercent(MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE));
+        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f正常难度每件抵消 "
+                + formatPercent(MATERIAL_ARMOR_AXE_BONUS_REDUCTION_PER_PIECE)
+                + " 强化斧增伤§8 / §f简单难度一件全免§8 / §f通用免伤 +"
+                + formatPercent(MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE));
         meta.setLore(lore);
     }
 
@@ -2148,7 +2358,13 @@ public class FlashModeManager {
         player.setFoodLevel(Math.min(20, player.getFoodLevel() + Math.max(1, profile.nutrition())));
         player.setSaturation(Math.min(20.0F, player.getSaturation() + Math.max(0.1F, profile.saturation())));
         Location center = player.getLocation().add(0.0D, 1.0D, 0.0D);
-        player.getWorld().spawnParticle(profile.particle(), center, 28, 0.32D, 0.34D, 0.32D, 0.045D);
+        if (profile.particle().getDataType() == Float.class) {
+            player.getWorld().spawnParticle(profile.particle(), center,
+                    28, 0.32D, 0.34D, 0.32D, 0.045D, 1.0F);
+        } else {
+            player.getWorld().spawnParticle(profile.particle(), center,
+                    28, 0.32D, 0.34D, 0.32D, 0.045D);
+        }
         if (profile.lightning()) {
             player.getWorld().strikeLightningEffect(player.getLocation());
         }
@@ -2845,7 +3061,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(18, "同路线削弱", "金苹果/附魔金苹果护甲", "攻击目标穿同路线护甲时自动计算。", "无", "无", "对应增伤削弱25%，路线对抗会影响收益。"));
         pages.add(guideBookQuickPage(19, "红石稳定器", "红石相关材料+剑/斧", "给武器做攻速微调。", "每把一次", "无", "攻击速度+10%，不会无限叠。"));
         pages.add(guideBookQuickPage(20, "剑材料强化", "对应材料块+对应剑", "铁砧强化剑攻速。", "消耗材料", "无", "攻速提高，伤害会按材料路线下降。"));
-        pages.add(guideBookQuickPage(21, "斧材料强化", "对应材料块+对应斧", "铁砧强化斧爆发。", "消耗材料", "攻击冷却变长", "合金斧增伤最高，但冷却代价也最大。"));
+        pages.add(guideBookQuickPage(21, "斧材料强化", "木斧可用任意木板/木质材料；其余斧使用对应材料", "背包内用材料右键斧头。", "消耗1个材料", "攻击冷却变长", "木板可稳定强化木斧；合金斧增伤最高，但冷却代价也最大。"));
         pages.add(guideBookQuickPage(22, "材料护层", "对应材料+盔甲", "铁砧给盔甲打材料护层。", "消耗材料", "无", "抵消强化斧额外伤害，通用受伤最多-10%。"));
         pages.add(guideBookQuickPage(23, "TNT护层", "TNT+盔甲", "铁砧叠爆炸免疫层。", "每层1个", "无", "每件最多40层，全身最高按80%减爆。"));
         pages.add(guideBookQuickPage(24, "羊毛羽毛鞋", "羊毛/羽毛+靴子", "分别打一层，凑齐后触发轻步。", "各1层", "无", "摔落伤害-40%，幽匿振动静音。"));
@@ -2863,10 +3079,10 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(36, "烟花TNT弩", "烟花弩+副手TNT", "发射时把烟花替换为TNT弹。", "消耗TNT", "弩本身", "TMT不再兼容该路线，只能放置。"));
         pages.add(guideBookQuickPage(37, "激流三叉戟弩", "弩+激流三叉戟", "装填后发射并推进玩家。", "不消耗三叉戟", "约1.85秒", "上次修复后不会卡住闪光物品发射冷却。"));
         pages.add(guideBookQuickPage(38, "食物弩弹", "弩+食物", "装填食物后发射给自己补给。", "消耗食物", "弩本身", "金苹果会额外给再生和吸收。"));
-        pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "弩剑伤害+55%；爆炸剑弩装填爆炸伤害+200%。"));
+        pages.add(guideBookQuickPage(39, "剑气弩弹", "弩+剑", "装填剑后发射飞剑。", "通常消耗剑", "弩本身", "弩剑伤害+55%；稳定剑会额外提高伤害、距离和速度。"));
         pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；碰到方块或实体会爆炸并造成范围伤害，FlashUse不破坏方块，游戏中和FlashSMP会破坏方块。"));
         pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度再次强化、伤害+74%，命中追加20%破甲伤害。"));
-        pages.add(guideBookQuickPage(42, "Q丢剑气", "任意剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "剑气伤害+70%；爆炸剑剑气爆炸伤害+250%，方块破坏半径-50%。"));
+        pages.add(guideBookQuickPage(42, "Q丢剑气", "非稳定剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "稳定剑按Q只会正常掉落，不会变成剑气。"));
         pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "敌人踩中后触发并消失，适合封路。"));
         pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "不同材质决定伤害和控制。", "同上", "同上", "金偏失明，钻偏漂浮，合金偏黑暗和强拉。"));
         pages.add(guideBookQuickPage(45, "矿车雷锄", "锄头+TNT矿车", "按Q放雷，踩中延迟爆炸。", "消耗材料", "触发一次", "TMT不再能打到锄头上。"));
@@ -2880,7 +3096,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
         pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域；聚焦实体会直接灼烧。", "无", "聚焦触发", "实体蓄力时会被环形火粒子包裹，触发后受伤并燃烧。"));
-        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "骷髅25%，末影人45%，僵尸30%。"));
+        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度40%/60%/45%；简单难度45%/65%/50%。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
         pages.add(guideBookQuickPage(59, "骷髅喂弓", "弓+骷髅宠物", "右键提高小白远程伤害。", "消耗弓", "无", "力量、冲击、火矢、无限都会影响加成。"));
@@ -2908,6 +3124,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(81, "轨道炮装配二", "TNT32、红石粉42、红石块12、红石火把8", "幽匿感测体2、红石中继器12", "绊线钩2、线1、侦测器24", "无", "每次只扣当前拿着的材料，多出的数量会留在手上。"));
         pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "逐项投入", "无", "拿着当前材料打开背包右键钓鱼竿，只消耗当前手上的材料并保存进度。"));
         pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "主手或副手每10秒充1格，共" + RAILGUN_CHARGE_UNITS + "格；充能按百分比显示并同步钓鱼竿耐久。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定300格内方块，上方40格生成连续" + RAILGUN_SPIRAL_TURN_COUNT + "匝单臂螺旋TNT（外半径56格、共" + RAILGUN_SINGLE_TNT_COUNT + "个，含中心一枚），自然下落且引信3秒；FlashUse保护方块。"));
+        pages.add(guideBookQuickPage(84, "稳定锻造", "正常:合金模板+剑+8恶魂泪；简单:空模板+剑+1恶魂泪", "放入锻造台制作稳定剑。", "按难度扣除", "无", "正常伤害+30%、弩剑距离+100%；简单伤害+20%、距离+50%；攻速+10%、弩剑速度+15%。"));
         return pages;
     }
 
@@ -3105,6 +3322,141 @@ public class FlashModeManager {
             frame.setFixed(false);
             frame.setItemDropChance(1.0F);
         });
+    }
+
+    public void prepareStableSwordSmithingResult(PrepareSmithingEvent event) {
+        if (event == null || !(event.getView().getPlayer() instanceof Player player)) {
+            return;
+        }
+        SmithingInventory smithing = event.getInventory();
+        ItemStack mineral = smithing.getInputMineral();
+        if (isEmpty(mineral) || mineral.getType() != Material.GHAST_TEAR) {
+            return;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        StableSwordUpgradeMatch match = createStableSwordUpgradeMatch(player, room, smithing);
+        event.setResult(match == null ? null : match.result().clone());
+    }
+
+    public boolean handleStableSwordSmithingTake(InventoryClickEvent event, Player player, GameRoom room) {
+        if (event == null || player == null || event.getRawSlot() != 3
+                || !(event.getView().getTopInventory() instanceof SmithingInventory smithing)) {
+            return false;
+        }
+        ItemStack current = event.getCurrentItem();
+        if (!isStableSword(current)) {
+            return false;
+        }
+        event.setCancelled(true);
+        StableSwordUpgradeMatch match = createStableSwordUpgradeMatch(player, room, smithing);
+        if (match == null) {
+            smithing.setResult(null);
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.72F, 0.92F);
+            return true;
+        }
+
+        ItemStack result = match.result().clone();
+        result.setAmount(1);
+        smithing.setInputEquipment(null);
+        smithing.setInputMineral(decreaseStack(smithing.getInputMineral(), match.ghastTearCost()));
+        if (match.consumeTemplate()) {
+            smithing.setInputTemplate(decreaseStack(smithing.getInputTemplate(), 1));
+        }
+        smithing.setResult(null);
+
+        if (!event.isShiftClick() && isEmpty(event.getCursor())) {
+            event.setCursor(result);
+        } else {
+            giveOrDrop(player, result);
+        }
+        playStableSwordSmithingFeedback(player, match.easyDifficulty());
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+        return true;
+    }
+
+    private StableSwordUpgradeMatch createStableSwordUpgradeMatch(Player player, GameRoom room, SmithingInventory smithing) {
+        if (player == null || smithing == null || !isFlashCombatAvailable(player, room)) {
+            return null;
+        }
+        ItemStack sword = smithing.getInputEquipment();
+        ItemStack mineral = smithing.getInputMineral();
+        ItemStack template = smithing.getInputTemplate();
+        if (!isSword(sword) || isStableSword(sword) || isEmpty(mineral) || mineral.getType() != Material.GHAST_TEAR) {
+            return null;
+        }
+
+        boolean easy = isEasyFlashDifficulty(room);
+        int ghastTearCost = easy ? STABLE_SWORD_EASY_GHAST_TEAR_COST : STABLE_SWORD_NORMAL_GHAST_TEAR_COST;
+        if (mineral.getAmount() < ghastTearCost) {
+            return null;
+        }
+        if (easy) {
+            if (!isEmpty(template)) {
+                return null;
+            }
+        } else {
+            if (isEmpty(template) || template.getType() != Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE) {
+                return null;
+            }
+            if (hasPersistentDouble(sword, materialSwordSpeedBonusKey)
+                    || hasPersistentDouble(sword, materialSwordDamagePenaltyKey)
+                    || hasPersistentByte(sword, redstoneStabilizerKey)) {
+                return null;
+            }
+        }
+
+        double damageBonus = easy ? STABLE_SWORD_EASY_DAMAGE_BONUS : STABLE_SWORD_NORMAL_DAMAGE_BONUS;
+        double distanceMultiplier = easy
+                ? STABLE_SWORD_EASY_CROSSBOW_DISTANCE_MULTIPLIER
+                : STABLE_SWORD_NORMAL_CROSSBOW_DISTANCE_MULTIPLIER;
+        ItemStack result = createStableSword(sword, damageBonus, distanceMultiplier);
+        return result == null ? null : new StableSwordUpgradeMatch(result, ghastTearCost, !easy, easy);
+    }
+
+    private ItemStack createStableSword(ItemStack sword, double damageBonus, double crossbowDistanceMultiplier) {
+        if (!isSword(sword) || isStableSword(sword)) {
+            return null;
+        }
+        ItemStack result = sword.clone();
+        result.setAmount(1);
+        ItemMeta meta = result.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
+        meta.getPersistentDataContainer().set(stableSwordKey, PersistentDataType.BYTE, (byte) 1);
+        meta.getPersistentDataContainer().set(stableSwordDamageBonusKey, PersistentDataType.DOUBLE, damageBonus);
+        meta.getPersistentDataContainer().set(stableSwordAttackSpeedBonusKey, PersistentDataType.DOUBLE, STABLE_SWORD_ATTACK_SPEED_BONUS);
+        meta.getPersistentDataContainer().set(stableSwordCrossbowDistanceMultiplierKey, PersistentDataType.DOUBLE, crossbowDistanceMultiplier);
+        meta.getPersistentDataContainer().set(stableSwordCrossbowSpeedMultiplierKey, PersistentDataType.DOUBLE, STABLE_SWORD_CROSSBOW_SPEED_MULTIPLIER);
+        refreshStableSwordLoreAndAttributes(result, meta);
+        result.setItemMeta(meta);
+        return result;
+    }
+
+    private ItemStack decreaseStack(ItemStack item, int amount) {
+        if (isEmpty(item) || amount <= 0 || item.getAmount() <= amount) {
+            return null;
+        }
+        ItemStack remaining = item.clone();
+        remaining.setAmount(item.getAmount() - amount);
+        return remaining;
+    }
+
+    private void playStableSwordSmithingFeedback(Player player, boolean easyDifficulty) {
+        double damageBonus = easyDifficulty ? STABLE_SWORD_EASY_DAMAGE_BONUS : STABLE_SWORD_NORMAL_DAMAGE_BONUS;
+        double distanceBonus = (easyDifficulty
+                ? STABLE_SWORD_EASY_CROSSBOW_DISTANCE_MULTIPLIER
+                : STABLE_SWORD_NORMAL_CROSSBOW_DISTANCE_MULTIPLIER) - 1.0D;
+        player.sendActionBar("§x§F§F§D§7§7§7✦ §f稳定锻造完成 §8| §c伤害 +" + formatPercent(damageBonus)
+                + " §8| §e攻速 +10% §8| §b弩剑距离 +" + formatPercent(distanceBonus));
+        Location location = player.getLocation();
+        player.playSound(location, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.66F, easyDifficulty ? 1.42F : 1.18F);
+        player.playSound(location, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.72F, 1.68F);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.52F, 1.82F);
+            }
+        }, 5L);
     }
 
     public void prepareAnvilResult(PrepareAnvilEvent event) {
@@ -4774,6 +5126,10 @@ public class FlashModeManager {
         if (meta == null || weaponType == null || weaponType == Material.AIR) {
             return;
         }
+        if (hasPersistentByteMeta(meta, stableSwordKey)) {
+            removeAttributeModifierByKey(meta, Attribute.ATTACK_DAMAGE, baseWeaponAttackDamageModifierKey);
+            return;
+        }
         // 剑/斧有自定义攻速或伤害组件后，Paper 会把整套默认属性视为被覆盖。
         // 原本只写攻速会让客户端不再显示原版攻击伤害，所以这里把原版攻击伤害显式补回去。
         if (!hasPersistentDoubleMeta(meta, materialSwordSpeedBonusKey)
@@ -5321,7 +5677,7 @@ public class FlashModeManager {
         if (handleHoeTrapDrop(event, player, room, dropped)) {
             return true;
         }
-        if (!isSword(dropped)) {
+        if (!isSword(dropped) || isStableSword(dropped)) {
             return false;
         }
 
@@ -5674,6 +6030,9 @@ public class FlashModeManager {
         if (!isFlashCombatAvailable(attacker, room)) {
             return;
         }
+        if (!claimEasyMaceDamageEvent(event, attacker, room)) {
+            return;
+        }
         normalizeHeldRedstoneStabilizers(attacker);
         normalizeUnstableCoreShieldBlockingDelay(attacker);
         if (victim instanceof Player victimPlayer) {
@@ -5686,7 +6045,7 @@ public class FlashModeManager {
             suppressQuickSwapAttributeInheritance(event, attacker);
             boolean maceShieldBreak = applyFlashMaceSmash(event, attacker, victim, room);
             applyFlashHoeMaterialDamage(event, attacker);
-            applyMaterialAxeBonus(event, attacker, victim);
+            applyMaterialAxeBonus(event, attacker, victim, room);
             applySwordPotionHit(event, attacker, victim, room);
             applyStormSwordKineticDamage(event, attacker, victim);
             applySwordReturnPointHit(attacker, victim, room);
@@ -5698,6 +6057,23 @@ public class FlashModeManager {
         applyOutgoingPlayerDamageRules(event, attacker, victim);
         applyMaterialArmorReduction(event, victim, room);
         // 最新规则：附魔改装 + 爆炸保护不再在近战命中生物时触发爆炸。
+    }
+
+    private boolean claimEasyMaceDamageEvent(EntityDamageByEntityEvent event, Player attacker, GameRoom room) {
+        if (!isEasyFlashDifficulty(room) || event == null || attacker == null
+                || !(event.getDamager() instanceof Player)) {
+            return true;
+        }
+        ItemStack weapon = attacker.getInventory().getItemInMainHand();
+        if (weapon == null || weapon.getType() != Material.MACE) {
+            return true;
+        }
+        if (!processedEasyMaceDamageEvents.add(event)) {
+            return false;
+        }
+        rememberAttackWeapon(attacker, weapon);
+        Bukkit.getScheduler().runTask(plugin, () -> processedEasyMaceDamageEvents.remove(event));
+        return true;
     }
 
     public void handleFlashTamedMountControl(PlayerMoveEvent event, Player player, GameRoom room) {
@@ -6694,7 +7070,8 @@ public class FlashModeManager {
     }
 
     private RedstoneStabilizerMatch createRedstoneStabilizerUpgrade(ItemStack weapon, Material material) {
-        if (isEmpty(weapon) || material != Material.REDSTONE || (!isSword(weapon) && !isAxe(weapon)) || hasPersistentByte(weapon, redstoneStabilizerKey)) {
+        if (isEmpty(weapon) || material != Material.REDSTONE || (!isSword(weapon) && !isAxe(weapon))
+                || hasPersistentByte(weapon, redstoneStabilizerKey) || isStableSword(weapon)) {
             return null;
         }
         ItemStack result = weapon.clone();
@@ -6827,7 +7204,8 @@ public class FlashModeManager {
         double multiplyScalar = 1.0D;
         boolean hasExplicitSpeed = false;
         for (AttributeModifier modifier : modifiers) {
-            if (modifier.getKey().equals(redstoneStabilizerAttackSpeedModifierKey)) {
+            if (modifier.getKey().equals(redstoneStabilizerAttackSpeedModifierKey)
+                    || modifier.getKey().equals(stableSwordAttackSpeedModifierKey)) {
                 continue;
             }
             hasExplicitSpeed = true;
@@ -6855,7 +7233,8 @@ public class FlashModeManager {
             return false;
         }
         for (AttributeModifier modifier : modifiers) {
-            if (!modifier.getKey().equals(redstoneStabilizerAttackSpeedModifierKey)) {
+            if (!modifier.getKey().equals(redstoneStabilizerAttackSpeedModifierKey)
+                    && !modifier.getKey().equals(stableSwordAttackSpeedModifierKey)) {
                 return true;
             }
         }
@@ -6952,7 +7331,7 @@ public class FlashModeManager {
 
     private ItemStack tryApplyMaterialSwordUpgrade(ItemStack sword, Material material) {
         SwordMaterialUpgrade upgrade = getSwordMaterialUpgrade(sword.getType(), material);
-        if (upgrade == null || hasPersistentDouble(sword, materialSwordSpeedBonusKey)) {
+        if (upgrade == null || hasPersistentDouble(sword, materialSwordSpeedBonusKey) || isStableSword(sword)) {
             return null;
         }
         ItemStack result = sword.clone();
@@ -7093,7 +7472,10 @@ public class FlashModeManager {
         meta.getPersistentDataContainer().set(materialArmorLayerKey, PersistentDataType.BYTE, (byte) 1);
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.removeIf(line -> line != null && line.startsWith(ARMOR_MATERIAL_LINE_PREFIX));
-        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f完全免疫斧头强化增伤§8 / §f通用免伤 +" + formatPercent(MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE));
+        lore.add(ARMOR_MATERIAL_LINE_PREFIX + "§f正常难度每件抵消 "
+                + formatPercent(MATERIAL_ARMOR_AXE_BONUS_REDUCTION_PER_PIECE)
+                + " 强化斧增伤§8 / §f简单难度一件全免§8 / §f通用免伤 +"
+                + formatPercent(MATERIAL_ARMOR_GENERAL_DAMAGE_REDUCTION_PER_PIECE));
         meta.setLore(lore);
         result.setItemMeta(meta);
         return result;
@@ -7411,7 +7793,9 @@ public class FlashModeManager {
         sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§B§B§8§8§F§F✦ §d龙息已注入§e" + weaponName + "§d，射出的箭会更快更痛。");
         player.playSound(player.getLocation(), Sound.ITEM_BOTTLE_FILL_DRAGONBREATH, 0.85f, 1.2f);
         player.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_FLAP, 0.45f, 1.55f);
-        player.getWorld().spawnParticle(Particle.DRAGON_BREATH, player.getLocation().add(0.0D, 1.15D, 0.0D), 36, 0.35, 0.28, 0.35, 0.05);
+        player.getWorld().spawnParticle(Particle.DRAGON_BREATH,
+                player.getLocation().add(0.0D, 1.15D, 0.0D),
+                36, 0.35, 0.28, 0.35, 0.05, 1.0F);
     }
 
     private void boostSpearKineticWeapon(ItemStack item) {
@@ -9633,13 +10017,15 @@ public class FlashModeManager {
                 }
                 if (crossbow && arrow.getWorld().equals(start.getWorld())
                         && arrow.getLocation().distanceSquared(start) > DRAGON_BREATH_CROSSBOW_MAX_DISTANCE * DRAGON_BREATH_CROSSBOW_MAX_DISTANCE) {
-                    arrow.getWorld().spawnParticle(Particle.DRAGON_BREATH, arrow.getLocation(), 18, 0.12, 0.12, 0.12, 0.03);
+                    arrow.getWorld().spawnParticle(Particle.DRAGON_BREATH, arrow.getLocation(),
+                            18, 0.12, 0.12, 0.12, 0.03, 1.0F);
                     arrow.remove();
                     cancel();
                     return;
                 }
                 Location loc = arrow.getLocation();
-                loc.getWorld().spawnParticle(Particle.DRAGON_BREATH, loc, 3, 0.045, 0.045, 0.045, 0.01);
+                loc.getWorld().spawnParticle(Particle.DRAGON_BREATH, loc,
+                        3, 0.045, 0.045, 0.045, 0.01, 1.0F);
                 if (arrow.getTicksLived() % 5 == 0) {
                     loc.getWorld().spawnParticle(Particle.WITCH, loc, 1, 0.025, 0.025, 0.025, 0.0);
                 }
@@ -12912,17 +13298,28 @@ public class FlashModeManager {
     }
 
     public void handleFlashGlobalMobSpawn(EntitySpawnEvent event) {
-        if (event == null || !(event.getEntity() instanceof LivingEntity living) || !isFlashWorldActive(living.getWorld())) {
+        if (event == null || !(event.getEntity() instanceof LivingEntity living)) {
+            return;
+        }
+        equipFlashGlobalMobIfNeeded(living);
+    }
+
+    private void equipFlashGlobalMobIfNeeded(LivingEntity living) {
+        if (living == null || living.isDead() || !isFlashWorldActive(living.getWorld())) {
+            return;
+        }
+        if (isEasyFlashDifficulty(getFlashRoomByWorld(living.getWorld()))) {
             return;
         }
         if (!shouldEquipFlashGlobalMob(living)) {
             return;
         }
-        if (living.getPersistentDataContainer().get(flashGlobalMobGearKey, PersistentDataType.BYTE) != null) {
-            return;
-        }
         EntityEquipment equipment = living.getEquipment();
         if (equipment == null) {
+            return;
+        }
+        if (living.getPersistentDataContainer().get(flashGlobalMobGearKey, PersistentDataType.BYTE) != null
+                && hasFlashGlobalMobGearEquipped(equipment)) {
             return;
         }
         living.getPersistentDataContainer().set(flashGlobalMobGearKey, PersistentDataType.BYTE, (byte) 1);
@@ -12947,7 +13344,197 @@ public class FlashModeManager {
     }
 
     public boolean handleFlashGlobalMobBowShoot(EntityShootBowEvent event) {
-        return false;
+        if (event == null || event.getEntity() instanceof Player
+                || !(event.getEntity() instanceof AbstractSkeleton skeleton)
+                || skeleton.getEquipment() == null || !isFlashWorldActive(skeleton.getWorld())) {
+            return false;
+        }
+        ItemStack crossbow = event.getBow();
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW) {
+            crossbow = skeleton.getEquipment().getItemInMainHand();
+        }
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW) {
+            return false;
+        }
+        CrossbowPayload payload = getCrossbowPayload(crossbow);
+        ItemStack payloadItem = getCrossbowPayloadItem(crossbow);
+        if (payload == null || isEmpty(payloadItem)) {
+            return false;
+        }
+        event.setCancelled(true);
+        event.setConsumeArrow(false);
+        event.setConsumeItem(false);
+        if (event.getProjectile() != null) {
+            event.getProjectile().remove();
+        }
+        LivingEntity target = getFlashGlobalSkeletonLockedTarget(skeleton);
+        if (target == null) {
+            return true;
+        }
+        fireFlashGlobalSkeletonCrossbow(skeleton, crossbow, payload, payloadItem);
+        return true;
+    }
+
+    private void startFlashGlobalSkeletonTask() {
+        if (flashGlobalMobMinerTask != null) {
+            return;
+        }
+        flashGlobalMobMinerTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                tickFlashGlobalSkeletonCrossbows();
+            }
+        }.runTaskTimer(plugin, 40L, 30L);
+    }
+
+    private void tickFlashGlobalSkeletonCrossbows() {
+        long now = System.currentTimeMillis();
+        flashGlobalSkeletonShotCooldowns.entrySet().removeIf(entry -> entry.getValue() + 120_000L < now
+                || Bukkit.getEntity(entry.getKey()) == null);
+        for (World world : Bukkit.getWorlds()) {
+            if (!isFlashWorldActive(world)) {
+                continue;
+            }
+            GameRoom room = getFlashRoomByWorld(world);
+            if (isEasyFlashDifficulty(room)) {
+                continue;
+            }
+            for (LivingEntity living : world.getLivingEntities()) {
+                equipFlashGlobalMobIfNeeded(living);
+                if (living instanceof AbstractSkeleton skeleton && !isFlashTamed(skeleton)) {
+                    tickFlashGlobalSkeletonCrossbow(skeleton, now);
+                }
+            }
+        }
+    }
+
+    private void tickFlashGlobalSkeletonCrossbow(AbstractSkeleton skeleton, long now) {
+        if (skeleton == null || skeleton.isDead() || !skeleton.isValid() || skeleton.getEquipment() == null
+                || flashGlobalSkeletonShotCooldowns.getOrDefault(skeleton.getUniqueId(), 0L) > now
+                || getFlashGlobalSkeletonLockedTarget(skeleton) == null) {
+            return;
+        }
+        ItemStack crossbow = skeleton.getEquipment().getItemInMainHand();
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW) {
+            restoreFlashGlobalSkeletonCrossbowFromMemory(skeleton);
+            flashGlobalSkeletonShotCooldowns.put(skeleton.getUniqueId(), now + 400L);
+            return;
+        }
+        CrossbowPayload payload = getCrossbowPayload(crossbow);
+        ItemStack payloadItem = getCrossbowPayloadItem(crossbow);
+        if (payload == null || isEmpty(payloadItem)) {
+            restoreFlashGlobalSkeletonCrossbowFromMemory(skeleton);
+            flashGlobalSkeletonShotCooldowns.put(skeleton.getUniqueId(), now + 400L);
+            return;
+        }
+        fireFlashGlobalSkeletonCrossbow(skeleton, crossbow, payload, payloadItem);
+    }
+
+    private void fireFlashGlobalSkeletonCrossbow(AbstractSkeleton skeleton, ItemStack crossbow,
+                                                  CrossbowPayload payload, ItemStack payloadItem) {
+        Vector direction = resolveFlashGlobalSkeletonShotDirection(skeleton);
+        GameRoom room = getFlashRoomByWorld(skeleton.getWorld());
+        rememberFlashGlobalSkeletonCrossbow(skeleton, crossbow, payload, payloadItem);
+        flashGlobalSkeletonShotCooldowns.put(skeleton.getUniqueId(), System.currentTimeMillis()
+                + getFlashGlobalSkeletonShotCooldownMillis(skeleton, crossbow, payload));
+        skeleton.clearActiveItem();
+        skeleton.swingMainHand();
+        skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_SHOOT, 0.92F, 1.08F);
+        launchFlashGlobalSkeletonPayload(skeleton, room, payload, payloadItem, crossbow, direction);
+        clearCrossbowPayload(null, crossbow);
+        damageFlashGlobalMobCrossbow(skeleton, crossbow, payload);
+        reloadFlashGlobalSkeletonCrossbow(skeleton, crossbow, payload, payloadItem);
+    }
+
+    private LivingEntity getFlashGlobalSkeletonLockedTarget(AbstractSkeleton skeleton) {
+        if (skeleton == null || skeleton.getWorld() == null || !(skeleton instanceof Mob mob)
+                || !(mob.getTarget() instanceof LivingEntity target) || !target.isValid() || target.isDead()
+                || !target.getWorld().equals(skeleton.getWorld()) || !skeleton.hasLineOfSight(target)) {
+            return null;
+        }
+        return target;
+    }
+
+    private Vector resolveFlashGlobalSkeletonShotDirection(AbstractSkeleton skeleton) {
+        Location start = skeleton.getEyeLocation();
+        LivingEntity target = getFlashGlobalSkeletonLockedTarget(skeleton);
+        if (target != null) {
+            Location aim = target.getLocation().add(0.0D, Math.min(target.getHeight() * 0.62D, 1.35D), 0.0D);
+            Vector direction = aim.toVector().subtract(start.toVector());
+            if (direction.lengthSquared() > 0.001D) {
+                return direction.normalize();
+            }
+        }
+        Vector direction = start.getDirection();
+        return direction.lengthSquared() > 0.001D ? direction.normalize() : new Vector(0.0D, 0.0D, 1.0D);
+    }
+
+    private void reloadFlashGlobalSkeletonCrossbow(AbstractSkeleton skeleton, ItemStack crossbow,
+                                                    CrossbowPayload payload, ItemStack payloadItem) {
+        if (skeleton == null || skeleton.getEquipment() == null || isEmpty(crossbow)
+                || payload == null || isEmpty(payloadItem)) {
+            return;
+        }
+        ItemStack reloaded = createLoadedFlashGlobalSkeletonCrossbow(crossbow, payload, payloadItem);
+        if (reloaded == null) {
+            return;
+        }
+        skeleton.getEquipment().setItemInMainHand(markFlashGlobalMobGear(reloaded), true);
+        skeleton.getEquipment().setItemInOffHand(markFlashGlobalMobGear(payloadItem.clone()), true);
+        skeleton.getEquipment().setItemInMainHandDropChance(0.0F);
+        skeleton.getEquipment().setItemInOffHandDropChance(0.0F);
+    }
+
+    private void rememberFlashGlobalSkeletonCrossbow(AbstractSkeleton skeleton, ItemStack crossbow,
+                                                      CrossbowPayload payload, ItemStack payloadItem) {
+        try {
+            skeleton.getPersistentDataContainer().set(flashGlobalSkeletonCrossbowDataKey,
+                    PersistentDataType.BYTE_ARRAY, crossbow.clone().serializeAsBytes());
+            skeleton.getPersistentDataContainer().set(flashGlobalSkeletonPayloadTypeKey,
+                    PersistentDataType.STRING, payload.name());
+            skeleton.getPersistentDataContainer().set(flashGlobalSkeletonPayloadDataKey,
+                    PersistentDataType.BYTE_ARRAY, payloadItem.clone().serializeAsBytes());
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private void restoreFlashGlobalSkeletonCrossbowFromMemory(AbstractSkeleton skeleton) {
+        if (skeleton == null || skeleton.getEquipment() == null) {
+            return;
+        }
+        try {
+            byte[] crossbowData = skeleton.getPersistentDataContainer().get(
+                    flashGlobalSkeletonCrossbowDataKey, PersistentDataType.BYTE_ARRAY);
+            String payloadName = skeleton.getPersistentDataContainer().get(
+                    flashGlobalSkeletonPayloadTypeKey, PersistentDataType.STRING);
+            byte[] payloadData = skeleton.getPersistentDataContainer().get(
+                    flashGlobalSkeletonPayloadDataKey, PersistentDataType.BYTE_ARRAY);
+            if (crossbowData == null || payloadName == null || payloadData == null) {
+                return;
+            }
+            reloadFlashGlobalSkeletonCrossbow(skeleton, ItemStack.deserializeBytes(crossbowData),
+                    CrossbowPayload.valueOf(payloadName), ItemStack.deserializeBytes(payloadData));
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private long getFlashGlobalSkeletonShotCooldownMillis(AbstractSkeleton skeleton, ItemStack crossbow,
+                                                          CrossbowPayload payload) {
+        int quickCharge = Math.max(0, crossbow.getEnchantmentLevel(Enchantment.QUICK_CHARGE));
+        long base = switch (payload) {
+            case TMT, TNT -> 3300L;
+            case ENHANCED_WIND_CHARGE -> 2450L;
+            case WIND_CHARGE -> 2100L;
+            case ENDER_PEARL, TRIDENT, SWORD -> 2600L;
+            case FOOD -> 1900L;
+        };
+        long difficultyOffset = switch (skeleton.getWorld().getDifficulty()) {
+            case PEACEFUL -> 1200L;
+            case EASY -> 650L;
+            case NORMAL -> 0L;
+            case HARD -> -420L;
+        };
+        return Math.max(850L, base + difficultyOffset - quickCharge * 360L);
     }
 
     public boolean handleUnstableMaceParticleToggle(InventoryClickEvent event, Player player, GameRoom room) {
@@ -13138,13 +13725,283 @@ public class FlashModeManager {
         if (equipment == null) {
             return;
         }
-        ItemStack main = random.nextBoolean()
-                ? new ItemStack(Material.BOW)
-                : new ItemStack(Material.CROSSBOW);
-        equipment.setItemInMainHand(markFlashGlobalMobGear(main), true);
-        equipment.setItemInOffHand(null, true);
+        if (random.nextBoolean()) {
+            ItemStack bow = new ItemStack(Material.BOW);
+            bow.addUnsafeEnchantment(Enchantment.POWER, random.nextInt(1, 5));
+            if (random.nextDouble() < 0.30D) {
+                bow.addUnsafeEnchantment(Enchantment.PUNCH, random.nextInt(1, 3));
+            }
+            equipment.setItemInMainHand(markFlashGlobalMobGear(bow), true);
+            equipment.setItemInOffHand(null, true);
+            equipment.setItemInMainHandDropChance(0.0F);
+            equipment.setItemInOffHandDropChance(0.0F);
+            return;
+        }
+        ItemStack crossbow = createFlashGlobalMobCrossbow(random);
+        CrossbowPayload payload = randomFlashGlobalSkeletonPayload(random);
+        ItemStack payloadItem = createFlashGlobalSkeletonPayloadItem(payload, random);
+        ItemStack loaded = createLoadedFlashGlobalSkeletonCrossbow(crossbow, payload, payloadItem);
+        equipment.setItemInMainHand(markFlashGlobalMobGear(loaded == null ? crossbow : loaded), true);
+        equipment.setItemInOffHand(markFlashGlobalMobGear(payloadItem), true);
         equipment.setItemInMainHandDropChance(0.0F);
         equipment.setItemInOffHandDropChance(0.0F);
+    }
+
+    private ItemStack createFlashGlobalMobCrossbow(ThreadLocalRandom random) {
+        ItemStack crossbow = new ItemStack(Material.CROSSBOW);
+        crossbow.addUnsafeEnchantment(Enchantment.QUICK_CHARGE, random.nextInt(1, 4));
+        if (random.nextDouble() < 0.58D) {
+            crossbow.addUnsafeEnchantment(Enchantment.PIERCING, random.nextInt(1, 5));
+        }
+        if (random.nextDouble() < 0.22D) {
+            crossbow.addUnsafeEnchantment(Enchantment.MULTISHOT, 1);
+        }
+        if (random.nextDouble() < 0.46D) {
+            ItemStack upgraded = tryApplyAmethystCrossbowUpgrade(crossbow, Material.AMETHYST_CLUSTER);
+            if (upgraded != null) {
+                crossbow = upgraded;
+            }
+        }
+        return crossbow;
+    }
+
+    private CrossbowPayload randomFlashGlobalSkeletonPayload(ThreadLocalRandom random) {
+        int roll = random.nextInt(100);
+        if (roll < 25) {
+            return CrossbowPayload.WIND_CHARGE;
+        }
+        if (roll < 45) {
+            return CrossbowPayload.ENHANCED_WIND_CHARGE;
+        }
+        if (roll < 60) {
+            return CrossbowPayload.ENDER_PEARL;
+        }
+        if (roll < 76) {
+            return CrossbowPayload.TNT;
+        }
+        return CrossbowPayload.SWORD;
+    }
+
+    private ItemStack createFlashGlobalSkeletonPayloadItem(CrossbowPayload payload, ThreadLocalRandom random) {
+        return switch (payload) {
+            case WIND_CHARGE -> new ItemStack(Material.WIND_CHARGE);
+            case ENHANCED_WIND_CHARGE -> createEnhancedWindCharge();
+            case ENDER_PEARL -> new ItemStack(Material.ENDER_PEARL);
+            case TNT -> new ItemStack(Material.TNT);
+            case TMT -> createTmt();
+            case SWORD -> new ItemStack(new Material[]{Material.STONE_SWORD, Material.IRON_SWORD, Material.DIAMOND_SWORD}[random.nextInt(3)]);
+            case FOOD -> new ItemStack(Material.COOKED_BEEF);
+            case TRIDENT -> new ItemStack(Material.TRIDENT);
+        };
+    }
+
+    private ItemStack createLoadedFlashGlobalSkeletonCrossbow(ItemStack sourceCrossbow, CrossbowPayload payload,
+                                                              ItemStack payloadItem) {
+        if (isEmpty(sourceCrossbow) || !(sourceCrossbow.getItemMeta() instanceof CrossbowMeta sourceMeta)) {
+            return null;
+        }
+        ItemStack loaded = sourceCrossbow.clone();
+        loaded.setAmount(1);
+        CrossbowMeta meta = (CrossbowMeta) sourceMeta.clone();
+        meta.setChargedProjectiles(List.of(new ItemStack(Material.ARROW)));
+        meta.getPersistentDataContainer().set(crossbowPayloadTypeKey, PersistentDataType.STRING, payload.name());
+        meta.getPersistentDataContainer().set(crossbowPayloadDataKey, PersistentDataType.BYTE_ARRAY,
+                payloadItem.clone().serializeAsBytes());
+        if (payload == CrossbowPayload.WIND_CHARGE || payload == CrossbowPayload.ENHANCED_WIND_CHARGE) {
+            meta.getPersistentDataContainer().set(windChargedCrossbowKey, PersistentDataType.BYTE, (byte) 1);
+        } else {
+            meta.getPersistentDataContainer().remove(windChargedCrossbowKey);
+        }
+        loaded.setItemMeta(meta);
+        return loaded;
+    }
+
+    private void launchFlashGlobalSkeletonPayload(AbstractSkeleton skeleton, GameRoom room, CrossbowPayload payload,
+                                                  ItemStack payloadItem, ItemStack crossbow, Vector direction) {
+        Vector shotDirection = direction == null || direction.lengthSquared() < 0.001D
+                ? skeleton.getEyeLocation().getDirection().normalize()
+                : direction.clone().normalize();
+        double speedMultiplier = getCrossbowProjectileMultiplier(null, crossbow);
+        double damageMultiplier = getFlashGlobalSkeletonDamageMultiplier(room);
+        switch (payload) {
+            case WIND_CHARGE -> spawnFlashGlobalSkeletonWindCharges(
+                    skeleton, room, shotDirection, speedMultiplier, damageMultiplier, false);
+            case ENHANCED_WIND_CHARGE -> spawnFlashGlobalSkeletonWindCharges(
+                    skeleton, room, shotDirection, speedMultiplier, damageMultiplier, true);
+            case TNT -> launchFlashGlobalSkeletonTnt(
+                    skeleton, room, shotDirection, speedMultiplier, damageMultiplier, false);
+            case TMT -> launchFlashGlobalSkeletonTnt(
+                    skeleton, room, shotDirection, speedMultiplier, damageMultiplier, true);
+            case FOOD -> launchFlashGlobalSkeletonFood(skeleton, payloadItem, shotDirection);
+            case SWORD -> launchFlashGlobalSkeletonSword(
+                    skeleton, room, payloadItem, shotDirection, damageMultiplier);
+            case ENDER_PEARL -> launchFlashGlobalSkeletonEnderPearl(
+                    skeleton, shotDirection, speedMultiplier, damageMultiplier);
+            case TRIDENT -> launchFlashGlobalSkeletonTrident(
+                    skeleton, payloadItem, shotDirection, speedMultiplier, damageMultiplier);
+        }
+    }
+
+    private void spawnFlashGlobalSkeletonWindCharges(AbstractSkeleton skeleton, GameRoom room, Vector direction,
+                                                      double speedMultiplier, double damageMultiplier, boolean enhanced) {
+        int count = enhanced ? 3 : 1;
+        double spread = Math.toRadians(9.5D);
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(1.55D));
+        for (int i = 0; i < count; i++) {
+            int offset = count == 1 ? 0 : i - 1;
+            Vector shot = direction.clone();
+            if (offset != 0) {
+                shot.rotateAroundY(spread * offset).normalize();
+            }
+            Vector velocity = shot.clone().multiply((enhanced ? 4.45D : 3.85D) * speedMultiplier);
+            Vector acceleration = shot.clone().multiply(enhanced ? 1.14D : 1.02D);
+            WindCharge charge = skeleton.getWorld().spawn(start, WindCharge.class, entity -> {
+                entity.setShooter(skeleton);
+                entity.setGravity(false);
+                entity.setNoPhysics(true);
+                entity.setVelocity(velocity);
+                entity.setDirection(shot);
+                entity.setAcceleration(acceleration);
+                entity.setPower(acceleration);
+                entity.setYield(enhanced ? 1.15F : 1.0F);
+                entity.setIsIncendiary(false);
+                markFlashGlobalSkeletonPayload(entity, damageMultiplier);
+            });
+            monitorFlashWindCharge(null, room, charge, velocity, false, 110.0D, true);
+        }
+        skeleton.getWorld().spawnParticle(Particle.GUST, start, 16, 0.22D, 0.14D, 0.22D, 0.025D);
+        skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ENTITY_BREEZE_SHOOT, 0.72F, 1.44F);
+    }
+
+    private void launchFlashGlobalSkeletonTnt(AbstractSkeleton skeleton, GameRoom room, Vector direction,
+                                              double speedMultiplier, double damageMultiplier, boolean tmt) {
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(1.9D));
+        Vector velocity = direction.clone().multiply((tmt ? 2.38D : 2.55D) * speedMultiplier);
+        boolean breakBlocks = canFlashExplosionBreakBlocks(null, room);
+        TNTPrimed primed = skeleton.getWorld().spawn(start, TNTPrimed.class, entity -> {
+            entity.setSource(skeleton);
+            entity.setFuseTicks(44);
+            entity.setGravity(false);
+            entity.setVelocity(velocity);
+            entity.setYield(breakBlocks ? (tmt ? TMT_EXPLOSION_POWER : 3.0F) : 0.0F);
+            entity.setIsIncendiary(false);
+            markFlashGlobalSkeletonPayload(entity, damageMultiplier);
+            if (tmt) {
+                entity.getPersistentDataContainer().set(tmtPrimedKey, PersistentDataType.BYTE, TMT_PRIMED_NORMAL);
+            }
+        });
+        if (tmt) {
+            watchFireworkTmtCollision(null, primed, 44, breakBlocks);
+        } else {
+            watchFireworkTntCollision(null, primed, 44, breakBlocks);
+        }
+        skeleton.getWorld().spawnParticle(Particle.FIREWORK, start, 20, 0.18D, 0.12D, 0.18D, 0.025D);
+        skeleton.getWorld().playSound(start, Sound.ENTITY_TNT_PRIMED, 0.75F, tmt ? 0.62F : 1.24F);
+    }
+
+    private void launchFlashGlobalSkeletonFood(AbstractSkeleton skeleton, ItemStack food, Vector direction) {
+        if (isEmpty(food)) {
+            return;
+        }
+        ItemStack flying = food.clone();
+        flying.setAmount(1);
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(1.05D));
+        skeleton.getWorld().dropItem(start, flying, item -> {
+            item.setVelocity(direction.clone().multiply(1.18D).setY(direction.getY() * 1.18D + 0.08D));
+            item.setPickupDelay(18);
+            item.setCanMobPickup(false);
+        });
+        skeleton.getWorld().spawnParticle(Particle.ITEM, start, 12, 0.12D, 0.08D, 0.12D, 0.02D, flying);
+    }
+
+    private void launchFlashGlobalSkeletonSword(AbstractSkeleton skeleton, GameRoom room, ItemStack sword,
+                                                Vector direction, double damageMultiplier) {
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(0.95D));
+        skeleton.getWorld().spawnParticle(Particle.ITEM, start, 18, 0.16D, 0.12D, 0.16D, 0.02D, sword);
+        skeleton.getWorld().playSound(start, Sound.ITEM_TRIDENT_THROW, 0.74F, 1.34F);
+        launchFlyingSwordDisplay(null, room, sword, start, direction, false, damageMultiplier);
+    }
+
+    private void launchFlashGlobalSkeletonEnderPearl(AbstractSkeleton skeleton, Vector direction,
+                                                     double speedMultiplier, double damageMultiplier) {
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(0.95D));
+        skeleton.getWorld().spawn(start, EnderPearl.class, pearl -> {
+            pearl.setShooter(skeleton);
+            pearl.setVelocity(direction.clone().multiply(2.65D * speedMultiplier));
+            markFlashGlobalSkeletonPayload(pearl, damageMultiplier);
+        });
+        skeleton.getWorld().playSound(start, Sound.ENTITY_ENDER_PEARL_THROW, 0.82F, 1.12F);
+    }
+
+    private void launchFlashGlobalSkeletonTrident(AbstractSkeleton skeleton, ItemStack item, Vector direction,
+                                                  double speedMultiplier, double damageMultiplier) {
+        if (isEmpty(item) || item.getType() != Material.TRIDENT) {
+            return;
+        }
+        ItemStack thrown = item.clone();
+        thrown.setAmount(1);
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(1.0D));
+        skeleton.getWorld().spawn(start, Trident.class, trident -> {
+            trident.setShooter(skeleton);
+            trident.setVelocity(direction.clone().multiply(2.35D * speedMultiplier * getTridentProjectileMultiplier(thrown)));
+            trident.setItemStack(thrown.clone());
+            trident.setWeapon(thrown.clone());
+            trident.setDamage(8.0D + thrown.getEnchantmentLevel(Enchantment.SHARPNESS) * 0.5D);
+            trident.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
+            markFlashGlobalSkeletonPayload(trident, damageMultiplier);
+        });
+        skeleton.getWorld().playSound(start, Sound.ITEM_TRIDENT_THROW, 0.88F, 1.18F);
+    }
+
+    private void markFlashGlobalSkeletonPayload(Entity entity, double damageMultiplier) {
+        if (entity != null && damageMultiplier < 0.999D) {
+            entity.getPersistentDataContainer().set(flashGlobalSkeletonDamageMultiplierKey,
+                    PersistentDataType.DOUBLE, Math.max(0.0D, damageMultiplier));
+        }
+    }
+
+    public void handleFlashGlobalSkeletonPayloadDamage(EntityDamageByEntityEvent event) {
+        if (event == null || event.isCancelled()) {
+            return;
+        }
+        Double multiplier = event.getDamager().getPersistentDataContainer().get(
+                flashGlobalSkeletonDamageMultiplierKey, PersistentDataType.DOUBLE);
+        if (multiplier != null) {
+            event.setDamage(event.getDamage() * Math.max(0.0D, Math.min(1.0D, multiplier)));
+        }
+    }
+
+    private double getFlashGlobalSkeletonDamageMultiplier(GameRoom room) {
+        return room != null && room.getGameMode().supportsFlashDifficultyVote()
+                && room.getFlashDifficulty() == FlashDifficulty.NORMAL ? 0.60D : 1.0D;
+    }
+
+    private void damageFlashGlobalMobCrossbow(AbstractSkeleton skeleton, ItemStack crossbow, CrossbowPayload payload) {
+        if (skeleton == null || skeleton.getEquipment() == null || isEmpty(crossbow)
+                || !(crossbow.getItemMeta() instanceof Damageable damageable) || crossbow.getItemMeta().isUnbreakable()) {
+            return;
+        }
+        int rawDamage = (payload == CrossbowPayload.WIND_CHARGE || payload == CrossbowPayload.ENHANCED_WIND_CHARGE)
+                && crossbow.getEnchantmentLevel(Enchantment.MULTISHOT) > 0 ? 3 : 1;
+        int unbreaking = Math.max(0, crossbow.getEnchantmentLevel(Enchantment.UNBREAKING));
+        int applied = 0;
+        for (int i = 0; i < rawDamage; i++) {
+            if (unbreaking == 0 || ThreadLocalRandom.current().nextInt(unbreaking + 1) == 0) {
+                applied++;
+            }
+        }
+        if (applied <= 0) {
+            return;
+        }
+        int nextDamage = damageable.getDamage() + applied;
+        if (nextDamage >= crossbow.getType().getMaxDurability()) {
+            skeleton.getEquipment().setItemInMainHand(null, true);
+            crossbow.setAmount(0);
+            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ENTITY_ITEM_BREAK, 0.9F, 1.1F);
+            return;
+        }
+        damageable.setDamage(nextDamage);
+        crossbow.setItemMeta((ItemMeta) damageable);
     }
 
     private void equipFlashGlobalMobArmor(EntityEquipment equipment, ThreadLocalRandom random) {
@@ -13155,18 +14012,42 @@ public class FlashModeManager {
         Material[] chests = {Material.LEATHER_CHESTPLATE, Material.CHAINMAIL_CHESTPLATE, Material.IRON_CHESTPLATE};
         Material[] legs = {Material.LEATHER_LEGGINGS, Material.CHAINMAIL_LEGGINGS, Material.IRON_LEGGINGS};
         Material[] boots = {Material.LEATHER_BOOTS, Material.CHAINMAIL_BOOTS, Material.IRON_BOOTS};
+        boolean equippedArmor = false;
         if (random.nextDouble() < 0.85D) {
             equipment.setHelmet(markFlashGlobalMobGear(new ItemStack(helmets[random.nextInt(helmets.length)])), true);
+            equippedArmor = true;
         }
         if (random.nextDouble() < 0.8D) {
             equipment.setChestplate(markFlashGlobalMobGear(new ItemStack(chests[random.nextInt(chests.length)])), true);
+            equippedArmor = true;
         }
         if (random.nextDouble() < 0.8D) {
             equipment.setLeggings(markFlashGlobalMobGear(new ItemStack(legs[random.nextInt(legs.length)])), true);
+            equippedArmor = true;
         }
         if (random.nextDouble() < 0.85D) {
             equipment.setBoots(markFlashGlobalMobGear(new ItemStack(boots[random.nextInt(boots.length)])), true);
+            equippedArmor = true;
         }
+        if (!equippedArmor) {
+            equipment.setHelmet(markFlashGlobalMobGear(new ItemStack(helmets[random.nextInt(helmets.length)])), true);
+        }
+    }
+
+    private boolean hasFlashGlobalMobGearEquipped(EntityEquipment equipment) {
+        if (equipment == null) {
+            return false;
+        }
+        if (isFlashGlobalMobGear(equipment.getItemInMainHand())
+                || isFlashGlobalMobGear(equipment.getItemInOffHand())) {
+            return true;
+        }
+        for (ItemStack armor : equipment.getArmorContents()) {
+            if (isFlashGlobalMobGear(armor)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ItemStack createRandomFlashGlobalMobMiningTool(ThreadLocalRandom random) {
@@ -15692,7 +16573,8 @@ public class FlashModeManager {
             case GOLDEN_HOE -> {
                 target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 45, 0, false, true, true));
                 target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 70, 2, false, true, true));
-                target.getWorld().spawnParticle(Particle.FLASH, target.getEyeLocation(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
+                target.getWorld().spawnParticle(Particle.FLASH, target.getEyeLocation(), 1,
+                        0.0D, 0.0D, 0.0D, 0.0D, Color.WHITE);
             }
             case DIAMOND_HOE -> {
                 target.addPotionEffect(new PotionEffect(PotionEffectType.LEVITATION, 18, 0, false, true, true));
@@ -17141,6 +18023,37 @@ public class FlashModeManager {
         return item != null && item.getType() != Material.AIR && item.getType().name().toUpperCase(Locale.ROOT).endsWith("_SWORD");
     }
 
+    private boolean isStableSword(ItemStack item) {
+        return isSword(item) && hasPersistentByte(item, stableSwordKey);
+    }
+
+    private double getStableSwordDamageMultiplier(ItemStack sword) {
+        if (!isStableSword(sword) || !sword.hasItemMeta()) {
+            return 1.0D;
+        }
+        double bonus = sword.getItemMeta().getPersistentDataContainer().getOrDefault(
+                stableSwordDamageBonusKey, PersistentDataType.DOUBLE, STABLE_SWORD_NORMAL_DAMAGE_BONUS);
+        return 1.0D + clampStableBonus(bonus);
+    }
+
+    private double getStableSwordCrossbowDistanceMultiplier(ItemStack sword) {
+        if (!isStableSword(sword) || !sword.hasItemMeta()) {
+            return 1.0D;
+        }
+        return Math.max(1.0D, sword.getItemMeta().getPersistentDataContainer().getOrDefault(
+                stableSwordCrossbowDistanceMultiplierKey, PersistentDataType.DOUBLE,
+                STABLE_SWORD_NORMAL_CROSSBOW_DISTANCE_MULTIPLIER));
+    }
+
+    private double getStableSwordCrossbowSpeedMultiplier(ItemStack sword) {
+        if (!isStableSword(sword) || !sword.hasItemMeta()) {
+            return 1.0D;
+        }
+        return Math.max(1.0D, sword.getItemMeta().getPersistentDataContainer().getOrDefault(
+                stableSwordCrossbowSpeedMultiplierKey, PersistentDataType.DOUBLE,
+                STABLE_SWORD_CROSSBOW_SPEED_MULTIPLIER));
+    }
+
     private int getUnstableMaceLevel(ItemStack item) {
         return 0;
     }
@@ -17404,6 +18317,12 @@ public class FlashModeManager {
     }
 
     private boolean isWoodUpgradeMaterial(Material material) {
+        if (material == null) {
+            return false;
+        }
+        if (Tag.ITEMS_PLANKS.isTagged(material)) {
+            return true;
+        }
         String name = material.name();
         return name.endsWith("_LOG")
                 || name.endsWith("_WOOD")
@@ -17506,9 +18425,12 @@ public class FlashModeManager {
         return count;
     }
 
-    private double getMaterialArmorAxeBonusReduction(Player player) {
+    private double getMaterialArmorAxeBonusReduction(Player player, GameRoom room) {
         if (player == null) {
             return 0.0D;
+        }
+        if (isEasyFlashDifficulty(room) && hasMaterialArmorLayer(player)) {
+            return 1.0D;
         }
         double reduction = 0.0D;
         for (ItemStack item : player.getInventory().getArmorContents()) {
@@ -17523,7 +18445,7 @@ public class FlashModeManager {
         if (!isArmor(item)) {
             return 0.0D;
         }
-        return 1.0D;
+        return MATERIAL_ARMOR_AXE_BONUS_REDUCTION_PER_PIECE;
     }
 
     private int countTntArmorLayers(Player player) {
@@ -18556,8 +19478,11 @@ public class FlashModeManager {
         world.spawnParticle(Particle.EXPLOSION, boom, 6, 0.18, 0.12, 0.18, 0.02);
         world.playSound(boom, Sound.ENTITY_FIREWORK_ROCKET_BLAST, 0.72f, 1.22f);
         world.playSound(boom, Sound.ENTITY_GENERIC_EXPLODE, 0.95f, 1.0f);
+        double damageMultiplier = tnt.getPersistentDataContainer().getOrDefault(
+                flashGlobalSkeletonDamageMultiplierKey, PersistentDataType.DOUBLE, 1.0D);
         tnt.remove();
-        world.createExplosion(boom.getX(), boom.getY(), boom.getZ(), 3.0F, false, breakBlocks);
+        world.createExplosion(boom.getX(), boom.getY(), boom.getZ(),
+                (float) (3.0D * Math.max(0.0D, Math.min(1.0D, damageMultiplier))), false, breakBlocks);
     }
 
     private void detonateTmtPayload(TNTPrimed tnt, Location location, boolean breakBlocks) {
@@ -18572,8 +19497,11 @@ public class FlashModeManager {
         world.spawnParticle(Particle.EXPLOSION, boom, 9, 0.22D, 0.12D, 0.22D, 0.025D);
         world.playSound(boom, Sound.ENTITY_GENERIC_EXPLODE, 1.12f, 0.72f);
         world.playSound(boom, Sound.ENTITY_TNT_PRIMED, 0.56f, 0.58f);
+        double damageMultiplier = tnt.getPersistentDataContainer().getOrDefault(
+                flashGlobalSkeletonDamageMultiplierKey, PersistentDataType.DOUBLE, 1.0D);
         tnt.remove();
-        world.createExplosion(boom.getX(), boom.getY(), boom.getZ(), TMT_EXPLOSION_POWER, false, breakBlocks);
+        world.createExplosion(boom.getX(), boom.getY(), boom.getZ(),
+                (float) (TMT_EXPLOSION_POWER * Math.max(0.0D, Math.min(1.0D, damageMultiplier))), false, breakBlocks);
     }
 
     private void launchCrossbowSwordPayload(Player player, GameRoom room, ItemStack sword) {
@@ -18588,6 +19516,11 @@ public class FlashModeManager {
 
     private void launchFlyingSwordDisplay(Player owner, GameRoom room, ItemStack sword, Location start, Vector direction,
                                           boolean crossbowSwordPayload) {
+        launchFlyingSwordDisplay(owner, room, sword, start, direction, crossbowSwordPayload, 1.0D);
+    }
+
+    private void launchFlyingSwordDisplay(Player owner, GameRoom room, ItemStack sword, Location start, Vector direction,
+                                          boolean crossbowSwordPayload, double externalDamageMultiplier) {
         World world = start.getWorld();
         if (world == null || sword == null || sword.getType() == Material.AIR) {
             return;
@@ -18602,11 +19535,20 @@ public class FlashModeManager {
         final Vector flightForward = forward.clone();
 
         WaveMotion motion = createWaveMotion(flyingSword);
+        double stableDamageMultiplier = getStableSwordDamageMultiplier(flyingSword);
+        double stableCrossbowSpeedMultiplier = crossbowSwordPayload
+                ? getStableSwordCrossbowSpeedMultiplier(flyingSword) : 1.0D;
+        double stableCrossbowDistanceMultiplier = crossbowSwordPayload
+                ? getStableSwordCrossbowDistanceMultiplier(flyingSword) : 1.0D;
         double speedPerTick = Math.max(0.62D, motion.stepDistance() * motion.stepsPerTick() * 1.08D)
-                * getJukeboxSwordFlightSpeedMultiplier(owner);
-        double maxDistance = motion.maxDistance();
-        double sourceDamageMultiplier = crossbowSwordPayload ? CROSSBOW_SWORD_DAMAGE_MULTIPLIER : 1.0D;
-        double sourceExplosionMultiplier = crossbowSwordPayload ? CROSSBOW_SWORD_EXPLOSION_DAMAGE_MULTIPLIER : 1.0D;
+                * getJukeboxSwordFlightSpeedMultiplier(owner)
+                * stableCrossbowSpeedMultiplier;
+        double maxDistance = motion.maxDistance() * stableCrossbowDistanceMultiplier;
+        double safeExternalDamageMultiplier = Math.max(0.0D, externalDamageMultiplier);
+        double sourceDamageMultiplier = (crossbowSwordPayload ? CROSSBOW_SWORD_DAMAGE_MULTIPLIER : 1.0D)
+                * stableDamageMultiplier * safeExternalDamageMultiplier;
+        double sourceExplosionMultiplier = (crossbowSwordPayload ? CROSSBOW_SWORD_EXPLOSION_DAMAGE_MULTIPLIER : 1.0D)
+                * stableDamageMultiplier * safeExternalDamageMultiplier;
         double damage = (getWaveDamage(flyingSword) + flyingSword.getEnchantmentLevel(Enchantment.SHARPNESS) * 0.35D)
                 * sourceDamageMultiplier
                 * getJukeboxSwordDamageMultiplier(owner);
@@ -18893,8 +19835,12 @@ public class FlashModeManager {
             case GOLDEN_APPLE, ENCHANTED_GOLDEN_APPLE -> 9.6f;
             default -> Math.max(1.2f, nutrition * 0.6f);
         };
-        player.setFoodLevel(Math.min(20, player.getFoodLevel() + nutrition));
-        player.setSaturation(Math.min(20.0f, player.getSaturation() + saturation));
+        int currentFoodLevel = player.getFoodLevel();
+        if (currentFoodLevel < 20) {
+            int updatedFoodLevel = Math.min(20, currentFoodLevel + nutrition);
+            player.setFoodLevel(updatedFoodLevel);
+            player.setSaturation(Math.min((float) updatedFoodLevel, player.getSaturation() + saturation));
+        }
         if (food.getType() == Material.GOLDEN_APPLE || food.getType() == Material.ENCHANTED_GOLDEN_APPLE) {
             player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.REGENERATION, food.getType() == Material.ENCHANTED_GOLDEN_APPLE ? 600 : 100, 1, false, true, true));
             player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.ABSORPTION, 2400, food.getType() == Material.ENCHANTED_GOLDEN_APPLE ? 3 : 0, false, true, true));
@@ -19401,7 +20347,7 @@ public class FlashModeManager {
             event.setCancelled(true);
             player.swingHand(event.getHand());
             consumeHandItem(player, event.getHand(), 1);
-            if (ThreadLocalRandom.current().nextDouble() < 0.25D) {
+            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.25D : 0.20D)) {
                 tameFlashMob(player, skeleton, 4.0D, true);
                 sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§F§F§F§4§8§D✦ §f箭矢驯服成功，§e小白§f现在听你的。§7再次右键可以坐上去。");
                 player.playSound(player.getLocation(), Sound.ENTITY_SKELETON_CONVERTED_TO_STRAY, 0.75f, 1.55f);
@@ -19416,7 +20362,7 @@ public class FlashModeManager {
             event.setCancelled(true);
             player.swingHand(event.getHand());
             consumeHandItem(player, event.getHand(), 1);
-            if (ThreadLocalRandom.current().nextDouble() < 0.45D) {
+            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.45D : 0.15D)) {
                 tameFlashMob(player, enderman, 6.0D, true);
                 sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§9§7§7§7§F§F✦ §5黑曜石驯服成功，§d末影人§5会跟着你。§7再次右键可以坐上去。");
                 player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.85f, 1.18f);
@@ -19431,7 +20377,7 @@ public class FlashModeManager {
             event.setCancelled(true);
             player.swingHand(event.getHand());
             consumeHandItem(player, event.getHand(), 1);
-            if (ThreadLocalRandom.current().nextDouble() < 0.30D) {
+            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.30D : 0.20D)) {
                 tameFlashMob(player, zombie, 4.6D, true);
                 sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§A§6§F§F§8§8✦ §a牛排驯服成功，§2僵尸§a会帮你打架。§7再次右键可以坐上去。");
                 player.playSound(player.getLocation(), Sound.ENTITY_ZOMBIE_VILLAGER_CURE, 0.72f, 1.42f);
@@ -20548,16 +21494,23 @@ public class FlashModeManager {
         }
 
         int unstableLevel = getUnstableMaceLevel(weapon);
+        boolean easyDifficulty = isEasyFlashDifficulty(room);
+        double originalSmashDamage = event.getDamage();
         if (victim instanceof Player target) {
             ItemStack shield = findBlockingShield(target);
             if (isShieldBlockingAttack(target, attacker)
                     || isUnstableCoreShieldBlockingAttack(target, attacker, shield)) {
-                rememberPendingMaceShieldBreak(attacker, target, room, event.getDamage() * 1.25D);
+                double shieldShatterMultiplier = easyDifficulty
+                        ? EASY_MACE_SHATTER_MULTIPLIER
+                        : NORMAL_MACE_SMASH_MULTIPLIER * NORMAL_MACE_SMASH_MULTIPLIER;
+                rememberPendingMaceShieldBreak(attacker, target, room, originalSmashDamage, shieldShatterMultiplier);
                 return false;
             }
         }
 
-        event.setDamage(event.getDamage() * 1.25D);
+        event.setDamage(originalSmashDamage * (easyDifficulty
+                ? EASY_MACE_SMASH_MULTIPLIER
+                : NORMAL_MACE_SMASH_MULTIPLIER));
         if (unstableLevel > 0) {
             applyUnstableMaceSmashDamage(event, attacker, victim, room, unstableLevel);
             if (unstableLevel >= 2) {
@@ -20584,11 +21537,13 @@ public class FlashModeManager {
             maybeTriggerUnstableMaceRebound(attacker, victim, room, unstableLevel);
         }
 
-        return applyRecordedAxeShieldMaceCombo(event, attacker, victim, room);
+        return applyRecordedAxeShieldMaceCombo(event, attacker, victim, room, originalSmashDamage);
     }
 
-    private void rememberPendingMaceShieldBreak(Player attacker, Player target, GameRoom room, double smashDamage) {
-        if (attacker == null || target == null || !Double.isFinite(smashDamage) || smashDamage <= 0.0D) {
+    private void rememberPendingMaceShieldBreak(Player attacker, Player target, GameRoom room,
+                                                double smashDamage, double damageMultiplier) {
+        if (attacker == null || target == null || !Double.isFinite(smashDamage) || smashDamage <= 0.0D
+                || !Double.isFinite(damageMultiplier) || damageMultiplier <= 0.0D) {
             return;
         }
         String roomId = getFlashContextId(attacker, room);
@@ -20597,7 +21552,8 @@ public class FlashModeManager {
         }
         UUID targetUuid = target.getUniqueId();
         PendingMaceShieldBreak pending = new PendingMaceShieldBreak(
-                attacker.getUniqueId(), targetUuid, roomId, smashDamage, System.currentTimeMillis() + 300L);
+                attacker.getUniqueId(), targetUuid, roomId, smashDamage, damageMultiplier,
+                System.currentTimeMillis() + 300L);
         pendingMaceShieldBreaks.put(targetUuid, pending);
         Bukkit.getScheduler().runTaskLater(plugin,
                 () -> pendingMaceShieldBreaks.remove(targetUuid, pending), 3L);
@@ -20630,7 +21586,7 @@ public class FlashModeManager {
             return;
         }
 
-        double damage = pending.smashDamage() * 1.25D;
+        double damage = pending.smashDamage() * pending.damageMultiplier();
         if (!Double.isFinite(damage) || damage <= 0.0D) {
             return;
         }
@@ -20867,7 +21823,8 @@ public class FlashModeManager {
         }
         unstableMaceSmashCounts.put(attacker.getUniqueId(), 0);
         double radius = 4.8D;
-        world.spawnParticle(Particle.DRAGON_BREATH, center, 86, 0.85D, 0.46D, 0.85D, 0.08D);
+        world.spawnParticle(Particle.DRAGON_BREATH, center,
+                86, 0.85D, 0.46D, 0.85D, 0.08D, 1.0F);
         world.spawnParticle(Particle.ELECTRIC_SPARK, center, 48, 0.68D, 0.36D, 0.68D, 0.12D);
         world.playSound(center, Sound.ENTITY_ENDER_DRAGON_GROWL, 0.62f, 1.78f);
         world.playSound(center, Sound.ITEM_MACE_SMASH_GROUND_HEAVY, 0.92f, 0.82f);
@@ -20981,7 +21938,9 @@ public class FlashModeManager {
         return Math.max(0.0D, Math.min(1.0D, nextChance));
     }
 
-    private boolean applyRecordedAxeShieldMaceCombo(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim, GameRoom room) {
+    private boolean applyRecordedAxeShieldMaceCombo(EntityDamageByEntityEvent event, Player attacker,
+                                                     LivingEntity victim, GameRoom room,
+                                                     double originalSmashDamage) {
         if (!(victim instanceof Player target) || !isWeaponSnapshotSame(attacker, Material.MACE)) {
             return false;
         }
@@ -21003,7 +21962,13 @@ public class FlashModeManager {
 
         recentAxeShieldBreaks.remove(attacker.getUniqueId());
         double currentDamage = event.getDamage();
-        double bonusDamage = Math.max(0.0D, currentDamage * 0.25D);
+        double targetDamage;
+        if (isEasyFlashDifficulty(room)) {
+            targetDamage = originalSmashDamage * EASY_MACE_SHIELD_COMBO_MULTIPLIER;
+        } else {
+            targetDamage = currentDamage * 1.25D;
+        }
+        double bonusDamage = Math.max(0.0D, targetDamage - currentDamage);
         double nonLethalLimit = Math.max(0.0D, target.getHealth() - 1.0D);
         if (bonusDamage > 0.0D && currentDamage < nonLethalLimit) {
             event.setDamage(Math.min(currentDamage + bonusDamage, nonLethalLimit));
@@ -21736,7 +22701,7 @@ public class FlashModeManager {
         player.playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 0.9f, 1.18f);
     }
 
-    private void applyMaterialAxeBonus(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim) {
+    private void applyMaterialAxeBonus(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim, GameRoom room) {
         ItemStack weapon = attacker.getInventory().getItemInMainHand();
         if (!isAxe(weapon) || !weapon.hasItemMeta()) {
             return;
@@ -21758,22 +22723,18 @@ public class FlashModeManager {
         if (now < cooldownUntil) {
             return;
         }
-        if (victim instanceof Player playerVictim && hasMaterialArmorLayer(playerVictim)) {
-            neutralizeMaterialAxeDamageBonus(event, damageBonus);
-            playerVictim.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, playerVictim.getLocation().add(0.0D, 1.0D, 0.0D), 10, 0.22, 0.2, 0.22, 0.03);
-            playerVictim.playSound(playerVictim.getLocation(), Sound.ITEM_ARMOR_EQUIP_DIAMOND, 0.55f, 1.45f);
-            long baseMs = Math.max(250L, (long) (attacker.getCooldownPeriod() * 50L));
-            long extraMs = Math.max(1L, (long) (baseMs * Math.max(0.0D, cooldownIncrease == null ? 0.0D : cooldownIncrease)));
-            materialAxeCooldowns.put(attacker.getUniqueId(), now + extraMs);
-            return;
-        }
         double effectiveDamageBonus = damageBonus;
         if (victim instanceof Player playerVictim) {
-            double armorBonusReduction = getMaterialArmorAxeBonusReduction(playerVictim);
+            double armorBonusReduction = getMaterialArmorAxeBonusReduction(playerVictim, room);
             if (armorBonusReduction > 0.0D) {
                 effectiveDamageBonus = Math.max(0.0D, damageBonus - armorBonusReduction);
+                applyMaterialAxeArmorAdjustment(event, damageBonus, effectiveDamageBonus);
                 playerVictim.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, playerVictim.getLocation().add(0.0D, 1.0D, 0.0D), 10, 0.22, 0.2, 0.22, 0.03);
                 playerVictim.playSound(playerVictim.getLocation(), Sound.ITEM_ARMOR_EQUIP_DIAMOND, 0.55f, 1.45f);
+                long baseMs = Math.max(250L, (long) (attacker.getCooldownPeriod() * 50L));
+                long extraMs = Math.max(1L, (long) (baseMs * Math.max(0.0D, cooldownIncrease == null ? 0.0D : cooldownIncrease)));
+                materialAxeCooldowns.put(attacker.getUniqueId(), now + extraMs);
+                return;
             }
         }
         if (effectiveDamageBonus <= 0.0D) {
@@ -22734,6 +23695,28 @@ public class FlashModeManager {
         return isFlashRoomFeaturePhase(room) && !room.isSpectator(player.getUniqueId());
     }
 
+    private void applyMaterialAxeArmorAdjustment(EntityDamageByEntityEvent event,
+                                                  double fullDamageBonus, double retainedDamageBonus) {
+        if (retainedDamageBonus <= 0.0D) {
+            neutralizeMaterialAxeDamageBonus(event, fullDamageBonus);
+            return;
+        }
+        double fullMultiplier = 1.0D + Math.max(0.0D, fullDamageBonus);
+        double retainedMultiplier = 1.0D + Math.max(0.0D, retainedDamageBonus);
+        double ratio = retainedMultiplier / fullMultiplier;
+        double currentDamage = event.getDamage();
+        double adjustedBaseDamage = getOriginalBaseDamage(event, currentDamage) * ratio;
+        if (event.isApplicable(EntityDamageEvent.DamageModifier.BASE)) {
+            try {
+                event.setDamage(EntityDamageEvent.DamageModifier.BASE, adjustedBaseDamage);
+            } catch (IllegalArgumentException | UnsupportedOperationException ignored) {
+                event.setDamage(Math.max(0.0D, currentDamage * ratio));
+            }
+        } else {
+            event.setDamage(Math.max(0.0D, currentDamage * ratio));
+        }
+    }
+
     private boolean isFlashRoomFeaturePhase(GameRoom room) {
         return isFlashMode(room)
                 && room.getState() == RoomState.PLAYING
@@ -23517,7 +24500,7 @@ public class FlashModeManager {
         CREATURE("creature", "宠物乐魂", 56, 62, "§a§l宠物乐魂", "§a宠物乐魂"),
         FARM("farm", "通关农耕", 63, 69, "§5§l通关农耕", "§5通关农耕"),
         HEAVY("heavy", "沉重爆破", 70, 79, "§x§6§0§6§0§6§0§l沉重爆破", "§x§6§0§6§0§6§0沉重爆破"),
-        ALL("all", "完整目录", 1, 79, "§f§l完整目录", "§f完整目录");
+        ALL("all", "完整目录", 1, 84, "§f§l完整目录", "§f完整目录");
 
         private final String id;
         private final String displayName;
@@ -23613,7 +24596,7 @@ public class FlashModeManager {
     }
 
     private record PendingMaceShieldBreak(UUID attackerUuid, UUID targetUuid, String roomId,
-                                          double smashDamage, long expiresAtMillis) {
+                                          double smashDamage, double damageMultiplier, long expiresAtMillis) {
     }
 
     private static final class CoreShieldWindChargeSession {
@@ -23956,6 +24939,10 @@ public class FlashModeManager {
     }
 
     private record RedstoneStabilizerMatch(String kind, ItemStack result) {
+    }
+
+    private record StableSwordUpgradeMatch(ItemStack result, int ghastTearCost,
+                                           boolean consumeTemplate, boolean easyDifficulty) {
     }
 
     private record WindRodUpgradeMatch(ItemStack result, String kind, double speedBonus) {

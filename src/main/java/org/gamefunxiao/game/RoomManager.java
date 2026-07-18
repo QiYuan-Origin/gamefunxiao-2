@@ -1057,6 +1057,7 @@ public class RoomManager {
     public void deleteRoom(String roomId) {
         GameRoom room = rooms.remove(roomId);
         if (room != null) {
+            plugin.getGameManager().clearSwapTimerLimitExemptions(room);
             keepEndingChatIsolation(room, 120_000L);
             // 清除所有玩家的房间记录
             for (UUID uuid : room.getAllPlayerUUIDs()) {
@@ -1450,6 +1451,7 @@ public class RoomManager {
         }
 
         UUID uuid = player.getUniqueId();
+        plugin.getGameManager().clearSwapTimerLimitExemption(player);
         plugin.getGameManager().clearManagedEndDimensionBrightness(player);
         plugin.getFlashModeManager().cleanupFlashPlayerState(player);
 
@@ -1669,10 +1671,6 @@ public class RoomManager {
     private void clearPlayerAdvancements(Player player) {
         if (player == null) {
             return;
-        }
-        if (plugin.getPlayerListener() != null) {
-            // 进入/重置房间时清成就也静默，避免后续触发提示。
-            plugin.getPlayerListener().suppressAdvancementMessages(player.getUniqueId(), 240L);
         }
         Iterator<Advancement> iterator = Bukkit.advancementIterator();
         while (iterator.hasNext()) {

@@ -49,6 +49,7 @@ public final class GameFunXiao extends JavaPlugin {
     private FlashModeManager flashModeManager;
     private EndFlashKitManager endFlashKitManager;
     private MiniGameMapManager miniGameMapManager;
+    private GameFunCommand gameFunCommand;
 
     @Override
     public void onEnable() {
@@ -165,7 +166,7 @@ public final class GameFunXiao extends JavaPlugin {
     }
 
     private void registerCommands() {
-        GameFunCommand gameFunCommand = new GameFunCommand(this);
+        gameFunCommand = new GameFunCommand(this);
         if (registerPaperCommands(gameFunCommand)) {
             return;
         }
@@ -368,5 +369,9 @@ public final class GameFunXiao extends JavaPlugin {
 
     public MiniGameMapManager getMiniGameMapManager() {
         return miniGameMapManager;
+    }
+
+    public GameFunCommand getGameFunCommand() {
+        return gameFunCommand;
     }
 }

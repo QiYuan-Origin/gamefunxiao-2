@@ -114,6 +114,9 @@ public class GameRoom {
     private final Set<UUID> doublePreyVotes;
     private final Set<UUID> flashTriplePreyVotes;
     private final Set<UUID> speedUpVotes;
+    private final Map<UUID, FlashDifficulty> flashDifficultyVotes;
+    private FlashDifficulty flashDifficulty = FlashDifficulty.NORMAL;
+    private boolean flashDifficultyFinalized = false;
     private final Map<UUID, NetherHunterScenario> netherHunterScenarioVotes;
     private final Map<UUID, EndChapterKit> endPreyKitSelections;
     private final Map<UUID, EndChapterKit> endHunterKitVotes;
@@ -175,6 +178,7 @@ public class GameRoom {
         this.doublePreyVotes = new HashSet<>();
         this.flashTriplePreyVotes = new HashSet<>();
         this.speedUpVotes = new HashSet<>();
+        this.flashDifficultyVotes = new HashMap<>();
         this.netherHunterScenarioVotes = new HashMap<>();
         this.endPreyKitSelections = new HashMap<>();
         this.endHunterKitVotes = new HashMap<>();
@@ -337,6 +341,7 @@ public class GameRoom {
         doublePreyVotes.remove(uuid);
         flashTriplePreyVotes.remove(uuid);
         speedUpVotes.remove(uuid);
+        flashDifficultyVotes.remove(uuid);
         netherHunterScenarioVotes.remove(uuid);
         endPreyKitSelections.remove(uuid);
         endHunterKitVotes.remove(uuid);
@@ -865,14 +870,69 @@ public class GameRoom {
         this.dualPreyStackLocked = false;
     }
 
-    // 加速投票
-    public void voteSpeedUp(UUID uuid) {
-        speedUpVotes.add(uuid);
+    // 等待大厅倒计时加速投票
+    public boolean voteSpeedUp(UUID uuid) {
+        return uuid != null && speedUpVotes.add(uuid);
     }
 
-    public boolean shouldSpeedUp() {
-        int required = players.size() <= 2 ? 2 : (players.size() + 1) / 2;
-        return speedUpVotes.size() >= required;
+    public boolean hasVotedSpeedUp(UUID uuid) {
+        return uuid != null && speedUpVotes.contains(uuid);
+    }
+
+    public int getSpeedUpVoteCount() {
+        return speedUpVotes.size();
+    }
+
+    public Set<UUID> getSpeedUpVotes() {
+        return Collections.unmodifiableSet(speedUpVotes);
+    }
+
+    public boolean shouldSpeedUp(int requiredVotes) {
+        return requiredVotes > 0 && speedUpVotes.size() >= requiredVotes;
+    }
+
+    public boolean voteFlashDifficulty(UUID uuid, FlashDifficulty difficulty) {
+        if (uuid == null || difficulty == null || flashDifficultyFinalized || !players.contains(uuid)) {
+            return false;
+        }
+        FlashDifficulty previous = flashDifficultyVotes.put(uuid, difficulty);
+        return previous != difficulty;
+    }
+
+    public FlashDifficulty getFlashDifficultyVote(UUID uuid) {
+        return flashDifficultyVotes.get(uuid);
+    }
+
+    public int getFlashDifficultyVoteCount(FlashDifficulty difficulty) {
+        if (difficulty == null) {
+            return 0;
+        }
+        return (int) flashDifficultyVotes.values().stream().filter(difficulty::equals).count();
+    }
+
+    public FlashDifficulty getFlashDifficulty() {
+        if (flashDifficultyFinalized) {
+            return flashDifficulty;
+        }
+        return resolveFlashDifficultyVotes();
+    }
+
+    public FlashDifficulty finalizeFlashDifficulty() {
+        if (!flashDifficultyFinalized) {
+            flashDifficulty = resolveFlashDifficultyVotes();
+            flashDifficultyFinalized = true;
+        }
+        return flashDifficulty;
+    }
+
+    public boolean isFlashDifficultyFinalized() {
+        return flashDifficultyFinalized;
+    }
+
+    private FlashDifficulty resolveFlashDifficultyVotes() {
+        int normalVotes = getFlashDifficultyVoteCount(FlashDifficulty.NORMAL);
+        int easyVotes = getFlashDifficultyVoteCount(FlashDifficulty.EASY);
+        return easyVotes > normalVotes ? FlashDifficulty.EASY : FlashDifficulty.NORMAL;
     }
 
     // 倒计时

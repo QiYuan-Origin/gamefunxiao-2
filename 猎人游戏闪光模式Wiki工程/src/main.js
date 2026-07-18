@@ -414,6 +414,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <tr><td>死亡</td><td>猎物死亡后进入旁观并飞出去，猎物死完则猎人胜利。猎人死亡后在原地旁观飞出，随机 3~5 分钟复活，复活没有无敌。</td></tr>
             <tr><td>背包与传送</td><td>共享背包、个人背包、指南针传送和 70 格禁传规则都保留。</td></tr>
             <tr><td>闪光书</td><td>终章房间入场后固定在物品栏第二格，右键打开；不能移动、丢弃或交换，离开房间时恢复进入前的背包。</td></tr>
+            <tr><td>难度投票</td><td>等待房物品栏第 8 格提供正常/简单难度投票；平票或无人投票默认正常，规则与普通闪光一致。</td></tr>
             <tr><td>龙池通关</td><td>终章也必须先击败末影龙，再让猎物进入龙池传送门才结算；猎人踩进龙池传送门会取消传送，并用动量弹离。</td></tr>
           </tbody></table>
         `
@@ -494,7 +495,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
     group: '闪光模式 / 快速了解',
     slug: 'flash',
     title: '闪光模式',
-    desc: '单例特殊模式、64 人上限、直接开局和 10 分钟后雷雨规则。',
+    desc: '单例特殊模式、64 人上限、直接开局和正常/简单难度投票。',
     icon: '钻石剑',
     status: '特殊模式',
     version: '1.0.6',
@@ -510,9 +511,23 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <tr><td>猎物数量</td><td>最多 3 位猎物；高人数会进行两轮猎物投票。</td></tr>
             <tr><td>猎人出生</td><td>猎人围绕猎物生成，高人数下会分成 3 圈。</td></tr>
             <tr><td>通关方式</td><td>打死末影龙不会立刻结束；末影龙死亡只会解锁龙池传送门，必须由猎物进入龙池传送门才算闪光通关。</td></tr>
-            <tr><td>天气</td><td>正式开始后的前 10 分钟保持晴天；10 分钟后本局主游戏世界进入并保持雷雨天。等待大厅和模板大厅会保持晴天，不会被闪光天气影响。</td></tr>
+            <tr><td>天气</td><td>正常难度开始 10 分钟后保持雷雨；简单难度不锁永久雷雨，主世界使用自然天气循环。</td></tr>
             <tr><td>闪光书</td><td>进入普通闪光、闪光赛事或终章闪光房间后，闪光书固定在物品栏第二格；可以右键打开，不能移动、丢弃或交换，离开房间后恢复进入前的背包。</td></tr>
           </tbody></table>
+        `
+      },
+      {
+        title: '闪光难度投票',
+        html: `
+          <p>普通闪光与终章闪光等待房的物品栏第 8 格会显示难度投票入口。菜单为 3 行，只放“正常”和“简单”两个按钮；票数较多者生效，平票或无人投票默认正常。</p>
+          <table class="wikitable"><thead><tr><th>规则</th><th>正常</th><th>简单</th></tr></thead><tbody>
+            <tr><td>怪物装备</td><td>怪物会获得闪光特供武器与盔甲；拿弩的小白会装填闪光载荷。</td><td>怪物不加强，按原版装备生成，小白不会获得弩。</td></tr>
+            <tr><td>小白载荷伤害</td><td>普通闪光与终章闪光房内按原伤害的 60% 结算；此削弱不影响 FlashSMP。</td><td>没有特供弩载荷。</td></tr>
+            <tr><td>重锤普通猛击</td><td>额外伤害 +25%。</td><td>以原始猛击伤害独立计算，只 +5%，不继承正常闪光的 +25% 倍率。</td></tr>
+            <tr><td>破盾猛击 / 碎盾</td><td>保留正常闪光原有连段数值。</td><td>同样以原始猛击伤害独立计算：破盾猛击 +25%，碎盾 +30%。</td></tr>
+            <tr><td>材料护甲</td><td>每件抵消 17.5% 强化斧额外增伤。</td><td>穿 1 件即可完全抵消强化斧额外增伤。</td></tr>
+          </tbody></table>
+          <div class="wiki-notice warning"><b>赛事：</b>闪光赛事没有难度投票，也没有提前投票把倒计时压到 30 秒。</div>
         `
       },
       {
@@ -553,6 +568,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <li>指南针只保留追踪功能，不显示距离；跨维度时会保持乱转。</li>
             <li>该模式内死亡会掉落装备，猎人打猎人也有伤害。</li>
             <li>赛事房间同样会提供闪光书，固定在物品栏第二格；它只用于查看规则，不参与死亡掉落，也不能移动或丢弃。</li>
+            <li>赛事房间不提供闪光难度投票，也不提供提前开始投票。</li>
           </ul>
         `
       },
@@ -585,7 +601,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
     group: '闪光模式 / 剑气',
     slug: 'flash-sword-wave',
     title: '剑气',
-    desc: '所有剑按 Q 释放剑气，按剑类型决定速度、距离和粒子表现。',
+    desc: '非稳定剑按 Q 释放剑气，稳定剑会按原版方式正常掉落。',
     icon: '铁剑',
     status: '核心玩法',
     version: '1.0.6',
@@ -594,7 +610,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
       {
         title: '释放方式',
         html: `
-          <p>每把剑都可以按 <code>Q</code> 释放剑气，剑会播放破损粒子与破损音效后清除。</p>
+          <p>除稳定剑外，其余剑可以按 <code>Q</code> 释放剑气，剑会播放破损粒子与破损音效后清除。稳定剑按 Q 只会正常掉落，不会变成剑气。</p>
           <ul>
             <li>剑气是从玩家视角平面推出的回旋镖形粒子。</li>
             <li>从扔出者视角看是平着飞出去的，不会因为低头或抬头变成弯面。</li>
@@ -885,7 +901,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
       {
         title: '护甲强化',
         html: `
-          <p>护甲可以打上对应材料，材料护层会抵消强化斧的额外增伤：铁每件 5%，钻石每件 10%，下界合金每件 18%，其他材料每件 3%；通用受伤仍为每件 -2.5%，最多 -10%。</p>
+          <p>护甲可以打上对应材料。正常难度每件材料护层抵消 17.5% 强化斧额外增伤；简单难度穿 1 件材料护甲就能完全抵消强化斧额外增伤。通用受伤仍为每件 -2.5%，最多 -10%。</p>
           <ul>
             <li>铁甲对应铁块，金甲对应金块，钻石甲对应钻石块，下界合金甲对应下界合金锭。</li>
             <li>铜甲对应铜块，皮革甲对应皮革，锁链甲对应铁粒，海龟壳对应鳞甲，鞘翅对应幻翼膜。</li>
@@ -894,6 +910,22 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <li>打开背包，用浓缩末影珍珠右键任意盔甲，可以让这件盔甲获得 <b>15%</b> 宠物伤害减免和 <b>12.5%</b> 末影人伤害减免。</li>
             <li>4 件都打上后最高宠物伤害 -60%、末影人伤害 -50%；如果宠物本身是末影人，两条减伤会同时参与计算。</li>
             <li>穿 4 件材料强化护甲时，总免伤为 10%。</li>
+          </ul>
+        `
+      },
+      {
+        title: '稳定剑锻造',
+        html: `
+          <table class="wikitable"><thead><tr><th>环境</th><th>锻造台材料</th><th>伤害</th><th>攻速</th><th>弩剑</th></tr></thead><tbody>
+            <tr><td>普通闪光 / 终章闪光 · 正常</td><td>下界合金升级模板 + 剑 + 8 个恶魂之泪</td><td>+30%</td><td>+10%</td><td>距离 +100%，速度 +15%</td></tr>
+            <tr><td>普通闪光 / 终章闪光 · 简单</td><td>模板槽留空 + 剑 + 1 个恶魂之泪</td><td>+20%</td><td>+10%</td><td>距离 +50%，速度 +15%</td></tr>
+            <tr><td>FlashSMP</td><td>下界合金升级模板 + 剑 + 8 个恶魂之泪</td><td>+30%</td><td>+10%</td><td>距离 +100%，速度 +15%</td></tr>
+          </tbody></table>
+          <ul>
+            <li>正常难度和 FlashSMP 不接受已经打过材料强化或红石稳定器的剑。</li>
+            <li>简单难度允许旧材料强化和红石稳定器与稳定属性叠加。</li>
+            <li>稳定完成后不能再追加材料强化或红石稳定器，也不能重复稳定。</li>
+            <li>稳定剑可以装入弩，但按 Q 丢出时只会正常成为掉落物，不再释放剑气。</li>
           </ul>
         `
       },
@@ -1270,11 +1302,11 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
       {
         title: '驯服方式',
         html: `
-          <table class="wikitable"><thead><tr><th>生物</th><th>物品</th><th>成功率</th><th>驯服后</th></tr></thead><tbody>
-            <tr><td>小白</td><td>箭</td><td>25%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 4 格左右。</td></tr>
-            <tr><td>末影人</td><td>黑曜石</td><td>45%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 6 格左右，并继承末影人传送特性。</td></tr>
-            <tr><td>僵尸</td><td>牛排</td><td>30%</td><td>驯服成功后帮主人打架；再次右键可以骑乘。</td></tr>
-            <tr><td>狼等原版已驯服生物</td><td>主人右键交互</td><td>已有主人</td><td>会接入闪光宠物强化，可以喂金苹果和剑。</td></tr>
+          <table class="wikitable"><thead><tr><th>生物</th><th>物品</th><th>正常 / FlashSMP</th><th>简单</th><th>驯服后</th></tr></thead><tbody>
+            <tr><td>小白</td><td>箭</td><td>20%</td><td>25%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 4 格左右。</td></tr>
+            <tr><td>末影人</td><td>黑曜石</td><td>15%</td><td>45%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 6 格左右，并继承末影人传送特性。</td></tr>
+            <tr><td>僵尸</td><td>牛排</td><td>20%</td><td>30%</td><td>驯服成功后帮主人打架；再次右键可以骑乘。</td></tr>
+            <tr><td>狼等原版已驯服生物</td><td>主人右键交互</td><td>已有主人</td><td>已有主人</td><td>会接入闪光宠物强化，可以喂金苹果和剑。</td></tr>
           </tbody></table>
         `
       },
