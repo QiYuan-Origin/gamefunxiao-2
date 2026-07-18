@@ -27,6 +27,8 @@ import org.bukkit.event.entity.TrialSpawnerSpawnEvent;
 import org.bukkit.event.hanging.HangingPlaceEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
@@ -47,6 +49,7 @@ import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleUpdateEvent;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -66,6 +69,22 @@ public class FlashModeListener implements Listener {
     private boolean isFlashPreGameInteractionLocked(Player player) {
         return player != null && plugin.getFlashModeManager().isFlashPreGameInteractionLocked(player,
                 plugin.getRoomManager().getPlayerRoom(player.getUniqueId()));
+    }
+
+    private boolean isEndFlashStartupPhase(Player player) {
+        return player != null && plugin.getFlashModeManager().isEndFlashStartupPhase(player,
+                plugin.getRoomManager().getPlayerRoom(player.getUniqueId()));
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player)
+                || event.getInventory().getType() != InventoryType.ENDER_CHEST
+                || !isEndFlashStartupPhase(player)) {
+            return;
+        }
+        event.setCancelled(true);
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.72f, 0.86f);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -202,6 +221,14 @@ public class FlashModeListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+        if (isEndFlashStartupPhase(player)
+                && event.getItem() != null
+                && event.getItem().getType() == org.bukkit.Material.ENDER_PEARL) {
+            event.setCancelled(true);
+            event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+            event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+            return;
+        }
         if (isFlashPreGameInteractionLocked(player)) {
             event.setCancelled(true);
             event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
@@ -364,6 +391,12 @@ public class FlashModeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        if (event.getEntity() instanceof EnderPearl
+                && event.getEntity().getShooter() instanceof Player player
+                && isEndFlashStartupPhase(player)) {
+            event.setCancelled(true);
+            return;
+        }
         if (event.getEntity().getShooter() instanceof Player player && isFlashPreGameInteractionLocked(player)) {
             event.setCancelled(true);
             return;

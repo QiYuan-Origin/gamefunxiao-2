@@ -913,6 +913,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         }
         var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null || room.getGameMode() != GameMode.END_FLASH || room.getState() != org.gamefunxiao.game.RoomState.PLAYING
+                || plugin.getFlashModeManager().isEndFlashStartupPhase(player, room)
                 || !room.isGameActuallyStarted()) {
             player.sendMessage(plugin.getConfigManager().getHunterGamePrefix() + "§x§F§F§8§8§8§8⚠ §c只有终章 · 闪光正式开始后才能使用。");
             return;

@@ -205,8 +205,11 @@ public class FlashModeManager {
     private static final double CROSSBOW_SWORD_EXPLOSION_DAMAGE_MULTIPLIER = 3.00D;
     private static final double EXPLOSIVE_SWORD_BLOCK_RADIUS_MULTIPLIER = 0.50D;
     private static final String MATERIAL_AXE_SPEED_LINE_PREFIX = "§8- §x§F§F§8§8§5§5攻击速度已降低：";
-    private static final String DRAGON_BREATH_WEAPON_LINE = "§8- §x§B§B§8§8§F§F龙息强化：箭矢更快更痛";
+    private static final String DRAGON_BREATH_WEAPON_LINE_PREFIX = "§8- §x§B§B§8§8§F§F龙息强化：";
+    private static final String DRAGON_BREATH_BOW_LINE = DRAGON_BREATH_WEAPON_LINE_PREFIX + "弓箭速度、伤害 +25%";
+    private static final String DRAGON_BREATH_CROSSBOW_LINE = DRAGON_BREATH_WEAPON_LINE_PREFIX + "弩箭速度降低 35%，伤害 +25%";
     private static final double DRAGON_BREATH_ARROW_MULTIPLIER = 1.25D;
+    private static final double DRAGON_BREATH_CROSSBOW_SPEED_MULTIPLIER = 0.65D;
     private static final double DRAGON_BREATH_CROSSBOW_MAX_DISTANCE = 450.0D;
     private static final String DOUBLED_POTION_LINE = "§8- §x§B§B§8§8§F§F闪光炼药：效果时间已翻倍";
     private static final String SWORD_POTION_LINE_PREFIX = "§8- §x§F§0§A§9§B§B剑刃药水：";
@@ -517,7 +520,7 @@ public class FlashModeManager {
     private static final int RAILGUN_SINGLE_FUSE_TICKS = 20 * 3;
     private static final float RAILGUN_SINGLE_EXPLOSION_POWER = 4.0F;
     private static final long RAILGUN_USE_DEBOUNCE_MILLIS = 250L;
-    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 2;
+    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 3;
     private static final List<RailgunMaterialRequirement> RAILGUN_ASSEMBLY_REQUIREMENTS = List.of(
             new RailgunMaterialRequirement(Material.HONEY_BLOCK, 12),
             new RailgunMaterialRequirement(Material.SLIME_BLOCK, 24),
@@ -1109,6 +1112,31 @@ public class FlashModeManager {
                 && !room.isGameActuallyStarted()
                 && room.getAllPlayerUUIDs().contains(player.getUniqueId())
                 && !room.isSpectator(player.getUniqueId());
+    }
+
+    /**
+     * 终章玩家传送到末地后、正式 GO 前的准备阶段。
+     * 这个阶段允许原版工作台合成，但不能使用正式游戏能力或打开末影箱。
+     */
+    public boolean isEndFlashStartupPhase(Player player, GameRoom room) {
+        return player != null
+                && room != null
+                && room.getGameMode() == GameMode.END_FLASH
+                && room.getState() == RoomState.PLAYING
+                && !room.isGameActuallyStarted()
+                && room.getAllPlayerUUIDs().contains(player.getUniqueId())
+                && !room.isSpectator(player.getUniqueId());
+    }
+
+    private boolean isEndFlashStartupCraftingAvailable(Player player, GameRoom room) {
+        return isEndFlashStartupPhase(player, room)
+                && room.getGameWorld() != null
+                && room.getGameWorld().equals(player.getWorld());
+    }
+
+    private boolean isFlashCraftingAvailable(Player player, GameRoom room) {
+        return isFlashCombatAvailable(player, room)
+                || isEndFlashStartupCraftingAvailable(player, room);
     }
 
     public boolean handleFlashCompassBackpackInteract(PlayerInteractEvent event, Player player, GameRoom room, ItemStack item) {
@@ -1905,10 +1933,21 @@ public class FlashModeManager {
         if (oldMeta.hasDisplayName()) {
             freshMeta.setDisplayName(oldMeta.getDisplayName());
         }
+        oldMeta.getPersistentDataContainer().copyTo(freshMeta.getPersistentDataContainer(), false);
+        if (!oldMeta.getItemFlags().isEmpty()) {
+            freshMeta.addItemFlags(oldMeta.getItemFlags().toArray(org.bukkit.inventory.ItemFlag[]::new));
+        }
+        if (oldMeta.isUnbreakable()) {
+            freshMeta.setUnbreakable(true);
+        }
         if (oldMeta instanceof Damageable oldDamageable && freshMeta instanceof Damageable freshDamageable) {
             freshDamageable.setDamage(oldDamageable.getDamage());
         }
         freshItem.setItemMeta(freshMeta);
+
+        // Kit 同步只刷新特殊物品模板；附魔组件必须按原字节状态完整保留。
+        freshItem.copyDataFrom(oldItem, type -> type == DataComponentTypes.ENCHANTMENTS
+                || type == DataComponentTypes.STORED_ENCHANTMENTS);
         return freshItem;
     }
 
@@ -2019,7 +2058,7 @@ public class FlashModeManager {
             refreshSingleLoreLine(meta, WIND_ROD_CROSSBOW_LINE);
         }
         if (isDragonBreathWeapon(item)) {
-            refreshSingleLoreLine(meta, DRAGON_BREATH_WEAPON_LINE);
+            refreshDragonBreathWeaponLore(item, meta);
         }
         if (isStormArmor(item)) {
             refreshStormArmorLore(meta);
@@ -2281,6 +2320,16 @@ public class FlashModeManager {
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.removeIf(line::equals);
         lore.add(line);
+        meta.setLore(lore);
+    }
+
+    private void refreshDragonBreathWeaponLore(ItemStack item, ItemMeta meta) {
+        if (item == null || meta == null) {
+            return;
+        }
+        List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+        lore.removeIf(line -> line != null && line.startsWith(DRAGON_BREATH_WEAPON_LINE_PREFIX));
+        lore.add(item.getType() == Material.CROSSBOW ? DRAGON_BREATH_CROSSBOW_LINE : DRAGON_BREATH_BOW_LINE);
         meta.setLore(lore);
     }
 
@@ -3069,7 +3118,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(26, "旋风棒三叉戟", "旋风棒+三叉戟", "铁砧强化三叉戟速度。", "消耗旋风棒", "无", "飞行速度+50%，偏远程压制。"));
         pages.add(guideBookQuickPage(27, "紫水晶弩", "紫水晶簇+弩", "铁砧校准弩。", "消耗材料", "无", "弩投射物飞行速度+12.5%。"));
         pages.add(guideBookQuickPage(28, "旋风棒弩", "旋风棒+弩", "铁砧强化弩。", "消耗旋风棒", "无", "弩投射物飞行速度+20%。"));
-        pages.add(guideBookQuickPage(29, "龙息武器", "龙息+弓/弩", "铁砧注入弓或弩。", "消耗龙息", "无", "箭矢速度和伤害+25%，弩龙息箭无重力。"));
+        pages.add(guideBookQuickPage(29, "龙息武器", "龙息+弓/弩", "铁砧注入弓或弩。", "消耗龙息", "无", "弓箭速度和伤害+25%；弩箭在原龙息速度上再降低35%，伤害仍+25%，且无重力。"));
         pages.add(guideBookQuickPage(30, "盾牌风弹", "主手盾牌+副手风弹", "右键向视角方向弹射。", "消耗1风弹", "短间隔", "失败不消耗，成功给免摔保护。"));
         pages.add(guideBookQuickPage(31, "空中盾跃", "盾牌+风弹", "空中继续右键可连跳。", "成功才消耗", "概率递减", "每次空中成功后下一次概率减半，落地重置。"));
         pages.add(guideBookQuickPage(32, "弓风弹", "主手弓+副手风弹", "拉弓发射风弹。", "消耗1风弹", "跟随弓", "弩装风弹更快，多重射击可分裂。"));
@@ -3507,7 +3556,7 @@ public class FlashModeManager {
         }
 
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
-        if (!isFlashCombatAvailable(player, room)) {
+        if (!isFlashCraftingAvailable(player, room)) {
             return;
         }
 
@@ -3790,7 +3839,7 @@ public class FlashModeManager {
         }
 
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
-        if (!isFlashCombatAvailable(player, room)) {
+        if (!isFlashCraftingAvailable(player, room)) {
             return;
         }
 
@@ -7767,8 +7816,8 @@ public class FlashModeManager {
         }
         meta.getPersistentDataContainer().set(dragonBreathWeaponKey, PersistentDataType.BYTE, (byte) 1);
         List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
-        lore.removeIf(DRAGON_BREATH_WEAPON_LINE::equals);
-        lore.add(DRAGON_BREATH_WEAPON_LINE);
+        lore.removeIf(line -> line != null && line.startsWith(DRAGON_BREATH_WEAPON_LINE_PREFIX));
+        lore.add(result.getType() == Material.CROSSBOW ? DRAGON_BREATH_CROSSBOW_LINE : DRAGON_BREATH_BOW_LINE);
         meta.setLore(lore);
         result.setItemMeta(meta);
         return result;
@@ -7790,7 +7839,11 @@ public class FlashModeManager {
 
     private void playDragonBreathInfusionFeedback(Player player, Material weaponType) {
         String weaponName = weaponType == Material.CROSSBOW ? "弩" : "弓";
-        sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§B§B§8§8§F§F✦ §d龙息已注入§e" + weaponName + "§d，射出的箭会更快更痛。");
+        String effect = weaponType == Material.CROSSBOW
+                ? "§d，箭速降低 §f35%§d，伤害仍会提高。"
+                : "§d，射出的箭会更快更痛。";
+        sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                + "§x§B§B§8§8§F§F✦ §d龙息已注入§e" + weaponName + effect);
         player.playSound(player.getLocation(), Sound.ITEM_BOTTLE_FILL_DRAGONBREATH, 0.85f, 1.2f);
         player.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_FLAP, 0.45f, 1.55f);
         player.getWorld().spawnParticle(Particle.DRAGON_BREATH,
@@ -9989,7 +10042,9 @@ public class FlashModeManager {
 
         Vector velocity = arrow.getVelocity();
         if (velocity.lengthSquared() > 0.001D) {
-            double multiplier = (dragonBreath ? DRAGON_BREATH_ARROW_MULTIPLIER : 1.0D) * (amethyst ? AMETHYST_CROSSBOW_SPEED_MULTIPLIER : 1.0D);
+            double multiplier = (dragonBreath ? DRAGON_BREATH_ARROW_MULTIPLIER : 1.0D)
+                    * (crossbow && dragonBreath ? DRAGON_BREATH_CROSSBOW_SPEED_MULTIPLIER : 1.0D)
+                    * (amethyst ? AMETHYST_CROSSBOW_SPEED_MULTIPLIER : 1.0D);
             arrow.setVelocity(velocity.multiply(multiplier));
         }
         if (dragonBreath) {
