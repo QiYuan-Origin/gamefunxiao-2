@@ -9,6 +9,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.data.PlayerData;
 import org.gamefunxiao.game.GameRoom;
+import org.gamefunxiao.game.HunterPerformanceRank;
 import org.gamefunxiao.menu.base.BaseMenu;
 import org.gamefunxiao.util.PlayerHeadUtil;
 
@@ -173,6 +174,8 @@ public class VotePreyMenu extends BaseMenu {
                 String hColor = hunterPts >= 0 ? "§6" : "§c";
                 String pColor = preyPts >= 0 ? "§6" : "§c";
                 lore.add("§f- §c猎人表现: " + hColor + hunterPts + " §8| §a猎物表现: " + pColor + preyPts);
+                lore.add("§f- §c猎人段位: " + HunterPerformanceRank.coloredHunterRank(hunterPts));
+                lore.add("§f- §a猎物段位: " + HunterPerformanceRank.coloredPreyRank(preyPts));
             }
 
             lore.add("§8· · · · · · · · · · · · · ·");

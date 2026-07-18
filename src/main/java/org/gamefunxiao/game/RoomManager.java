@@ -908,6 +908,8 @@ public class RoomManager {
 
         room.addSpectator(player.getUniqueId());
         playerRooms.put(player.getUniqueId(), room.getRoomId());
+        detachPlayerFromVehicles(player);
+        player.setCollidable(false);
 
         // 传送到游戏世界（猎物附近）
         if (room.getGameWorld() != null) {
@@ -935,9 +937,10 @@ public class RoomManager {
             // 延迟设置旁观模式和给物品（等待 mvtp 完成）
             org.bukkit.Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 // 传送到目标位置
-                player.teleport(finalLoc);
+                teleportPlayerDetached(player, finalLoc, "旁观传送");
                 // 设置为旁观模式（覆盖世界默认模式）
                 player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                player.setCollidable(false);
                 // 给旁观退出物品
                 plugin.getGameManager().giveSpectatorItems(player);
                 // 播放传送音效
@@ -1007,7 +1010,7 @@ public class RoomManager {
         plugin.getLogger().info("传送玩家 " + player.getName() + " 到大厅世界 " + lobbyWorld.getName() +
                                " 坐标: " + spawnLoc.getBlockX() + ", " + spawnLoc.getBlockY() + ", " + spawnLoc.getBlockZ());
         clearRoleNameTag(player);
-        player.teleport(spawnLoc);
+        teleportPlayerDetached(player, spawnLoc, "房间等待大厅传送");
         clearRoleNameTag(player);
         updatePlayerTabName(player, room.getRoomId());
 
@@ -1454,11 +1457,12 @@ public class RoomManager {
         plugin.getGameManager().clearSwapTimerLimitExemption(player);
         plugin.getGameManager().clearManagedEndDimensionBrightness(player);
         plugin.getFlashModeManager().cleanupFlashPlayerState(player);
+        detachPlayerFromVehicles(player);
 
         if (teleportToPrevious) {
             Location prevLoc = room.getPreviousLocation(uuid);
             if (prevLoc != null) {
-                player.teleport(prevLoc);
+                teleportPlayerDetached(player, prevLoc, "房间结算恢复传送");
             }
         }
 
@@ -1480,6 +1484,7 @@ public class RoomManager {
         if (player == null) {
             return;
         }
+        detachPlayerFromVehicles(player);
         clearRoleNameTag(player);
         player.setPlayerListName(null);
         resetPlayerRuntimeState(player);
@@ -1507,6 +1512,7 @@ public class RoomManager {
         if (player == null) {
             return;
         }
+        detachPlayerFromVehicles(player);
         plugin.getGameManager().clearManagedEndDimensionBrightness(player);
         plugin.getFlashModeManager().cleanupFlashPlayerState(player);
         if (room != null) {
@@ -1543,6 +1549,44 @@ public class RoomManager {
         player.resetCooldown();
         player.clearActiveItem();
         clearPlayerActivePotionEffects(player);
+    }
+
+    private void detachPlayerFromVehicles(Player player) {
+        if (player == null) {
+            return;
+        }
+        for (int attempt = 0; attempt < 8 && player.isInsideVehicle(); attempt++) {
+            org.bukkit.entity.Entity vehicle = player.getVehicle();
+            if (vehicle != null) {
+                vehicle.removePassenger(player);
+            }
+            player.leaveVehicle();
+        }
+        player.eject();
+        player.setVelocity(new org.bukkit.util.Vector(0.0D, 0.0D, 0.0D));
+    }
+
+    private boolean teleportPlayerDetached(Player player, Location target, String context) {
+        if (player == null || target == null || target.getWorld() == null) {
+            return false;
+        }
+        detachPlayerFromVehicles(player);
+        if (player.teleport(target)) {
+            return true;
+        }
+
+        Location retryTarget = target.clone();
+        plugin.getLogger().warning(context + "首次失败，将在下一 tick 重试: " + player.getName());
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            detachPlayerFromVehicles(player);
+            if (!player.teleport(retryTarget)) {
+                plugin.getLogger().warning(context + "重试仍然失败: " + player.getName());
+            }
+        });
+        return false;
     }
 
     private void resetPlayerVitalsAndProgress(Player player) {

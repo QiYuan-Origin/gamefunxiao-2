@@ -142,11 +142,11 @@ public class HunterPerformanceMenu extends BaseMenu {
             case 10, 12, 14, 16, 32 -> playClickSound();
             case 28 -> {
                 playClickSound();
-                new LeaderboardDetailMenu(plugin, player, "hunter_points").open();
+                new LeaderboardDetailMenu(plugin, player, "hunter_points", true).open();
             }
             case 30 -> {
                 playClickSound();
-                new LeaderboardDetailMenu(plugin, player, "prey_points").open();
+                new LeaderboardDetailMenu(plugin, player, "prey_points", true).open();
             }
             case 36 -> {
                 playClickSound();

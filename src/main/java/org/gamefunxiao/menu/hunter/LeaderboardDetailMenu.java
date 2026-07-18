@@ -36,25 +36,36 @@ public class LeaderboardDetailMenu extends BaseMenu {
     private final MenuSection menuSection;
     private final Set<GameMode> modeFilter;
     private final boolean roleSwitchLocked;
+    private final boolean returnToPerformanceMenu;
     private String timeRange = "total";
     private String roleType = "all";
     private String fastestModeId = "all";
     private int page = 0;
 
     public LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type) {
-        this(plugin, player, type, MenuSection.HUNTER, defaultFilter(MenuSection.HUNTER), null);
+        this(plugin, player, type, MenuSection.HUNTER, defaultFilter(MenuSection.HUNTER), null, false);
+    }
+
+    public LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type, boolean returnToPerformanceMenu) {
+        this(plugin, player, type, MenuSection.HUNTER, defaultFilter(MenuSection.HUNTER), null, returnToPerformanceMenu);
     }
 
     public LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type, MenuSection menuSection, Set<GameMode> modeFilter) {
-        this(plugin, player, type, menuSection, modeFilter, null);
+        this(plugin, player, type, menuSection, modeFilter, null, false);
     }
 
     public LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type, MenuSection menuSection, Set<GameMode> modeFilter, String forcedRoleType) {
+        this(plugin, player, type, menuSection, modeFilter, forcedRoleType, false);
+    }
+
+    private LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type, MenuSection menuSection,
+                                  Set<GameMode> modeFilter, String forcedRoleType, boolean returnToPerformanceMenu) {
         super(plugin, player, resolveTitle(type, menuSection), 54);
         this.type = type;
         this.menuSection = menuSection == null ? MenuSection.HUNTER : menuSection;
         this.modeFilter = modeFilter == null ? defaultFilter(this.menuSection) : EnumSet.copyOf(modeFilter);
         this.roleSwitchLocked = forcedRoleType != null && !forcedRoleType.isBlank();
+        this.returnToPerformanceMenu = returnToPerformanceMenu;
 
         if (roleSwitchLocked) {
             this.roleType = forcedRoleType;
@@ -483,7 +494,11 @@ public class LeaderboardDetailMenu extends BaseMenu {
             }
             case 45 -> {
                 playClickSound();
-                new LeaderboardMenu(plugin, player, menuSection, modeFilter).open();
+                if (returnToPerformanceMenu) {
+                    plugin.getMenuManager().openHunterPerformanceMenu(player);
+                } else {
+                    new LeaderboardMenu(plugin, player, menuSection, modeFilter).open();
+                }
             }
         }
     }

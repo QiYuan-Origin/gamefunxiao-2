@@ -2336,7 +2336,8 @@ public class PlayerListener implements Listener {
     public void onPrePlayerAttackEntity(PrePlayerAttackEntityEvent event) {
         Player player = event.getPlayer();
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
-        if (isFlashPreGameInteractionLocked(player, room)) {
+        if (isFlashPreGameInteractionLocked(player, room)
+                || isLuckyPillarsSpectatorInteractionLocked(player, room)) {
             event.setCancelled(true);
             return;
         }
@@ -2406,7 +2407,8 @@ public class PlayerListener implements Listener {
         GameRoom attackerPreGameRoom = attacker == null
                 ? null
                 : plugin.getRoomManager().getPlayerRoom(attacker.getUniqueId());
-        if (attacker != null && isFlashPreGameInteractionLocked(attacker, attackerPreGameRoom)) {
+        if (attacker != null && (isFlashPreGameInteractionLocked(attacker, attackerPreGameRoom)
+                || isLuckyPillarsSpectatorInteractionLocked(attacker, attackerPreGameRoom))) {
             event.setCancelled(true);
             return;
         }
@@ -2585,6 +2587,14 @@ public class PlayerListener implements Listener {
             return player;
         }
         return null;
+    }
+
+    private boolean isLuckyPillarsSpectatorInteractionLocked(Player player, GameRoom room) {
+        return player != null
+                && room != null
+                && room.getGameMode().isLuckyPillars()
+                && (room.isSpectator(player.getUniqueId())
+                || room.isLuckyPillarsEliminated(player.getUniqueId()));
     }
 
     private boolean shouldProtectLobbyEntity(Player attacker, World world) {
