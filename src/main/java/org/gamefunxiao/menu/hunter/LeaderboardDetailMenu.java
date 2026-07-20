@@ -54,6 +54,11 @@ public class LeaderboardDetailMenu extends BaseMenu {
         this(plugin, player, type, menuSection, modeFilter, null, false);
     }
 
+    public LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type, MenuSection menuSection,
+                                 Set<GameMode> modeFilter, boolean returnToPerformanceMenu) {
+        this(plugin, player, type, menuSection, modeFilter, null, returnToPerformanceMenu);
+    }
+
     public LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type, MenuSection menuSection, Set<GameMode> modeFilter, String forcedRoleType) {
         this(plugin, player, type, menuSection, modeFilter, forcedRoleType, false);
     }
@@ -495,7 +500,7 @@ public class LeaderboardDetailMenu extends BaseMenu {
             case 45 -> {
                 playClickSound();
                 if (returnToPerformanceMenu) {
-                    plugin.getMenuManager().openHunterPerformanceMenu(player);
+                    plugin.getMenuManager().openHunterPerformanceMenuAsCommandReturnRoot(player);
                 } else {
                     new LeaderboardMenu(plugin, player, menuSection, modeFilter).open();
                 }

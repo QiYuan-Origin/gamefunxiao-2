@@ -197,11 +197,11 @@ public class LeaderboardMenu extends BaseMenu {
             }
             case 28 -> {
                 playClickSound();
-                new LeaderboardDetailMenu(plugin, player, "hunter_points", menuSection, modeFilter).open();
+                new LeaderboardDetailMenu(plugin, player, "hunter_points", menuSection, modeFilter, true).open();
             }
             case 31 -> {
                 playClickSound();
-                new LeaderboardDetailMenu(plugin, player, "prey_points", menuSection, modeFilter).open();
+                new LeaderboardDetailMenu(plugin, player, "prey_points", menuSection, modeFilter, true).open();
             }
             case 34 -> {
                 playClickSound();

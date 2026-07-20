@@ -269,10 +269,22 @@ public class MenuManager {
     }
 
     public void openHunterPerformanceMenu(Player player) {
+        openHunterPerformanceMenu(player, false);
+    }
+
+    public void openHunterPerformanceMenuAsCommandReturnRoot(Player player) {
+        openHunterPerformanceMenu(player, true);
+    }
+
+    private void openHunterPerformanceMenu(Player player, boolean useAsCommandReturnRoot) {
         if (!canOpenGameFunMenu(player)) {
             return;
         }
-        openMenu(player, new HunterPerformanceMenu(plugin, player));
+        HunterPerformanceMenu menu = new HunterPerformanceMenu(plugin, player);
+        if (useAsCommandReturnRoot && commandReturnMenus.contains(player.getUniqueId())) {
+            commandReturnRootMenuTypes.put(player.getUniqueId(), menu.getClass());
+        }
+        openMenu(player, menu);
     }
 
 

@@ -520,7 +520,7 @@ public class FlashModeManager {
     private static final int RAILGUN_SINGLE_FUSE_TICKS = 20 * 3;
     private static final float RAILGUN_SINGLE_EXPLOSION_POWER = 4.0F;
     private static final long RAILGUN_USE_DEBOUNCE_MILLIS = 250L;
-    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 3;
+    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 4;
     private static final List<RailgunMaterialRequirement> RAILGUN_ASSEMBLY_REQUIREMENTS = List.of(
             new RailgunMaterialRequirement(Material.HONEY_BLOCK, 12),
             new RailgunMaterialRequirement(Material.SLIME_BLOCK, 24),
@@ -3145,7 +3145,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
         pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域；聚焦实体会直接灼烧。", "无", "聚焦触发", "实体蓄力时会被环形火粒子包裹，触发后受伤并燃烧。"));
-        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度40%/60%/45%；简单难度45%/65%/50%。"));
+        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度25%/45%/30%。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
         pages.add(guideBookQuickPage(59, "骷髅喂弓", "弓+骷髅宠物", "右键提高小白远程伤害。", "消耗弓", "无", "力量、冲击、火矢、无限都会影响加成。"));
@@ -3567,7 +3567,10 @@ public class FlashModeManager {
                 event.getInventory().setResult(null);
                 return;
             }
-            event.getInventory().setResult(matrixSpecialResult);
+            ItemStack preparedResult = shouldDoubleFlashCraft(player, matrixSpecialResult, matrix, false)
+                    ? createDoubledCraftResult(matrixSpecialResult)
+                    : matrixSpecialResult.clone();
+            event.getInventory().setResult(preparedResult);
             return;
         }
 
@@ -13357,6 +13360,21 @@ public class FlashModeManager {
             return;
         }
         equipFlashGlobalMobIfNeeded(living);
+        Bukkit.getScheduler().runTask(plugin, () -> equipFlashGlobalMobIfNeeded(living));
+    }
+
+    public void refreshFlashGlobalMobEquipment(GameRoom room) {
+        if (!isFlashRoomFeaturePhase(room) || isEasyFlashDifficulty(room)) {
+            return;
+        }
+        for (World world : Bukkit.getWorlds()) {
+            if (getFlashRoomByWorld(world) != room) {
+                continue;
+            }
+            for (LivingEntity living : world.getLivingEntities()) {
+                equipFlashGlobalMobIfNeeded(living);
+            }
+        }
     }
 
     private void equipFlashGlobalMobIfNeeded(LivingEntity living) {
@@ -13374,7 +13392,7 @@ public class FlashModeManager {
             return;
         }
         if (living.getPersistentDataContainer().get(flashGlobalMobGearKey, PersistentDataType.BYTE) != null
-                && hasFlashGlobalMobGearEquipped(equipment)) {
+                && hasCompleteFlashGlobalMobLoadout(equipment)) {
             return;
         }
         living.getPersistentDataContainer().set(flashGlobalMobGearKey, PersistentDataType.BYTE, (byte) 1);
@@ -14089,13 +14107,12 @@ public class FlashModeManager {
         }
     }
 
-    private boolean hasFlashGlobalMobGearEquipped(EntityEquipment equipment) {
+    private boolean hasCompleteFlashGlobalMobLoadout(EntityEquipment equipment) {
         if (equipment == null) {
             return false;
         }
-        if (isFlashGlobalMobGear(equipment.getItemInMainHand())
-                || isFlashGlobalMobGear(equipment.getItemInOffHand())) {
-            return true;
+        if (!isFlashGlobalMobGear(equipment.getItemInMainHand())) {
+            return false;
         }
         for (ItemStack armor : equipment.getArmorContents()) {
             if (isFlashGlobalMobGear(armor)) {
@@ -19891,12 +19908,15 @@ public class FlashModeManager {
             default -> Math.max(1.2f, nutrition * 0.6f);
         };
         int currentFoodLevel = player.getFoodLevel();
-        if (currentFoodLevel < 20) {
-            int updatedFoodLevel = Math.min(20, currentFoodLevel + nutrition);
+        int restoredFood = Math.max(0, Math.min(nutrition, 20 - currentFoodLevel));
+        if (restoredFood > 0) {
+            int updatedFoodLevel = currentFoodLevel + restoredFood;
+            float restoredSaturation = nutrition <= 0 ? 0.0F : saturation * restoredFood / nutrition;
             player.setFoodLevel(updatedFoodLevel);
-            player.setSaturation(Math.min((float) updatedFoodLevel, player.getSaturation() + saturation));
+            player.setSaturation(Math.min((float) updatedFoodLevel, player.getSaturation() + restoredSaturation));
         }
-        if (food.getType() == Material.GOLDEN_APPLE || food.getType() == Material.ENCHANTED_GOLDEN_APPLE) {
+        if (restoredFood > 0
+                && (food.getType() == Material.GOLDEN_APPLE || food.getType() == Material.ENCHANTED_GOLDEN_APPLE)) {
             player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.REGENERATION, food.getType() == Material.ENCHANTED_GOLDEN_APPLE ? 600 : 100, 1, false, true, true));
             player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.ABSORPTION, 2400, food.getType() == Material.ENCHANTED_GOLDEN_APPLE ? 3 : 0, false, true, true));
         }

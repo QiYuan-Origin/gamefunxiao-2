@@ -60,6 +60,7 @@ public class GameManager {
     private final Map<String, BukkitTask> preGameCountdownTasks = new HashMap<>();
     private final Map<String, BukkitTask> divisionTasks = new HashMap<>();
     private final Map<String, BukkitTask> dualPreyDecisionTasks = new HashMap<>();
+    private final Set<String> pendingFlashTournamentMovementStarts = new HashSet<>();
     private final Map<String, BossBar> randomCompassBossBars = new HashMap<>();
     private final Map<String, Integer> randomCompassCountdowns = new HashMap<>();
     private final Map<String, BossBar> survivalBossBars = new HashMap<>();
@@ -9386,16 +9387,27 @@ public class GameManager {
         if (room == null
                 || !room.getGameMode().isFlashTournament()
                 || room.getState() != RoomState.PLAYING
-                || room.isGameActuallyStarted()) {
+                || room.isGameActuallyStarted()
+                || !pendingFlashTournamentMovementStarts.add(room.getRoomId())) {
             return;
         }
         room.setGameStartCountdown(false);
         room.setPreyStarted(true);
+        room.setPreyStartCountdownSeconds(0);
         BukkitTask preGameTask = preGameCountdownTasks.remove(room.getRoomId());
         if (preGameTask != null) {
             preGameTask.cancel();
         }
-        doActualGameStart(room);
+        // 让本次 PlayerMoveEvent 先正常完成，避免在移动事件内重置状态产生位置回拉。
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            try {
+                if (room.getState() == RoomState.PLAYING && !room.isGameActuallyStarted()) {
+                    doActualGameStart(room, true);
+                }
+            } finally {
+                pendingFlashTournamentMovementStarts.remove(room.getRoomId());
+            }
+        });
     }
 
     /**
@@ -9650,9 +9662,14 @@ public class GameManager {
 
     /** 游戏正式开始的核心逻辑（从倒计时结束后调用） */
     private void doActualGameStart(GameRoom room) {
+        doActualGameStart(room, false);
+    }
+
+    private void doActualGameStart(GameRoom room, boolean preserveTournamentPreyMotion) {
         if (room == null || room.isGameActuallyStarted()) {
             return;
         }
+        pendingFlashTournamentMovementStarts.remove(room.getRoomId());
         // 设置游戏开始时间（从这里开始计时）
         room.setGameStartTime(System.currentTimeMillis());
         // 标记游戏正式开始
@@ -9675,6 +9692,7 @@ public class GameManager {
         boolean flashMode = plugin.getFlashModeManager().isFlashMode(room);
         if (flashMode) {
             clearFlashModeStormUntilDelay(room);
+            plugin.getFlashModeManager().refreshFlashGlobalMobEquipment(room);
         }
 
         // 获取猎物名字
@@ -9682,6 +9700,7 @@ public class GameManager {
 
         // 解除所有限制，清空经验条
         for (UUID uuid : room.getAllPlayerUUIDs()) {
+            plugin.getPlayerListener().resumeAdvancementMessages(uuid);
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
                 if (flashMode) {
@@ -9691,7 +9710,8 @@ public class GameManager {
                     keepSpectatorModeForGameStart(room, p);
                     continue;
                 }
-                plugin.getRoomManager().resetPlayerForGameStart(room, p);
+                boolean preserveMotion = preserveTournamentPreyMotion && room.isPrey(uuid);
+                plugin.getRoomManager().resetPlayerForGameStart(room, p, preserveMotion);
                 // 末影龙音效
                 p.playSound(p.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 1.0f, 1.0f);
 
@@ -11916,6 +11936,7 @@ public class GameManager {
         countdownTasks.clear();
         gameTasks.clear();
         preGameCountdownTasks.clear();
+        pendingFlashTournamentMovementStarts.clear();
 
         for (BossBar bossBar : randomCompassBossBars.values()) {
             bossBar.removeAll();

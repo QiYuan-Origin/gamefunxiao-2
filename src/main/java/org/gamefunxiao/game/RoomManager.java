@@ -1496,6 +1496,10 @@ public class RoomManager {
     }
 
     public void resetPlayerForGameStart(GameRoom room, Player player) {
+        resetPlayerForGameStart(room, player, false);
+    }
+
+    public void resetPlayerForGameStart(GameRoom room, Player player, boolean preserveCurrentVelocity) {
         if (player == null) {
             return;
         }
@@ -1503,7 +1507,7 @@ public class RoomManager {
         if (room != null) {
             clearPlayerAdvancements(player);
         }
-        resetPlayerRuntimeState(player);
+        resetPlayerRuntimeState(player, preserveCurrentVelocity);
         resetPlayerVitalsAndProgress(player);
         ensurePlayerRecipesAvailable(player);
     }
@@ -1526,6 +1530,10 @@ public class RoomManager {
     }
 
     private void resetPlayerRuntimeState(Player player) {
+        resetPlayerRuntimeState(player, false);
+    }
+
+    private void resetPlayerRuntimeState(Player player, boolean preserveCurrentVelocity) {
         player.setGameMode(org.bukkit.GameMode.SURVIVAL);
         player.setAllowFlight(false);
         player.setFlying(false);
@@ -1539,7 +1547,9 @@ public class RoomManager {
         player.setFallDistance(0.0F);
         player.setNoDamageTicks(0);
         player.setAbsorptionAmount(0.0D);
-        player.setVelocity(new org.bukkit.util.Vector(0.0D, 0.0D, 0.0D));
+        if (!preserveCurrentVelocity) {
+            player.setVelocity(new org.bukkit.util.Vector(0.0D, 0.0D, 0.0D));
+        }
         player.setArrowsInBody(0, false);
         player.setBeeStingersInBody(0);
         player.setArrowCooldown(0);

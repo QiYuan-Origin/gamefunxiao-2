@@ -105,9 +105,25 @@ public class PlayerListener implements Listener {
         player.setFallDistance(0.0F);
         player.setVelocity(new Vector(0.0D, 0.0D, 0.0D));
         player.teleport(safe);
+        restoreWorldSelectionPreyControls(player, room);
         if (feedback) {
             player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.28f);
             player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.34f, 1.72f);
+        }
+    }
+
+    private void restoreWorldSelectionPreyControls(Player player, GameRoom room) {
+        if (player == null || room == null
+                || room.getState() != RoomState.SELECTING
+                || !room.isPrey(player.getUniqueId())) {
+            return;
+        }
+        player.setGameMode(org.bukkit.GameMode.SURVIVAL);
+        player.setFallDistance(0.0F);
+        player.setAllowFlight(true);
+        player.setFlying(true);
+        if (!room.isWorldSelectionConfirmed()) {
+            plugin.getGameManager().giveWorldSelectionItemsPublic(player);
         }
     }
 
@@ -1286,6 +1302,20 @@ public class PlayerListener implements Listener {
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null) return;
 
+        if (room.getState() == RoomState.SELECTING && room.isPrey(player.getUniqueId())) {
+            Location safe = getWorldSelectionPreySafeLocation(room, event.getRespawnLocation());
+            if (safe != null && safe.getWorld() != null) {
+                event.setRespawnLocation(safe);
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                GameRoom currentRoom = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+                if (currentRoom == room) {
+                    restoreWorldSelectionPreyControls(player, room);
+                }
+            });
+            return;
+        }
+
         Bukkit.getScheduler().runTaskLater(plugin,
                 () -> plugin.getFlashModeManager().ensureFlashRoomGuideBook(player,
                         plugin.getRoomManager().getPlayerRoom(player.getUniqueId())), 1L);
@@ -1360,7 +1390,16 @@ public class PlayerListener implements Listener {
         Player player = event.getEntity();
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
 
-        if (room == null || room.getState() != RoomState.PLAYING) return;
+        if (room == null) return;
+        if (room.getState() == RoomState.SELECTING && room.isPrey(player.getUniqueId())) {
+            event.setKeepInventory(true);
+            event.setKeepLevel(true);
+            event.setDroppedExp(0);
+            event.getDrops().clear();
+            event.deathMessage(null);
+            return;
+        }
+        if (room.getState() != RoomState.PLAYING) return;
 
         // 房间 Wiki 是固定工具，不参与死亡掉落；复活后由 onPlayerRespawn 补回第二格。
         event.getDrops().removeIf(plugin.getFlashModeManager()::isFlashRoomGuideBook);
@@ -1837,6 +1876,12 @@ public class PlayerListener implements Listener {
         }
         long millis = Math.max(1000L, ticks * 50L);
         advancementMessageSuppressUntil.put(playerId, System.currentTimeMillis() + millis);
+    }
+
+    public void resumeAdvancementMessages(UUID playerId) {
+        if (playerId != null) {
+            advancementMessageSuppressUntil.remove(playerId);
+        }
     }
 
     private boolean shouldSuppressAdvancementMessage(UUID playerId) {
@@ -2606,7 +2651,7 @@ public class PlayerListener implements Listener {
         return shouldLockWorldInteraction(attacker, world, room);
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onPlayerVoidDamage(org.bukkit.event.entity.EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
 
