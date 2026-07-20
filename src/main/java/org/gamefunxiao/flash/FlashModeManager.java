@@ -22358,7 +22358,9 @@ public class FlashModeManager {
             return true;
         }
 
-        unstableCoreShieldImmuneBreakUsed.remove(targetId);
+        // Keep the first-break marker until Paper finishes PlayerShieldDisableEvent.
+        // Clearing it here makes the real second break look like another immune first break.
+        unstableCoreShieldVanillaDisableCancelUntil.remove(targetId);
         if (target.hasActiveItem()) {
             ItemStack activeItem = target.getActiveItem();
             if (activeItem != null && activeItem.getType() == Material.SHIELD) {
@@ -22382,9 +22384,18 @@ public class FlashModeManager {
         Vector finalVelocity = knockback.normalize().multiply(0.58D);
         finalVelocity.setY(-0.18D);
         Bukkit.getScheduler().runTask(plugin, () -> {
+            unstableCoreShieldImmuneBreakUsed.remove(targetId);
+            unstableCoreShieldVanillaDisableCancelUntil.remove(targetId);
             if (!target.isOnline()) {
                 return;
             }
+            if (target.hasActiveItem()) {
+                ItemStack activeItem = target.getActiveItem();
+                if (activeItem != null && activeItem.getType() == Material.SHIELD) {
+                    target.clearActiveItem();
+                }
+            }
+            target.setCooldown(Material.SHIELD, UNSTABLE_CORE_SHIELD_SECOND_BREAK_COOLDOWN_TICKS);
             Vector velocity = target.getVelocity();
             velocity.setX(finalVelocity.getX());
             velocity.setZ(finalVelocity.getZ());
