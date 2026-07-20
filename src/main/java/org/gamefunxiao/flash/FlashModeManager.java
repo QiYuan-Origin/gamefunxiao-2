@@ -570,6 +570,9 @@ public class FlashModeManager {
     private static final int FLASH_NOTE_MELODY_MIN_CHANGES = 2;
     private static final String TAME_FOLLOWING_ENABLED = "1";
     private static final String TAME_FOLLOWING_DISABLED = "0";
+    private static final long TAME_WAIT_ARM_DELAY_MILLIS = 650L;
+    private static final double TAME_WAIT_HORIZONTAL_TRIGGER_DISTANCE_SQUARED = 0.16D;
+    private static final double TAME_WAIT_VERTICAL_TRIGGER_DISTANCE = 0.60D;
 
     private final GameFunXiao plugin;
     private final NamespacedKey upgradeBookKey;
@@ -742,6 +745,7 @@ public class FlashModeManager {
     private final Map<String, Inventory> flashSharedBackpacks = new HashMap<>();
     private final Map<String, Inventory> flashPersonalBackpacks = new HashMap<>();
     private final Map<UUID, UUID> tameLastOwnerTargets = new HashMap<>();
+    private final Map<UUID, FlashTameWaitState> flashTameWaitStates = new HashMap<>();
     private final Set<UUID> flashTamedPiercingProjectiles = new HashSet<>();
     private final Map<UUID, Long> flashTamedSkeletonRangedShotCooldowns = new HashMap<>();
     private final Map<UUID, Long> flashPickaxeAreaBreakCooldowns = new HashMap<>();
@@ -3145,7 +3149,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
         pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域；聚焦实体会直接灼烧。", "无", "聚焦触发", "实体蓄力时会被环形火粒子包裹，触发后受伤并燃烧。"));
-        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度25%/45%/30%。"));
+        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度25%/45%/30%。面包可切换等待；等待中被推动或碰水会回到主人身边并恢复跟随。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
         pages.add(guideBookQuickPage(59, "骷髅喂弓", "弓+骷髅宠物", "右键提高小白远程伤害。", "消耗弓", "无", "力量、冲击、火矢、无限都会影响加成。"));
@@ -10496,6 +10500,7 @@ public class FlashModeManager {
         jukeboxArmorRepairTimes.remove(uuid);
         recyclableDoubleCraftCounts.remove(uuid);
         tameLastOwnerTargets.remove(uuid);
+        clearFlashTameWaitStates(uuid);
         flashPickaxeAreaBreakCooldowns.remove(uuid);
         extendedFishingHooks.remove(uuid);
         flashFishingCasts.entrySet().removeIf(entry -> entry.getValue() == null || uuid.equals(entry.getValue().playerId()));
@@ -20703,6 +20708,7 @@ public class FlashModeManager {
             if (player.getVehicle() != null) {
                 player.getVehicle().removePassenger(player);
             }
+            releaseFlashTameWaiting(living);
             living.addPassenger(player);
             living.getPersistentDataContainer().set(flashTamedFollowingKey, PersistentDataType.STRING, TAME_FOLLOWING_DISABLED);
             player.playSound(player.getLocation(), Sound.ENTITY_HORSE_SADDLE, 0.72f, 1.25f);
@@ -20929,11 +20935,106 @@ public class FlashModeManager {
         String current = entity.getPersistentDataContainer().get(flashTamedFollowingKey, PersistentDataType.STRING);
         boolean next = !TAME_FOLLOWING_ENABLED.equals(current);
         entity.getPersistentDataContainer().set(flashTamedFollowingKey, PersistentDataType.STRING, next ? TAME_FOLLOWING_ENABLED : TAME_FOLLOWING_DISABLED);
-        sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + (next ? "§x§9§9§F§F§A§A✦ §a已切换为跟随。" : "§x§F§F§D§7§7§7✦ §e已切换为原地等待。"));
+        if (next) {
+            releaseFlashTameWaiting(entity);
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§9§9§F§F§A§A✦ §a已切换为跟随。");
+        } else {
+            beginFlashTameWaiting(player, entity);
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§F§F§D§7§7§7✦ §e已切换为原地等待。§7宠物被推动或碰到水时会回到你身边。");
+        }
         player.playSound(player.getLocation(), next ? Sound.ENTITY_ALLAY_ITEM_GIVEN : Sound.ENTITY_ALLAY_ITEM_TAKEN, 0.7f, 1.2f);
         if (next) {
             startFlashTameFollowTask(player.getUniqueId(), entity.getUniqueId(), entity instanceof Enderman ? 6.0D : 4.0D);
         }
+    }
+
+    private void beginFlashTameWaiting(Player owner, LivingEntity entity) {
+        Location location = entity.getLocation();
+        flashTameWaitStates.put(entity.getUniqueId(), new FlashTameWaitState(
+                owner.getUniqueId(), location.getWorld().getUID(), location.getX(), location.getY(), location.getZ(),
+                System.currentTimeMillis() + TAME_WAIT_ARM_DELAY_MILLIS));
+        if (entity instanceof Mob mob) {
+            mob.setTarget(null);
+            mob.getPathfinder().stopPathfinding();
+            mob.setAware(false);
+        }
+        Vector stopped = entity.getVelocity();
+        stopped.setX(0.0D);
+        stopped.setZ(0.0D);
+        entity.setVelocity(stopped);
+    }
+
+    private void releaseFlashTameWaiting(LivingEntity entity) {
+        flashTameWaitStates.remove(entity.getUniqueId());
+        if (entity instanceof Mob mob) {
+            mob.setAware(true);
+            mob.getPathfinder().stopPathfinding();
+        }
+    }
+
+    private void clearFlashTameWaitStates(UUID ownerId) {
+        Iterator<Map.Entry<UUID, FlashTameWaitState>> iterator = flashTameWaitStates.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, FlashTameWaitState> entry = iterator.next();
+            if (!ownerId.equals(entry.getValue().ownerId())) {
+                continue;
+            }
+            Entity entity = Bukkit.getEntity(entry.getKey());
+            if (entity instanceof LivingEntity living) {
+                living.getPersistentDataContainer().set(
+                        flashTamedFollowingKey, PersistentDataType.STRING, TAME_FOLLOWING_ENABLED);
+                if (living instanceof Mob mob) {
+                    mob.setAware(true);
+                    mob.getPathfinder().stopPathfinding();
+                }
+            }
+            iterator.remove();
+        }
+    }
+
+    private void handleFlashTameWaiting(Player owner, LivingEntity entity) {
+        FlashTameWaitState state = flashTameWaitStates.get(entity.getUniqueId());
+        if (state == null || !owner.getUniqueId().equals(state.ownerId())) {
+            return;
+        }
+        if (entity instanceof Mob mob) {
+            mob.setTarget(null);
+            mob.getPathfinder().stopPathfinding();
+            mob.setAware(false);
+        }
+        if (System.currentTimeMillis() < state.armedAtMillis()) {
+            return;
+        }
+
+        Location current = entity.getLocation();
+        boolean touchedWater = entity.isInWater() || current.getBlock().getType() == Material.WATER;
+        boolean changedWorld = !current.getWorld().getUID().equals(state.worldId());
+        double dx = current.getX() - state.x();
+        double dz = current.getZ() - state.z();
+        boolean displaced = changedWorld
+                || dx * dx + dz * dz > TAME_WAIT_HORIZONTAL_TRIGGER_DISTANCE_SQUARED
+                || Math.abs(current.getY() - state.y()) > TAME_WAIT_VERTICAL_TRIGGER_DISTANCE;
+        if (!touchedWater && !displaced) {
+            return;
+        }
+
+        entity.getPersistentDataContainer().set(flashTamedFollowingKey, PersistentDataType.STRING, TAME_FOLLOWING_ENABLED);
+        releaseFlashTameWaiting(entity);
+        Location origin = current.clone();
+        Location destination = owner.getLocation().clone().add(1.2D, 0.0D, 1.2D);
+        entity.teleport(destination, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        entity.setFallDistance(0.0F);
+        origin.getWorld().spawnParticle(Particle.PORTAL, origin.add(0.0D, Math.min(1.0D, entity.getHeight() * 0.5D), 0.0D),
+                22, 0.28D, 0.30D, 0.28D, 0.08D);
+        entity.getWorld().spawnParticle(Particle.HAPPY_VILLAGER,
+                entity.getLocation().add(0.0D, Math.min(1.0D, entity.getHeight() * 0.5D), 0.0D),
+                12, 0.28D, 0.24D, 0.28D, 0.03D);
+        entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.32f);
+        sendFlashMessage(owner, plugin.getConfigManager().getHunterGamePrefix()
+                + "§x§9§9§F§F§A§A✦ §a宠物已恢复跟随 §8| §7"
+                + (touchedWater ? "碰到水后" : "被推动后") + "§f回到了你身边。");
     }
 
     private boolean increaseFlashTameHealth(Player player, LivingEntity entity) {
@@ -21343,10 +21444,18 @@ public class FlashModeManager {
                 Player owner = Bukkit.getPlayer(ownerId);
                 Entity rawEntity = Bukkit.getEntity(entityId);
                 if (owner == null || !owner.isOnline() || !(rawEntity instanceof LivingEntity entity) || entity.isDead() || !entity.isValid() || !isFlashTamed(entity)) {
+                    if (rawEntity instanceof LivingEntity livingEntity) {
+                        livingEntity.getPersistentDataContainer().set(
+                                flashTamedFollowingKey, PersistentDataType.STRING, TAME_FOLLOWING_ENABLED);
+                        releaseFlashTameWaiting(livingEntity);
+                    } else {
+                        flashTameWaitStates.remove(entityId);
+                    }
                     cancel();
                     return;
                 }
                 if (!TAME_FOLLOWING_ENABLED.equals(entity.getPersistentDataContainer().get(flashTamedFollowingKey, PersistentDataType.STRING))) {
+                    handleFlashTameWaiting(owner, entity);
                     return;
                 }
                 GameRoom room = plugin.getRoomManager().getPlayerRoom(ownerId);
@@ -24679,6 +24788,10 @@ public class FlashModeManager {
     }
 
     private record ShieldBreakTrace(UUID targetUuid, String roomId, long timeMillis) {
+    }
+
+    private record FlashTameWaitState(UUID ownerId, UUID worldId, double x, double y, double z,
+                                      long armedAtMillis) {
     }
 
     private record PendingMaceShieldBreak(UUID attackerUuid, UUID targetUuid, String roomId,
