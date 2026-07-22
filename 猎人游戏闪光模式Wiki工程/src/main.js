@@ -1,4 +1,5 @@
 import './style.css';
+import { installFlashGuidePages } from './flash-guide.js';
 import { installFlashItemPages } from './flash-items.js';
 
 const pages = [
@@ -3268,11 +3269,12 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
   }
 ];
 
+installFlashGuidePages(pages);
 installFlashItemPages(pages);
 
 const app = document.querySelector('#app');
 const defaultSlug = 'start';
-const updatedAtText = '2026年7月16日';
+const updatedAtText = '2026年7月23日';
 
 function parseRouteHash(hash = location.hash) {
   if (!hash || !hash.startsWith('#/')) {
@@ -3306,6 +3308,29 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+const pageSearchTextCache = new Map();
+
+function searchTextForPage(page) {
+  if (pageSearchTextCache.has(page.slug)) {
+    return pageSearchTextCache.get(page.slug);
+  }
+
+  const parser = document.createElement('template');
+  const sectionText = page.body.flatMap(section => {
+    parser.innerHTML = String(section.html ?? '');
+    return [section.title, parser.content.textContent ?? ''];
+  });
+  const searchText = [
+    page.group,
+    page.title,
+    page.desc,
+    ...page.categories,
+    ...sectionText
+  ].join(' ').replace(/\s+/g, ' ').trim();
+  pageSearchTextCache.set(page.slug, searchText);
+  return searchText;
 }
 
 function firstGroup(page) {
@@ -3358,7 +3383,7 @@ function renderNavTree(tree, depth = 0) {
     const childHtml = renderNavTree(node.children, depth + 1);
     const open = depth === 0 || navNodeContainsSlug(node, currentSlug());
     const pageHtml = node.pages.map(page => `
-      <a class="sidebar-link" href="#/${page.slug}" data-slug="${page.slug}" data-search-text="${escapeHtml(`${page.group} ${page.title} ${page.desc} ${page.categories.join(' ')}`)}">
+      <a class="sidebar-link" href="#/${page.slug}" data-slug="${page.slug}" data-search-text="${escapeHtml(searchTextForPage(page))}">
         <span>${page.title}</span>
       </a>
     `).join('');
@@ -3405,9 +3430,9 @@ function initTheme() {
 }
 
 function filterNavigation(keyword) {
-  const normalized = keyword.trim().toLowerCase();
+  const normalized = keyword.trim().toLowerCase().replace(/\s+/g, '');
   document.querySelectorAll('[data-slug]').forEach(link => {
-    const text = link.dataset.searchText.toLowerCase();
+    const text = link.dataset.searchText.toLowerCase().replace(/\s+/g, '');
     link.hidden = normalized && !text.includes(normalized);
   });
 
@@ -3480,7 +3505,7 @@ function renderShell() {
           <nav class="top-nav" id="top-nav">${renderPageNav()}</nav>
           <label class="doc-search top-search">
             <span>⌕</span>
-            <input id="top-search" placeholder="搜索文档" autocomplete="off" />
+            <input id="top-search" placeholder="搜索标题或正文" autocomplete="off" />
             <kbd>Ctrl K</kbd>
           </label>
           <button class="theme-toggle" id="theme-toggle" type="button"></button>
@@ -3500,7 +3525,7 @@ function renderShell() {
           </div>
           <label class="doc-search side-search">
             <span>⌕</span>
-            <input id="side-search" placeholder="搜索文档" autocomplete="off" />
+            <input id="side-search" placeholder="搜索标题或正文" autocomplete="off" />
           </label>
           <nav class="sidebar-content" id="sidebar-content">
             ${renderNavTree(buildNavTree())}

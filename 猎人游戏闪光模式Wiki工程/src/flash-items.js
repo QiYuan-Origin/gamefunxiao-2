@@ -714,7 +714,7 @@ function createItemPage(definition, existingPages) {
     desc: definition.desc,
     icon: definition.icon,
     status: '物品',
-    version: '1.0.6',
+    version: '1.0.8',
     categories: ['闪光模式', '物品', definition.category, definition.title, ...definition.keywords],
     body
   };
@@ -737,7 +737,7 @@ function createIndexPage(definitions) {
     desc: '按基础物品分类查看闪光功能；同一物品的强化、装填、战斗和联动全部放在同一页。',
     icon: '指南针',
     status: '完整索引',
-    version: '1.0.6',
+    version: '1.0.8',
     categories: ['闪光模式', '物品索引', '全部物品'],
     body: [
       {
@@ -745,6 +745,19 @@ function createIndexPage(definitions) {
         html: `
           <p>目录按玩家手里实际拿到的基础物品分类。比如剑气、材料强化、剑刃药水、末影回传、风暴剑和弩飞剑都归到 <a href="#/flash-item-sword">剑</a> 页面。</p>
           <div class="wiki-notice note"><b>变体：</b>100 种特殊食物和 300 个潮汐钓鱼物分别放在一个基础物品页内，并在页面中列出全部编号，不会把侧栏塞成 400 个同类按钮。</div>
+        `
+      },
+      {
+        title: '先看玩法流程',
+        html: `
+          <div class="wiki-card-grid flash-item-index-grid">
+            <a class="wiki-item-card" href="#/flash"><b>闪光完整规则</b><span>投票、难度、开局站位、距离限制、死亡与龙池结算。</span></a>
+            <a class="wiki-item-card" href="#/flash-match-flow"><b>默认 1v6 流程</b><span>普通闪光正常难度从等待房到结算的完整时间轴。</span></a>
+            <a class="wiki-item-card" href="#/flash-hunter-1v6"><b>六猎人攻略</b><span>推荐分工、追击轮换、维度控制和龙池封锁。</span></a>
+            <a class="wiki-item-card" href="#/flash-controls"><b>操作手册</b><span>Q 键、指南针、副手装填、宠物与终章命令。</span></a>
+            <a class="wiki-item-card" href="#/flash-loadout-roadmap"><b>装备路线</b><span>稳定剑、强化斧、材料护甲和团队资源分配。</span></a>
+            <a class="wiki-item-card" href="#/flash-prey-1v6"><b>单猎物攻略</b><span>拆分六名猎人并完成末影龙与龙池通关。</span></a>
+          </div>
         `
       },
       ...categories.map(category => ({
