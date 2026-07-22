@@ -139,6 +139,7 @@ permissions:
       gamefunxiao.admin.endflashkit.remove: true
       gamefunxiao.admin.endflashkit.reload: true
       gamefunxiao.admin.flashuse: true
+      gamefunxiao.admin.railgun: true
       gamefunxiao.admin.flashmusic: true
       gamefunxiao.admin.flashmusic.all: true
       gamefunxiao.admin.flashmusic.nearby: true
@@ -229,6 +230,9 @@ permissions:
     default: op
   gamefunxiao.admin.flashuse:
     description: 管理闪光试用权限
+    default: op
+  gamefunxiao.admin.railgun:
+    description: 获取已充能的闪光轨道炮
     default: op
   gamefunxiao.admin.flashmusic:
     description: 管理闪光音符盒全服或范围播放

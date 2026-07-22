@@ -13,7 +13,10 @@ import org.gamefunxiao.menu.base.BaseMenu;
 import org.gamefunxiao.util.PlayerHeadUtil;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 public class TeleportTeammateMenu extends BaseMenu {
@@ -94,7 +97,25 @@ public class TeleportTeammateMenu extends BaseMenu {
 
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
-            lore.add("§f- §a点击传送到此队友身边");
+            Player target = Bukkit.getPlayer(uuid);
+            if (!mandatoryRespawnSelection && room.isHunter(uuid)) {
+                double preyDistance = target == null ? -1.0D
+                        : plugin.getFlashModeManager().getNearestPreyDistance(room, target);
+                if (preyDistance >= 0.0D) {
+                    boolean blocked = preyDistance <= plugin.getFlashModeManager().getHunterCompassPreyLimit();
+                    lore.add("§f- §e距离最近猎物: "
+                            + (blocked ? "§c" : "§a")
+                            + String.format(Locale.ROOT, "%.1f", preyDistance) + " §e格");
+                    lore.add(blocked
+                            ? "§f- §c目标处于猎物100格内，暂时不能传送"
+                            : "§f- §a目标距离安全，可以传送");
+                } else {
+                    lore.add("§f- §7目标与在线猎物不在同一世界");
+                    lore.add("§f- §a当前可以传送");
+                }
+            } else {
+                lore.add("§f- §a点击传送到此队友身边");
+            }
             lore.add("§8· · · · · · · · · · · · · ·");
             meta.setLore(lore);
             item.setItemMeta(meta);
@@ -131,10 +152,23 @@ public class TeleportTeammateMenu extends BaseMenu {
                 Player target = Bukkit.getPlayer(targetUuid);
 
                 if (target != null && target.isOnline()) {
-                    if (room.isHunter(player.getUniqueId())
-                            && plugin.getFlashModeManager().isHunterWithinPreyDistance(room, player, 70.0D)) {
+                    if (!mandatoryRespawnSelection && room.isHunter(player.getUniqueId())
+                            && plugin.getFlashModeManager().denyHunterCompassUseNearPrey(player, room)) {
                         playErrorSound();
-                        player.sendMessage(plugin.getConfigManager().getHunterGamePrefix() + "§x§F§F§8§8§5§5⚠ §c你距离猎物太近，70格内不能传送到其他猎人身边。");
+                        return;
+                    }
+                    if (!mandatoryRespawnSelection && room.isHunter(targetUuid)
+                            && plugin.getFlashModeManager().isHunterCompassUseBlockedNearPrey(target, room)) {
+                        double distance = plugin.getFlashModeManager().getNearestPreyDistance(room, target);
+                        Map<String, String> placeholders = new HashMap<>();
+                        placeholders.put("target", target.getName());
+                        placeholders.put("distance", String.format(Locale.ROOT, "%.1f", Math.max(0.0D, distance)));
+                        placeholders.put("limit", String.format(Locale.ROOT, "%.0f",
+                                plugin.getFlashModeManager().getHunterCompassPreyLimit()));
+                        player.sendMessage(plugin.getMessageManager()
+                                .getHunterGameMessageWithPrefix("game.compass_target_prey_too_close", placeholders));
+                        playErrorSound();
+                        setupItems();
                         return;
                     }
                     playConfirmSound();

@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 19
+config_version: 21
 
 # 通用消息
 general:
@@ -26,6 +26,8 @@ railgun:
   material_missing: "§x§F§F§7§7§5§5✦ §e材料不足，§7还需要 §f{missing}个§e{material}§7。"
   assembled: "§x§F§F§4§4§4§4✦ §c轨道炮组装完成，手持或放在副手每10秒充能1格。"
   upgraded: "§x§F§F§4§4§4§4✦ §c轨道炮 {level} §7组装完成，手持 §f10秒 §7即可获得一发充能。"
+  command_given: "§x§F§F§4§4§4§4✦ §c已获得一把 §f100%充能 §c的轨道炮，§7右键即可锁定并发射。"
+  command_dropped: "§x§F§F§B§B§5§5✦ §e背包已满，已充能轨道炮已掉在你的脚下。"
 
 shop:
   already_selected: "§x§F§F§D§7§0§0✦ §e{effect} §6已经是你当前使用的胜利特效。"
@@ -227,6 +229,8 @@ game:
   hunter_died: "§x§F§F§8§8§5§5💀 §c猎人 §e{player} §c死亡，已复活到重生点。"
   tp_available: "§x§D§D§5§5§F§F🌀 §d你获得了一次传送机会！正在打开传送菜单..."
   tp_cooldown: "§x§F§F§A§A§5§5⏱ §c传送冷却中！还需等待 §e{time} §c秒。"
+  compass_prey_too_close: "§x§F§F§8§8§5§5⚠ §c你距离最近猎物只有 §e{distance} §c格，§f{limit}格内不能使用团队背包、个人背包或队友传送。"
+  compass_target_prey_too_close: "§x§F§F§8§8§5§5⚠ §e{target} §c距离最近猎物只有 §f{distance} §c格，暂时不能传送到该猎人身边。"
   tp_on_death: "§x§D§D§5§5§F§F🌀 §d死亡复活！你获得了一次传送到队友的机会！"
   teleported: "§x§D§D§5§5§F§F🌀 §d{player} §f传送到了 §e{target} §f身边！"
   spectator_target_room_only: "§x§F§F§8§8§8§8⚠ §c旁观时只能传送到当前房间内的玩家。"

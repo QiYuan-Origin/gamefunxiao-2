@@ -50,6 +50,7 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.AbstractSkeleton;
 import org.bukkit.entity.AreaEffectCloud;
+import org.bukkit.entity.Arrow;
 import org.bukkit.entity.ComplexEntityPart;
 import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.EnderDragon;
@@ -67,6 +68,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Skeleton;
+import org.bukkit.entity.SpectralArrow;
 import org.bukkit.entity.LargeFireball;
 import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.Tameable;
@@ -390,7 +392,7 @@ public class FlashModeManager {
             "宠物驯服",
             "宠物喂金苹果",
             "宠物喂武器",
-            "骷髅喂弓",
+            "宠物自定义装备",
             "乐魂速度挽具",
             "乐魂喂养",
             "乐魂装备成长",
@@ -416,6 +418,7 @@ public class FlashModeManager {
             "轨道炮装配三",
             "轨道炮使用",
             "稳定锻造",
+            "怪物长矛",
     };
     private static final int FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE = 9;
     private static final int FLASH_GUIDE_VOLUME_MAIN = 0;
@@ -425,7 +428,7 @@ public class FlashModeManager {
             "宠物乐魂", "通关农耕", "沉重爆破", "完整目录"
     };
     private static final int[] FLASH_GUIDE_VOLUME_STARTS = {0, 1, 13, 30, 42, 56, 63, 70, 1};
-    private static final int[] FLASH_GUIDE_VOLUME_ENDS = {0, 12, 34, 41, 55, 62, 69, 79, 84};
+    private static final int[] FLASH_GUIDE_VOLUME_ENDS = {0, 12, 34, 41, 55, 62, 69, 79, 85};
     private static final String[] FLASH_GUIDE_VOLUME_HEADERS = {
             "§x§9§8§D§D§F§F§l主 §8§l· §x§F§4§C§3§F§F§l闪光书",
             "§b§l基础规则", "§6§l铁砧强化", "§9§l风弹装填", "§c§l战斗机关",
@@ -441,6 +444,15 @@ public class FlashModeManager {
     private static final double JUKEBOX_AURA_RADIUS = 500.0D;
     private static final int JUKEBOX_AURA_REFRESH_TICKS = 80;
     private static final double TAME_DAMAGE_BOOST_MULTIPLIER = 1.35D;
+    private static final double FLASH_GLOBAL_MOB_COMMON_SPEAR_CHANCE = 0.28D;
+    private static final double FLASH_GLOBAL_MOB_DIAMOND_SPEAR_CHANCE = 0.05D;
+    private static final double HUNTER_COMPASS_PREY_LIMIT = 100.0D;
+    private static final long TAME_SKELETON_CROSSBOW_BASE_LOAD_MILLIS = 1250L;
+    private static final long TAME_SKELETON_CROSSBOW_QUICK_CHARGE_REDUCTION_MILLIS = 250L;
+    private static final long TAME_SKELETON_CROSSBOW_MIN_LOAD_MILLIS = 250L;
+    private static final double TAME_SKELETON_CROSSBOW_ARROW_SPEED = 3.15D;
+    private static final double TAME_SKELETON_CROSSBOW_FIREWORK_SPEED = 1.62D;
+    private static final double TAME_SKELETON_CROSSBOW_MAX_RANGE_SQUARED = 64.0D * 64.0D;
     private static final long AXE_SHIELD_BREAK_MACE_COMBO_WINDOW_MS = 3200L;
     private static final float MACE_SMASH_MIN_FALL_DISTANCE = 1.50F;
     private static final double NORMAL_MACE_SMASH_MULTIPLIER = 1.25D;
@@ -520,7 +532,7 @@ public class FlashModeManager {
     private static final int RAILGUN_SINGLE_FUSE_TICKS = 20 * 3;
     private static final float RAILGUN_SINGLE_EXPLOSION_POWER = 4.0F;
     private static final long RAILGUN_USE_DEBOUNCE_MILLIS = 250L;
-    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 4;
+    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 8;
     private static final List<RailgunMaterialRequirement> RAILGUN_ASSEMBLY_REQUIREMENTS = List.of(
             new RailgunMaterialRequirement(Material.HONEY_BLOCK, 12),
             new RailgunMaterialRequirement(Material.SLIME_BLOCK, 24),
@@ -571,8 +583,6 @@ public class FlashModeManager {
     private static final String TAME_FOLLOWING_ENABLED = "1";
     private static final String TAME_FOLLOWING_DISABLED = "0";
     private static final long TAME_WAIT_ARM_DELAY_MILLIS = 650L;
-    private static final double TAME_WAIT_HORIZONTAL_TRIGGER_DISTANCE_SQUARED = 0.16D;
-    private static final double TAME_WAIT_VERTICAL_TRIGGER_DISTANCE = 0.60D;
 
     private final GameFunXiao plugin;
     private final NamespacedKey upgradeBookKey;
@@ -1163,6 +1173,9 @@ public class FlashModeManager {
         event.setCancelled(true);
         event.setUseInteractedBlock(Event.Result.DENY);
         event.setUseItemInHand(Event.Result.DENY);
+        if (room.isHunter(player.getUniqueId()) && denyHunterCompassUseNearPrey(player, room)) {
+            return true;
+        }
         if (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK) {
             openFlashSharedBackpack(player, room);
         } else {
@@ -1203,6 +1216,10 @@ public class FlashModeManager {
         }
         if (!canUseFlashBackpack(player, room)) {
             event.setCancelled(true);
+            if (isHunterCompassUseBlockedNearPrey(player, room)) {
+                denyHunterCompassUseNearPrey(player, room);
+                Bukkit.getScheduler().runTask(plugin, () -> player.closeInventory());
+            }
             return true;
         }
         event.setCancelled(false);
@@ -1219,6 +1236,10 @@ public class FlashModeManager {
         }
         if (!canUseFlashBackpack(player, room)) {
             event.setCancelled(true);
+            if (isHunterCompassUseBlockedNearPrey(player, room)) {
+                denyHunterCompassUseNearPrey(player, room);
+                Bukkit.getScheduler().runTask(plugin, () -> player.closeInventory());
+            }
             return true;
         }
         event.setCancelled(false);
@@ -1230,7 +1251,8 @@ public class FlashModeManager {
                 && !isFlashTournamentMode(room)
                 && isFlashCombatAvailable(player, room)
                 && (room.isHunter(player.getUniqueId())
-                || (room.isPrey(player.getUniqueId()) && room.getPreyUUIDs().size() >= 2));
+                || (room.isPrey(player.getUniqueId()) && room.getPreyUUIDs().size() >= 2))
+                && !isHunterCompassUseBlockedNearPrey(player, room);
     }
 
     private boolean isFlashBackpackInventory(Inventory inventory) {
@@ -1441,21 +1463,57 @@ public class FlashModeManager {
     }
 
     public boolean isHunterWithinPreyDistance(GameRoom room, Player hunter, double distance) {
-        if (!isFlashMode(room) || hunter == null || !room.isHunter(hunter.getUniqueId())) {
-            return false;
+        double nearestDistance = getNearestPreyDistance(room, hunter);
+        return nearestDistance >= 0.0D && nearestDistance <= Math.max(0.0D, distance);
+    }
+
+    public double getNearestPreyDistance(GameRoom room, Player hunter) {
+        if (room == null || hunter == null || hunter.getWorld() == null
+                || !room.isHunter(hunter.getUniqueId())) {
+            return -1.0D;
         }
-        double limitSquared = distance * distance;
-        for (UUID preyUuid : room.getPreyUUIDs()) {
+        Collection<UUID> preyCandidates = room.getPreyUUIDs();
+        if (room.getGameMode() == GameMode.SWAP) {
+            UUID activeSwapPrey = room.getActiveSwapPrey();
+            if (activeSwapPrey == null) {
+                return -1.0D;
+            }
+            preyCandidates = Collections.singleton(activeSwapPrey);
+        }
+        double nearestDistanceSquared = Double.MAX_VALUE;
+        for (UUID preyUuid : preyCandidates) {
             Player prey = Bukkit.getPlayer(preyUuid);
             if (prey == null || !prey.isOnline() || room.isSpectator(preyUuid)
                     || prey.getWorld() == null || !prey.getWorld().equals(hunter.getWorld())) {
                 continue;
             }
-            if (prey.getLocation().distanceSquared(hunter.getLocation()) <= limitSquared) {
-                return true;
-            }
+            nearestDistanceSquared = Math.min(nearestDistanceSquared,
+                    prey.getLocation().distanceSquared(hunter.getLocation()));
         }
-        return false;
+        return nearestDistanceSquared == Double.MAX_VALUE ? -1.0D : Math.sqrt(nearestDistanceSquared);
+    }
+
+    public double getHunterCompassPreyLimit() {
+        return HUNTER_COMPASS_PREY_LIMIT;
+    }
+
+    public boolean isHunterCompassUseBlockedNearPrey(Player hunter, GameRoom room) {
+        return isHunterWithinPreyDistance(room, hunter, HUNTER_COMPASS_PREY_LIMIT);
+    }
+
+    public boolean denyHunterCompassUseNearPrey(Player hunter, GameRoom room) {
+        if (!isHunterCompassUseBlockedNearPrey(hunter, room)) {
+            return false;
+        }
+        double distance = getNearestPreyDistance(room, hunter);
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("distance", String.format(Locale.ROOT, "%.1f", Math.max(0.0D, distance)));
+        placeholders.put("limit", String.format(Locale.ROOT, "%.0f", HUNTER_COMPASS_PREY_LIMIT));
+        hunter.sendMessage(plugin.getMessageManager()
+                .getHunterGameMessageWithPrefix("game.compass_prey_too_close", placeholders));
+        hunter.playSound(hunter.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.62F, 1.18F);
+        hunter.playSound(hunter.getLocation(), Sound.ITEM_LODESTONE_COMPASS_LOCK, 0.42F, 0.72F);
+        return true;
     }
 
     public boolean isStandaloneFlashEnabled(UUID playerId) {
@@ -3149,10 +3207,10 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
         pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域；聚焦实体会直接灼烧。", "无", "聚焦触发", "实体蓄力时会被环形火粒子包裹，触发后受伤并燃烧。"));
-        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度25%/45%/30%。面包可切换等待；等待中被推动或碰水会回到主人身边并恢复跟随。"));
+        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度25%/45%/30%。甜浆果可切换跟随/等待；只有接触水流才会结束等待并回到主人身边，实体推动不会触发。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
-        pages.add(guideBookQuickPage(59, "骷髅喂弓", "弓+骷髅宠物", "右键提高小白远程伤害。", "消耗弓", "无", "力量、冲击、火矢、无限都会影响加成。"));
+        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽、盾牌进副手，其余任意物品进主手；旧物品返还。小白弩内闪光载荷会优先发射。"));
         pages.add(guideBookQuickPage(60, "乐魂速度挽具", "迅捷潜行书+乐魂挽具", "铁砧强化挽具。", "消耗附魔书", "无", "1/2/3级速度约×1.25/1.50/2.00。"));
         pages.add(guideBookQuickPage(61, "乐魂喂养", "金苹果或雪块+乐魂", "蹲下右键乐魂回血或加生命。", "消耗材料", "金苹果最多80次", "雪块可给失水乐魂直接回复10点。"));
         pages.add(guideBookQuickPage(62, "乐魂装备成长", "胸甲/雪块+乐魂", "胸甲继承护甲路线，雪块加速成长。", "消耗/装备", "成长最多减到约3分钟", "乐魂胸甲会继承TNT、末影、图腾等护层。"));
@@ -3178,6 +3236,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "逐项投入", "无", "拿着当前材料打开背包右键钓鱼竿，只消耗当前手上的材料并保存进度。"));
         pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "主手或副手每10秒充1格，共" + RAILGUN_CHARGE_UNITS + "格；充能按百分比显示并同步钓鱼竿耐久。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定300格内方块，上方40格生成连续" + RAILGUN_SPIRAL_TURN_COUNT + "匝单臂螺旋TNT（外半径56格、共" + RAILGUN_SINGLE_TNT_COUNT + "个，含中心一枚），自然下落且引信3秒；FlashUse保护方块。"));
         pages.add(guideBookQuickPage(84, "稳定锻造", "正常:合金模板+剑+8恶魂泪；简单:空模板+剑+1恶魂泪", "放入锻造台制作稳定剑。", "按难度扣除", "无", "正常伤害+30%、弩剑距离+100%；简单伤害+20%、距离+50%；攻速+10%、弩剑速度+15%。"));
+        pages.add(guideBookQuickPage(85, "怪物长矛", "正常难度的近战怪物", "怪物生成时自动判定。", "无", "无", "28%概率获得木、石、铜或铁长矛，另有5%概率获得钻石长矛；小白、灾厄弩手、女巫、溺尸等远程生物不会获得。"));
         return pages;
     }
 
@@ -6500,6 +6559,12 @@ public class FlashModeManager {
         player.playSound(player.getLocation(), Sound.BLOCK_PISTON_EXTEND, 0.82F, 1.0F);
         player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.78F, 1.0F);
         player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.55F, 1.0F);
+    }
+
+    public ItemStack createChargedRailgun() {
+        ItemStack railgun = applyRailgunLevel(new ItemStack(Material.FISHING_ROD), 1);
+        setRailgunCharge(railgun, RAILGUN_CHARGE_UNITS, true);
+        return railgun;
     }
 
     private ItemStack applyRailgunLevel(ItemStack base, int level) {
@@ -13410,7 +13475,8 @@ public class FlashModeManager {
             equipment.setItemInMainHand(markFlashGlobalMobGear(createRandomFlashGlobalMobMiningTool(random)), true);
             equipment.setItemInMainHandDropChance(0.0F);
         } else {
-            equipment.setItemInMainHand(markFlashGlobalMobGear(createRandomFlashGlobalMobWeapon(random)), true);
+            equipment.setItemInMainHand(markFlashGlobalMobGear(
+                    createRandomFlashGlobalMobWeapon(random, !isFlashRangedMob(living))), true);
             equipment.setItemInMainHandDropChance(0.0F);
         }
         equipFlashGlobalMobArmor(equipment, random);
@@ -13424,7 +13490,8 @@ public class FlashModeManager {
     public boolean handleFlashGlobalMobBowShoot(EntityShootBowEvent event) {
         if (event == null || event.getEntity() instanceof Player
                 || !(event.getEntity() instanceof AbstractSkeleton skeleton)
-                || skeleton.getEquipment() == null || !isFlashWorldActive(skeleton.getWorld())) {
+                || isFlashTamed(skeleton) || skeleton.getEquipment() == null
+                || !isFlashWorldActive(skeleton.getWorld())) {
             return false;
         }
         ItemStack crossbow = event.getBow();
@@ -13469,17 +13536,24 @@ public class FlashModeManager {
         long now = System.currentTimeMillis();
         flashGlobalSkeletonShotCooldowns.entrySet().removeIf(entry -> entry.getValue() + 120_000L < now
                 || Bukkit.getEntity(entry.getKey()) == null);
+        flashTamedSkeletonRangedShotCooldowns.entrySet().removeIf(entry -> entry.getValue() + 120_000L < now
+                || Bukkit.getEntity(entry.getKey()) == null);
         for (World world : Bukkit.getWorlds()) {
             if (!isFlashWorldActive(world)) {
                 continue;
             }
             GameRoom room = getFlashRoomByWorld(world);
-            if (isEasyFlashDifficulty(room)) {
-                continue;
-            }
+            boolean easyDifficulty = isEasyFlashDifficulty(room);
             for (LivingEntity living : world.getLivingEntities()) {
+                if (living instanceof AbstractSkeleton skeleton && isFlashTamed(skeleton)) {
+                    tickFlashTamedSkeletonCrossbow(skeleton, now);
+                    continue;
+                }
+                if (easyDifficulty) {
+                    continue;
+                }
                 equipFlashGlobalMobIfNeeded(living);
-                if (living instanceof AbstractSkeleton skeleton && !isFlashTamed(skeleton)) {
+                if (living instanceof AbstractSkeleton skeleton) {
                     tickFlashGlobalSkeletonCrossbow(skeleton, now);
                 }
             }
@@ -13531,6 +13605,456 @@ public class FlashModeManager {
             return null;
         }
         return target;
+    }
+
+    private void tickFlashTamedSkeletonCrossbow(AbstractSkeleton skeleton, long now) {
+        if (skeleton == null || skeleton.isDead() || !skeleton.isValid() || skeleton.getEquipment() == null) {
+            return;
+        }
+        UUID skeletonId = skeleton.getUniqueId();
+        EntityEquipment equipment = skeleton.getEquipment();
+        ItemStack crossbow = equipment.getItemInMainHand();
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW) {
+            flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
+            return;
+        }
+
+        UUID ownerId = getFlashTameOwner(skeleton);
+        Player owner = ownerId == null ? null : Bukkit.getPlayer(ownerId);
+        LivingEntity target = getFlashTamedSkeletonLockedTarget(skeleton, owner);
+        if (owner == null || target == null) {
+            return;
+        }
+        maintainFlashTamedSkeletonCrossbowDistance(skeleton, target);
+        if (flashTamedSkeletonRangedShotCooldowns.getOrDefault(skeletonId, 0L) > now) {
+            return;
+        }
+
+        CrossbowPayload customPayload = getCrossbowPayload(crossbow);
+        if (customPayload != null) {
+            ItemStack payloadItem = getCrossbowPayloadItem(crossbow);
+            if (!isEmpty(payloadItem)) {
+                skeleton.lookAt(target, 30.0F, 30.0F);
+                Vector direction = resolveFlashTamedSkeletonShotDirection(skeleton, target);
+                if (fireFlashTamedSkeletonPayload(skeleton, owner, crossbow, customPayload, payloadItem, direction)) {
+                    ItemStack spentCrossbow = clearFlashTamedSkeletonCrossbowLoad(crossbow);
+                    int durabilityCost = (customPayload == CrossbowPayload.WIND_CHARGE
+                            || customPayload == CrossbowPayload.ENHANCED_WIND_CHARGE)
+                            && crossbow.getEnchantmentLevel(Enchantment.MULTISHOT) > 0 ? 3 : 1;
+                    spentCrossbow = damageFlashTamedSkeletonCrossbow(skeleton, spentCrossbow, durabilityCost);
+                    if (isEmpty(spentCrossbow)) {
+                        equipment.setItemInMainHand(null, true);
+                        flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
+                    } else {
+                        equipment.setItemInMainHand(spentCrossbow, true);
+                        equipment.setItemInMainHandDropChance(1.0F);
+                        flashTamedSkeletonRangedShotCooldowns.put(skeletonId,
+                                now + getFlashGlobalSkeletonShotCooldownMillis(skeleton, crossbow, customPayload));
+                    }
+                    if (isFlashGlobalMobGear(equipment.getItemInOffHand())) {
+                        equipment.setItemInOffHand(null, true);
+                    }
+                    return;
+                }
+            }
+            crossbow = clearFlashTamedSkeletonCrossbowLoad(crossbow);
+            equipment.setItemInMainHand(crossbow, true);
+        }
+
+        if (!(crossbow.getItemMeta() instanceof CrossbowMeta crossbowMeta)) {
+            return;
+        }
+        if (!crossbowMeta.hasChargedProjectiles()) {
+            ItemStack loaded = loadFlashTamedSkeletonCrossbow(crossbow);
+            if (loaded == null) {
+                return;
+            }
+            equipment.setItemInMainHand(loaded, true);
+            equipment.setItemInMainHandDropChance(1.0F);
+            flashTamedSkeletonRangedShotCooldowns.put(skeletonId,
+                    now + getFlashTamedSkeletonCrossbowLoadMillis(crossbow));
+            skeleton.lookAt(target, 30.0F, 30.0F);
+            skeleton.swingMainHand();
+            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_LOADING_START, 0.72F, 1.14F);
+            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.28F, 1.68F);
+            return;
+        }
+
+        List<ItemStack> chargedProjectiles = crossbowMeta.getChargedProjectiles().stream()
+                .filter(item -> !isEmpty(item))
+                .map(ItemStack::clone)
+                .toList();
+        if (chargedProjectiles.isEmpty()) {
+            ItemStack unloaded = clearFlashTamedSkeletonCrossbowLoad(crossbow);
+            equipment.setItemInMainHand(unloaded, true);
+            flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
+            return;
+        }
+
+        skeleton.lookAt(target, 30.0F, 30.0F);
+        Vector direction = resolveFlashTamedSkeletonShotDirection(skeleton, target);
+        if (!fireFlashTamedSkeletonCrossbow(skeleton, owner, crossbow, chargedProjectiles, direction)) {
+            return;
+        }
+
+        ItemStack spentCrossbow = clearFlashTamedSkeletonCrossbowLoad(crossbow);
+        spentCrossbow = damageFlashTamedSkeletonCrossbow(skeleton, spentCrossbow, chargedProjectiles);
+        if (isEmpty(spentCrossbow)) {
+            equipment.setItemInMainHand(null, true);
+            flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
+        } else {
+            equipment.setItemInMainHand(spentCrossbow, true);
+            equipment.setItemInMainHandDropChance(1.0F);
+            flashTamedSkeletonRangedShotCooldowns.put(skeletonId, now + 250L);
+        }
+    }
+
+    private LivingEntity getFlashTamedSkeletonLockedTarget(AbstractSkeleton skeleton, Player owner) {
+        if (skeleton == null || owner == null || !owner.isOnline() || skeleton.getWorld() == null
+                || !owner.getWorld().equals(skeleton.getWorld()) || !(skeleton instanceof Mob mob)
+                || !(mob.getTarget() instanceof LivingEntity target) || !target.isValid() || target.isDead()
+                || !target.getWorld().equals(skeleton.getWorld()) || !skeleton.hasLineOfSight(target)
+                || skeleton.getLocation().distanceSquared(target.getLocation()) > TAME_SKELETON_CROSSBOW_MAX_RANGE_SQUARED) {
+            return null;
+        }
+        UUID ownerId = owner.getUniqueId();
+        UUID wanted = tameLastOwnerTargets.get(ownerId);
+        if (wanted == null || !wanted.equals(target.getUniqueId())
+                || target.getUniqueId().equals(ownerId) || isOwnedOrFriendlyTame(ownerId, target)) {
+            return null;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(ownerId);
+        if (!isFlashCombatAvailable(owner, room)
+                || (target instanceof Player playerTarget && !canDamage(room, owner, playerTarget))) {
+            return null;
+        }
+        return target;
+    }
+
+    private ItemStack loadFlashTamedSkeletonCrossbow(ItemStack crossbow) {
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW
+                || !(crossbow.getItemMeta() instanceof CrossbowMeta)) {
+            return null;
+        }
+        ItemStack loaded = crossbow.clone();
+        loaded.setAmount(1);
+        CrossbowMeta meta = (CrossbowMeta) loaded.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
+        meta.getPersistentDataContainer().remove(windChargedCrossbowKey);
+        meta.getPersistentDataContainer().remove(crossbowPayloadTypeKey);
+        meta.getPersistentDataContainer().remove(crossbowPayloadDataKey);
+        meta.setChargedProjectiles(List.of(new ItemStack(Material.ARROW)));
+        loaded.setItemMeta(meta);
+        return loaded;
+    }
+
+    private long getFlashTamedSkeletonCrossbowLoadMillis(ItemStack crossbow) {
+        int quickCharge = Math.max(0, crossbow.getEnchantmentLevel(Enchantment.QUICK_CHARGE));
+        return Math.max(TAME_SKELETON_CROSSBOW_MIN_LOAD_MILLIS,
+                TAME_SKELETON_CROSSBOW_BASE_LOAD_MILLIS
+                        - quickCharge * TAME_SKELETON_CROSSBOW_QUICK_CHARGE_REDUCTION_MILLIS);
+    }
+
+    private Vector resolveFlashTamedSkeletonShotDirection(AbstractSkeleton skeleton, LivingEntity target) {
+        Location start = skeleton.getEyeLocation();
+        Location aim = target.getLocation().add(0.0D, Math.min(target.getHeight() * 0.62D, 1.35D), 0.0D);
+        Vector direction = aim.toVector().subtract(start.toVector());
+        if (direction.lengthSquared() > 0.001D) {
+            return direction.normalize();
+        }
+        direction = start.getDirection();
+        return direction.lengthSquared() > 0.001D ? direction.normalize() : new Vector(0.0D, 0.0D, 1.0D);
+    }
+
+    private void maintainFlashTamedSkeletonCrossbowDistance(AbstractSkeleton skeleton, LivingEntity target) {
+        if (skeleton == null || target == null || skeleton.getEquipment() == null
+                || skeleton.getEquipment().getItemInMainHand().getType() != Material.CROSSBOW) {
+            return;
+        }
+        skeleton.getPathfinder().stopPathfinding();
+        if (!skeleton.getPassengers().isEmpty() || skeleton.getVehicle() != null
+                || skeleton.getLocation().distanceSquared(target.getLocation()) >= 64.0D) {
+            return;
+        }
+        Vector retreat = skeleton.getLocation().toVector().subtract(target.getLocation().toVector());
+        retreat.setY(0.0D);
+        if (retreat.lengthSquared() < 0.001D) {
+            retreat = skeleton.getLocation().getDirection().setY(0.0D).multiply(-1.0D);
+        }
+        if (retreat.lengthSquared() > 0.001D) {
+            retreat.normalize().multiply(0.34D);
+            Vector velocity = skeleton.getVelocity();
+            skeleton.setVelocity(new Vector(retreat.getX(), Math.max(velocity.getY(), 0.08D), retreat.getZ()));
+        }
+    }
+
+    private boolean fireFlashTamedSkeletonPayload(AbstractSkeleton skeleton, Player owner, ItemStack crossbow,
+                                                    CrossbowPayload payload, ItemStack payloadItem, Vector direction) {
+        if (skeleton == null || owner == null || isEmpty(crossbow) || payload == null || isEmpty(payloadItem)
+                || direction == null || direction.lengthSquared() < 0.001D || payload == CrossbowPayload.TMT) {
+            return false;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(owner.getUniqueId());
+        Vector shotDirection = direction.clone().normalize();
+        double speedMultiplier = getCrossbowProjectileMultiplier(owner, crossbow);
+        double damageMultiplier = getFlashGlobalSkeletonDamageMultiplier(room);
+        switch (payload) {
+            case WIND_CHARGE -> spawnFlashGlobalSkeletonWindCharges(
+                    skeleton, room, shotDirection, speedMultiplier, damageMultiplier, false);
+            case ENHANCED_WIND_CHARGE -> spawnFlashGlobalSkeletonWindCharges(
+                    skeleton, room, shotDirection, speedMultiplier, damageMultiplier, true);
+            case TNT -> launchFlashTamedSkeletonTnt(
+                    skeleton, owner, room, shotDirection, speedMultiplier, damageMultiplier);
+            case FOOD -> applyFlashTamedSkeletonFoodPayload(skeleton, payloadItem);
+            case SWORD -> launchFlashTamedSkeletonSword(
+                    skeleton, owner, room, payloadItem, shotDirection, damageMultiplier);
+            case ENDER_PEARL -> launchFlashGlobalSkeletonEnderPearl(
+                    skeleton, shotDirection, speedMultiplier, damageMultiplier);
+            case TRIDENT -> launchFlashGlobalSkeletonTrident(
+                    skeleton, payloadItem, shotDirection, speedMultiplier, damageMultiplier);
+            case TMT -> {
+                return false;
+            }
+        }
+        skeleton.clearActiveItem();
+        skeleton.swingMainHand();
+        skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_LOADING_END, 0.62F, 1.16F);
+        skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_SHOOT, 0.92F, 1.08F);
+        return true;
+    }
+
+    private void launchFlashTamedSkeletonTnt(AbstractSkeleton skeleton, Player owner, GameRoom room,
+                                              Vector direction, double speedMultiplier, double damageMultiplier) {
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(1.9D));
+        Vector velocity = direction.clone().multiply(2.55D * speedMultiplier);
+        boolean breakBlocks = canFlashExplosionBreakBlocks(owner, room);
+        TNTPrimed primed = skeleton.getWorld().spawn(start, TNTPrimed.class, entity -> {
+            entity.setSource(skeleton);
+            entity.setFuseTicks(60);
+            entity.setGravity(false);
+            entity.setVelocity(velocity);
+            entity.setYield(0.0F);
+            entity.setIsIncendiary(false);
+        });
+        new BukkitRunnable() {
+            private int ticks;
+            private Location last = primed.getLocation().clone();
+
+            @Override
+            public void run() {
+                if (!primed.isValid() || primed.isDead() || !isFlashEffectStillActive(owner, room)) {
+                    if (primed.isValid()) {
+                        primed.remove();
+                    }
+                    cancel();
+                    return;
+                }
+                Location current = primed.getLocation().clone();
+                Location collision = findBlockCollisionBetween(last, current);
+                if (collision == null) {
+                    collision = findLivingEntityCollisionBetween(owner, primed, last, current, 0.48D, room);
+                }
+                ticks++;
+                if (collision != null || ticks >= 44) {
+                    Location boom = collision == null ? current : collision;
+                    primed.remove();
+                    World world = boom.getWorld();
+                    if (world != null) {
+                        world.spawnParticle(Particle.FIREWORK, boom, 30, 0.24D, 0.18D, 0.24D, 0.05D);
+                        world.spawnParticle(Particle.EXPLOSION, boom, 6, 0.18D, 0.12D, 0.18D, 0.02D);
+                        world.playSound(boom, Sound.ENTITY_GENERIC_EXPLODE, 0.95F, 1.0F);
+                        float power = (float) (3.0D * Math.max(0.0D, Math.min(1.0D, damageMultiplier)));
+                        world.createExplosion(owner, boom, power, false, breakBlocks);
+                    }
+                    cancel();
+                    return;
+                }
+                last = current;
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+        skeleton.getWorld().spawnParticle(Particle.FIREWORK, start, 20, 0.18D, 0.12D, 0.18D, 0.025D);
+        skeleton.getWorld().playSound(start, Sound.ENTITY_TNT_PRIMED, 0.75F, 1.24F);
+    }
+
+    private void launchFlashTamedSkeletonSword(AbstractSkeleton skeleton, Player owner, GameRoom room,
+                                                ItemStack sword, Vector direction, double damageMultiplier) {
+        if (isEmpty(sword)) {
+            return;
+        }
+        Location start = skeleton.getEyeLocation().clone().add(direction.clone().multiply(0.95D));
+        skeleton.getWorld().spawnParticle(Particle.ITEM, start, 18, 0.16D, 0.12D, 0.16D, 0.02D, sword);
+        skeleton.getWorld().playSound(start, Sound.ITEM_TRIDENT_THROW, 0.74F, 1.34F);
+        launchFlyingSwordDisplay(owner, room, sword, start, direction, true, damageMultiplier);
+    }
+
+    private void applyFlashTamedSkeletonFoodPayload(AbstractSkeleton skeleton, ItemStack food) {
+        int nutrition = switch (food.getType()) {
+            case APPLE, CHORUS_FRUIT, GOLDEN_APPLE, ENCHANTED_GOLDEN_APPLE -> 4;
+            case BREAD, COOKED_COD, COOKED_SALMON -> 5;
+            case GOLDEN_CARROT -> 6;
+            case COOKED_BEEF, COOKED_PORKCHOP -> 8;
+            default -> food.getType().isEdible() ? 3 : 0;
+        };
+        AttributeInstance maxHealth = skeleton.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null && nutrition > 0) {
+            skeleton.setHealth(Math.min(maxHealth.getValue(), skeleton.getHealth() + nutrition));
+        }
+        if (food.getType() == Material.GOLDEN_APPLE || food.getType() == Material.ENCHANTED_GOLDEN_APPLE) {
+            skeleton.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,
+                    food.getType() == Material.ENCHANTED_GOLDEN_APPLE ? 600 : 100, 1, false, true, true));
+            skeleton.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 2400,
+                    food.getType() == Material.ENCHANTED_GOLDEN_APPLE ? 3 : 0, false, true, true));
+        }
+        Location effect = skeleton.getLocation().add(0.0D, Math.min(1.2D, skeleton.getHeight() * 0.68D), 0.0D);
+        skeleton.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, effect, 18, 0.25D, 0.25D, 0.25D, 0.03D);
+        skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ENTITY_GENERIC_EAT, 0.9F, 1.18F);
+    }
+
+    private boolean fireFlashTamedSkeletonCrossbow(AbstractSkeleton skeleton, Player owner, ItemStack crossbow,
+                                                     List<ItemStack> chargedProjectiles, Vector direction) {
+        if (skeleton == null || owner == null || isEmpty(crossbow) || chargedProjectiles == null
+                || chargedProjectiles.isEmpty() || direction == null || direction.lengthSquared() < 0.001D) {
+            return false;
+        }
+        List<ItemStack> projectiles = chargedProjectiles;
+        if (chargedProjectiles.size() == 1 && crossbow.getEnchantmentLevel(Enchantment.MULTISHOT) > 0) {
+            ItemStack projectile = chargedProjectiles.getFirst();
+            projectiles = List.of(projectile.clone(), projectile.clone(), projectile.clone());
+        }
+
+        boolean fired = false;
+        double center = (projectiles.size() - 1) / 2.0D;
+        double speedMultiplier = getCrossbowProjectileMultiplier(owner, crossbow);
+        boolean dragonBreath = isDragonBreathWeapon(crossbow);
+        for (int index = 0; index < projectiles.size(); index++) {
+            ItemStack projectileItem = projectiles.get(index);
+            if (isEmpty(projectileItem)) {
+                continue;
+            }
+            Vector shotDirection = direction.clone()
+                    .rotateAroundY(Math.toRadians(10.0D) * (index - center))
+                    .normalize();
+            if (projectileItem.getType() == Material.FIREWORK_ROCKET) {
+                Vector velocity = shotDirection.multiply(TAME_SKELETON_CROSSBOW_FIREWORK_SPEED * speedMultiplier);
+                skeleton.launchProjectile(Firework.class, velocity, firework -> {
+                    ItemStack rocket = projectileItem.clone();
+                    rocket.setAmount(1);
+                    firework.setItem(rocket);
+                    firework.setShotAtAngle(true);
+                });
+                fired = true;
+                continue;
+            }
+
+            ItemStack arrowItem = switch (projectileItem.getType()) {
+                case ARROW, SPECTRAL_ARROW, TIPPED_ARROW -> projectileItem.clone();
+                default -> new ItemStack(Material.ARROW);
+            };
+            arrowItem.setAmount(1);
+            double dragonSpeed = dragonBreath
+                    ? DRAGON_BREATH_ARROW_MULTIPLIER * DRAGON_BREATH_CROSSBOW_SPEED_MULTIPLIER : 1.0D;
+            Vector velocity = shotDirection.multiply(TAME_SKELETON_CROSSBOW_ARROW_SPEED * speedMultiplier * dragonSpeed);
+            AbstractArrow arrow;
+            if (arrowItem.getType() == Material.SPECTRAL_ARROW) {
+                arrow = skeleton.launchProjectile(SpectralArrow.class, velocity,
+                        projectile -> configureFlashTamedSkeletonArrow(projectile, arrowItem, crossbow));
+            } else {
+                arrow = skeleton.launchProjectile(Arrow.class, velocity,
+                        projectile -> configureFlashTamedSkeletonArrow(projectile, arrowItem, crossbow));
+            }
+            if (dragonBreath) {
+                arrow.setDamage(arrow.getDamage() * DRAGON_BREATH_ARROW_MULTIPLIER);
+                arrow.setGravity(false);
+                monitorDragonBreathArrow(owner, arrow, true, arrow.getLocation().clone());
+            }
+            fired = true;
+        }
+        if (!fired) {
+            return false;
+        }
+        skeleton.clearActiveItem();
+        skeleton.swingMainHand();
+        skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_LOADING_END, 0.62F, 1.18F);
+        skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_SHOOT, 0.92F, 1.08F);
+        if (dragonBreath) {
+            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ENTITY_ENDER_DRAGON_SHOOT, 0.36F, 1.55F);
+        }
+        return true;
+    }
+
+    private void configureFlashTamedSkeletonArrow(AbstractArrow arrow, ItemStack arrowItem, ItemStack crossbow) {
+        ItemStack projectile = arrowItem.clone();
+        projectile.setAmount(1);
+        ItemStack weapon = crossbow.clone();
+        weapon.setAmount(1);
+        arrow.setItemStack(projectile);
+        arrow.setWeapon(weapon);
+        arrow.setShotFromCrossbow(true);
+        arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
+        arrow.setCritical(true);
+        arrow.setPierceLevel(Math.max(arrow.getPierceLevel(),
+                Math.max(0, crossbow.getEnchantmentLevel(Enchantment.PIERCING))));
+    }
+
+    private ItemStack clearFlashTamedSkeletonCrossbowLoad(ItemStack crossbow) {
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW
+                || !(crossbow.getItemMeta() instanceof CrossbowMeta)) {
+            return crossbow;
+        }
+        ItemStack unloaded = crossbow.clone();
+        CrossbowMeta meta = (CrossbowMeta) unloaded.getItemMeta();
+        if (meta == null) {
+            return unloaded;
+        }
+        meta.getPersistentDataContainer().remove(windChargedCrossbowKey);
+        meta.getPersistentDataContainer().remove(crossbowPayloadTypeKey);
+        meta.getPersistentDataContainer().remove(crossbowPayloadDataKey);
+        meta.setChargedProjectiles(List.of());
+        unloaded.setItemMeta(meta);
+        return unloaded;
+    }
+
+    private ItemStack damageFlashTamedSkeletonCrossbow(AbstractSkeleton skeleton, ItemStack crossbow,
+                                                        List<ItemStack> chargedProjectiles) {
+        int rawDamage = chargedProjectiles.stream()
+                .anyMatch(item -> !isEmpty(item) && item.getType() == Material.FIREWORK_ROCKET) ? 3 : 1;
+        return damageFlashTamedSkeletonCrossbow(skeleton, crossbow, rawDamage);
+    }
+
+    private ItemStack damageFlashTamedSkeletonCrossbow(AbstractSkeleton skeleton, ItemStack crossbow,
+                                                        int rawDamage) {
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW
+                || !(crossbow.getItemMeta() instanceof Damageable damageable)
+                || crossbow.getItemMeta().isUnbreakable()) {
+            return crossbow;
+        }
+        rawDamage = Math.max(1, rawDamage);
+        int unbreaking = Math.max(0, crossbow.getEnchantmentLevel(Enchantment.UNBREAKING));
+        int appliedDamage = 0;
+        for (int index = 0; index < rawDamage; index++) {
+            if (unbreaking == 0 || ThreadLocalRandom.current().nextInt(unbreaking + 1) == 0) {
+                appliedDamage++;
+            }
+        }
+        if (appliedDamage <= 0) {
+            return crossbow;
+        }
+        int nextDamage = damageable.getDamage() + appliedDamage;
+        if (nextDamage >= crossbow.getType().getMaxDurability()) {
+            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ENTITY_ITEM_BREAK, 0.9F, 1.1F);
+            skeleton.getWorld().spawnParticle(Particle.ITEM, skeleton.getEyeLocation(),
+                    18, 0.18D, 0.14D, 0.18D, 0.03D, crossbow);
+            return null;
+        }
+        ItemStack damaged = crossbow.clone();
+        ItemMeta meta = damaged.getItemMeta();
+        if (meta instanceof Damageable updatedDamageable) {
+            updatedDamageable.setDamage(nextDamage);
+            damaged.setItemMeta(meta);
+        }
+        return damaged;
     }
 
     private Vector resolveFlashGlobalSkeletonShotDirection(AbstractSkeleton skeleton) {
@@ -14132,9 +14656,56 @@ public class FlashModeManager {
         return new ItemStack(pool[random.nextInt(pool.length)]);
     }
 
-    private ItemStack createRandomFlashGlobalMobWeapon(ThreadLocalRandom random) {
+    private ItemStack createRandomFlashGlobalMobWeapon(ThreadLocalRandom random, boolean allowSpear) {
+        if (allowSpear) {
+            double spearRoll = random.nextDouble();
+            if (spearRoll < FLASH_GLOBAL_MOB_DIAMOND_SPEAR_CHANCE) {
+                return new ItemStack(Material.DIAMOND_SPEAR);
+            }
+            if (spearRoll < FLASH_GLOBAL_MOB_DIAMOND_SPEAR_CHANCE + FLASH_GLOBAL_MOB_COMMON_SPEAR_CHANCE) {
+                Material[] spears = {
+                        Material.WOODEN_SPEAR, Material.STONE_SPEAR, Material.COPPER_SPEAR, Material.IRON_SPEAR
+                };
+                return new ItemStack(spears[random.nextInt(spears.length)]);
+            }
+        }
         Material[] pool = {Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD};
         return new ItemStack(pool[random.nextInt(pool.length)]);
+    }
+
+    private boolean isFlashRangedMob(LivingEntity living) {
+        if (living == null) {
+            return false;
+        }
+        if (living instanceof AbstractSkeleton
+                || living instanceof org.bukkit.entity.Pillager
+                || living instanceof org.bukkit.entity.Witch
+                || living instanceof org.bukkit.entity.Breeze
+                || living instanceof org.bukkit.entity.Blaze
+                || living instanceof org.bukkit.entity.Ghast
+                || living instanceof org.bukkit.entity.Shulker
+                || living instanceof org.bukkit.entity.Guardian
+                || living instanceof org.bukkit.entity.Drowned
+                || living instanceof org.bukkit.entity.Evoker
+                || living instanceof org.bukkit.entity.Illusioner
+                || living instanceof org.bukkit.entity.Piglin
+                || living instanceof org.bukkit.entity.Wither
+                || living instanceof org.bukkit.entity.Warden) {
+            return true;
+        }
+        EntityEquipment equipment = living.getEquipment();
+        return equipment != null
+                && (isFlashRangedWeapon(equipment.getItemInMainHand())
+                || isFlashRangedWeapon(equipment.getItemInOffHand()));
+    }
+
+    private boolean isFlashRangedWeapon(ItemStack item) {
+        if (isEmpty(item)) {
+            return false;
+        }
+        return item.getType() == Material.BOW
+                || item.getType() == Material.CROSSBOW
+                || item.getType() == Material.TRIDENT;
     }
 
     private ItemStack markFlashGlobalMobGear(ItemStack item) {
@@ -20374,6 +20945,12 @@ public class FlashModeManager {
         }
         ItemStack item = player.getInventory().getItem(event.getHand());
         if (isEmpty(item)) {
+            if (event.getHand() == EquipmentSlot.HAND && player.isSneaking() && isFlashTamedBy(living, player)) {
+                event.setCancelled(true);
+                player.swingHand(event.getHand());
+                clearFlashTamedPetMainHand(player, living);
+                return true;
+            }
             return false;
         }
 
@@ -20407,6 +20984,13 @@ public class FlashModeManager {
         if (tryAdoptOwnedTameForFlash(player, living)) {
             event.setCancelled(true);
             player.swingHand(event.getHand());
+        }
+
+        if (event.getHand() == EquipmentSlot.HAND && player.isSneaking() && isFlashTamedBy(living, player)) {
+            event.setCancelled(true);
+            player.swingHand(event.getHand());
+            equipFlashTamedPetItem(player, living, item, event.getHand());
+            return true;
         }
 
         if (handleFlashTameMountRequest(event, player, living, item)) {
@@ -20472,7 +21056,7 @@ public class FlashModeManager {
             return false;
         }
 
-        if (item.getType() == Material.BREAD) {
+        if (item.getType() == Material.SWEET_BERRIES) {
             event.setCancelled(true);
             player.swingHand(event.getHand());
             toggleFlashTameFollowing(player, living);
@@ -20519,7 +21103,9 @@ public class FlashModeManager {
         }
         ItemStack item = player.getInventory().getItemInMainHand();
         Material type = item == null ? Material.AIR : item.getType();
-        if (type != Material.GOLDEN_APPLE && type != Material.SNOW_BLOCK && type != Material.BREAD && type != Material.BOW && !isSword(item) && !isChestplate(item)) {
+        boolean equipmentUse = player.isSneaking() && getFlashTameEquipmentSlot(item) != null;
+        if (type != Material.GOLDEN_APPLE && type != Material.SNOW_BLOCK && type != Material.SWEET_BERRIES
+                && type != Material.BOW && !isSword(item) && !equipmentUse) {
             return false;
         }
         Entity target = player.getTargetEntity(5, false);
@@ -20699,7 +21285,9 @@ public class FlashModeManager {
             return false;
         }
         Material type = item.getType();
-        if (type == Material.BREAD || type == Material.GOLDEN_APPLE || type == Material.BOW || type == Material.ARROW || type == Material.OBSIDIAN || type == Material.COOKED_BEEF || isSword(item)) {
+        if (type == Material.SWEET_BERRIES || type == Material.GOLDEN_APPLE || type == Material.BOW
+                || type == Material.ARROW || type == Material.OBSIDIAN || type == Material.COOKED_BEEF
+                || isSword(item) || (player.isSneaking() && getFlashTameEquipmentSlot(item) != null)) {
             return false;
         }
         event.setCancelled(true);
@@ -20942,7 +21530,7 @@ public class FlashModeManager {
         } else {
             beginFlashTameWaiting(player, entity);
             sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
-                    + "§x§F§F§D§7§7§7✦ §e已切换为原地等待。§7宠物被推动或碰到水时会回到你身边。");
+                    + "§x§F§F§D§7§7§7✦ §e已切换为原地等待。§7宠物接触水流后会回到你身边并恢复跟随。");
         }
         player.playSound(player.getLocation(), next ? Sound.ENTITY_ALLAY_ITEM_GIVEN : Sound.ENTITY_ALLAY_ITEM_TAKEN, 0.7f, 1.2f);
         if (next) {
@@ -20951,10 +21539,8 @@ public class FlashModeManager {
     }
 
     private void beginFlashTameWaiting(Player owner, LivingEntity entity) {
-        Location location = entity.getLocation();
         flashTameWaitStates.put(entity.getUniqueId(), new FlashTameWaitState(
-                owner.getUniqueId(), location.getWorld().getUID(), location.getX(), location.getY(), location.getZ(),
-                System.currentTimeMillis() + TAME_WAIT_ARM_DELAY_MILLIS));
+                owner.getUniqueId(), System.currentTimeMillis() + TAME_WAIT_ARM_DELAY_MILLIS));
         if (entity instanceof Mob mob) {
             mob.setTarget(null);
             mob.getPathfinder().stopPathfinding();
@@ -21010,13 +21596,7 @@ public class FlashModeManager {
 
         Location current = entity.getLocation();
         boolean touchedWater = entity.isInWater() || current.getBlock().getType() == Material.WATER;
-        boolean changedWorld = !current.getWorld().getUID().equals(state.worldId());
-        double dx = current.getX() - state.x();
-        double dz = current.getZ() - state.z();
-        boolean displaced = changedWorld
-                || dx * dx + dz * dz > TAME_WAIT_HORIZONTAL_TRIGGER_DISTANCE_SQUARED
-                || Math.abs(current.getY() - state.y()) > TAME_WAIT_VERTICAL_TRIGGER_DISTANCE;
-        if (!touchedWater && !displaced) {
+        if (!touchedWater) {
             return;
         }
 
@@ -21033,8 +21613,7 @@ public class FlashModeManager {
                 12, 0.28D, 0.24D, 0.28D, 0.03D);
         entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.32f);
         sendFlashMessage(owner, plugin.getConfigManager().getHunterGamePrefix()
-                + "§x§9§9§F§F§A§A✦ §a宠物已恢复跟随 §8| §7"
-                + (touchedWater ? "碰到水后" : "被推动后") + "§f回到了你身边。");
+                + "§x§9§9§F§F§A§A✦ §a宠物已恢复跟随 §8| §7接触水流后§f回到了你身边。");
     }
 
     private boolean increaseFlashTameHealth(Player player, LivingEntity entity) {
@@ -21054,6 +21633,131 @@ public class FlashModeManager {
         sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§F§F§D§D§7§7✦ §e金苹果强化成功§7（§f" + (used + 1) + "§7/§f10§7）。");
         entity.getWorld().spawnParticle(Particle.HEART, entity.getLocation().add(0.0D, entity.getHeight() + 0.2D, 0.0D), 10, 0.32, 0.25, 0.32, 0.02);
         entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_GENERIC_EAT, 0.8f, 1.35f);
+        return true;
+    }
+
+    private EquipmentSlot getFlashTameEquipmentSlot(ItemStack item) {
+        if (isEmpty(item)) {
+            return null;
+        }
+        EquipmentSlot armorSlot = getArmorEquipmentSlot(item.getType());
+        if (armorSlot != null) {
+            return armorSlot;
+        }
+        if (item.getType() == Material.SHIELD) {
+            return EquipmentSlot.OFF_HAND;
+        }
+        return EquipmentSlot.HAND;
+    }
+
+    private boolean clearFlashTamedPetMainHand(Player player, LivingEntity pet) {
+        if (player == null || pet == null || pet.getEquipment() == null) {
+            return false;
+        }
+        EntityEquipment equipment = pet.getEquipment();
+        ItemStack previous = equipment.getItemInMainHand();
+        if (isEmpty(previous)) {
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§B§B§D§D§F§F✦ §7这只宠物的主手已经是空的。§f");
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.52F, 1.35F);
+            return true;
+        }
+
+        equipment.setItemInMainHand(null, true);
+        equipment.setItemInMainHandDropChance(0.0F);
+        if (pet instanceof AbstractSkeleton) {
+            flashTamedSkeletonRangedShotCooldowns.remove(pet.getUniqueId());
+            if (isFlashGlobalMobGear(equipment.getItemInOffHand())) {
+                equipment.setItemInOffHand(null, true);
+            }
+        }
+        boolean returnedPrevious = !isFlashGlobalMobGear(previous);
+        if (returnedPrevious) {
+            giveOrDrop(player, previous.clone());
+        }
+        sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                + "§x§B§B§F§F§D§D✦ §b已清空宠物主手"
+                + (returnedPrevious ? "§8，§a原物品已返还" : "") + "§f。");
+        pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_BUNDLE_REMOVE_ONE, 0.66F, 1.28F);
+        pet.getWorld().spawnParticle(Particle.ENCHANTED_HIT,
+                pet.getLocation().add(0.0D, Math.min(1.25D, pet.getHeight() * 0.72D), 0.0D),
+                10, 0.20D, 0.24D, 0.20D, 0.025D);
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+        return true;
+    }
+
+    private boolean equipFlashTamedPetItem(Player player, LivingEntity pet, ItemStack source,
+                                            EquipmentSlot sourceHand) {
+        if (player == null || pet == null || isEmpty(source) || pet.getEquipment() == null) {
+            return false;
+        }
+        EquipmentSlot targetSlot = getFlashTameEquipmentSlot(source);
+        if (targetSlot == null) {
+            return false;
+        }
+
+        EntityEquipment equipment = pet.getEquipment();
+        ItemStack equipped = source.clone();
+        equipped.setAmount(1);
+        ItemStack previous = equipment.getItem(targetSlot);
+        equipment.setItem(targetSlot, equipped, true);
+        equipment.setDropChance(targetSlot, 1.0F);
+        pet.setCanPickupItems(false);
+        if (pet instanceof AbstractSkeleton skeleton && targetSlot == EquipmentSlot.HAND) {
+            flashTamedSkeletonRangedShotCooldowns.remove(pet.getUniqueId());
+            if (isFlashGlobalMobGear(equipment.getItemInOffHand())) {
+                equipment.setItemInOffHand(null, true);
+            }
+        }
+        consumeHandItem(player, sourceHand, 1);
+
+        boolean returnedPrevious = !isEmpty(previous) && !isFlashGlobalMobGear(previous);
+        if (returnedPrevious) {
+            giveOrDrop(player, previous.clone());
+        }
+
+        String returnedText = returnedPrevious ? "§8，§7原装备已返还" : "";
+        String petName = pet instanceof Skeleton ? "小白"
+                : pet instanceof Enderman ? "末影人"
+                : pet instanceof Zombie ? "僵尸" : "宠物";
+        if (targetSlot == EquipmentSlot.HAND && equipped.getType() == Material.CROSSBOW
+                && pet instanceof AbstractSkeleton) {
+            boolean hasFlashPayload = getCrossbowPayload(equipped) != null
+                    && !isEmpty(getCrossbowPayloadItem(equipped));
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§B§B§D§D§F§F✦ §b小白已接过弩§8，§f会射击你锁定的敌人"
+                    + (hasFlashPayload ? "§8，§d弩内闪光弹药会优先发射" : "§8，§7空弩会自动装填普通箭")
+                    + returnedText + "§f。");
+            pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_CROSSBOW_LOADING_START, 0.82F, 1.22F);
+            pet.getWorld().playSound(pet.getLocation(), Sound.ENTITY_ALLAY_ITEM_GIVEN, 0.46F, 1.42F);
+        } else if (targetSlot == EquipmentSlot.HAND) {
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§F§F§8§8§8§8✦ §c" + petName + "已拿上自定义物品§8，§7附魔、组件和闪光数据已完整保留"
+                    + returnedText + "§f。");
+            pet.getWorld().playSound(pet.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.72F, 0.86F);
+            pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_TRIDENT_THROW, 0.24F, 1.62F);
+        } else if (targetSlot == EquipmentSlot.OFF_HAND) {
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§B§B§F§F§D§D✦ §b" + petName + "已装备副手盾牌" + returnedText + "§f。");
+            pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_ARMOR_EQUIP_IRON, 0.72F, 1.24F);
+            pet.getWorld().playSound(pet.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.28F, 1.72F);
+        } else {
+            String slotName = switch (targetSlot) {
+                case HEAD -> "头盔";
+                case CHEST -> "胸甲";
+                case LEGS -> "护腿";
+                case FEET -> "靴子";
+                default -> "装备";
+            };
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§A§6§F§F§C§8✦ §a已为" + petName + "穿上§f" + slotName + returnedText + "§f。");
+            pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_ARMOR_EQUIP_GENERIC, 0.78F, 1.18F);
+            pet.getWorld().playSound(pet.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.34F, 1.62F);
+        }
+        pet.getWorld().spawnParticle(Particle.ENCHANTED_HIT,
+                pet.getLocation().add(0.0D, Math.min(1.25D, pet.getHeight() * 0.72D), 0.0D),
+                16, 0.24D, 0.28D, 0.24D, 0.035D);
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
         return true;
     }
 
@@ -21190,6 +21894,16 @@ public class FlashModeManager {
         GameRoom room = plugin.getRoomManager().getPlayerRoom(ownerId);
         if (!isFlashCombatAvailable(owner, room)) {
             event.setCancelled(true);
+            return;
+        }
+        if (pet instanceof AbstractSkeleton skeleton && event.getDamager().getUniqueId().equals(pet.getUniqueId())
+                && skeleton.getEquipment() != null
+                && skeleton.getEquipment().getItemInMainHand().getType() == Material.CROSSBOW) {
+            event.setDamage(0.0D);
+            event.setCancelled(true);
+            if (event.getEntity() instanceof LivingEntity target) {
+                maintainFlashTamedSkeletonCrossbowDistance(skeleton, target);
+            }
             return;
         }
         if (event.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof LivingEntity shooter && isFlashTamed(shooter)) {
@@ -21474,6 +22188,11 @@ public class FlashModeManager {
                     if (wanted != null && wanted.equals(target.getUniqueId())) {
                         tameLastOwnerTargets.remove(ownerId);
                     }
+                }
+                if (entity instanceof AbstractSkeleton skeleton && skeleton.getEquipment() != null
+                        && skeleton.getEquipment().getItemInMainHand().getType() == Material.CROSSBOW
+                        && skeleton.getTarget() instanceof LivingEntity target && target.isValid() && !target.isDead()) {
+                    maintainFlashTamedSkeletonCrossbowDistance(skeleton, target);
                 }
                 double distanceSq = entity.getLocation().distanceSquared(owner.getLocation());
                 if (distanceSq > 144.0D) {
@@ -24790,8 +25509,7 @@ public class FlashModeManager {
     private record ShieldBreakTrace(UUID targetUuid, String roomId, long timeMillis) {
     }
 
-    private record FlashTameWaitState(UUID ownerId, UUID worldId, double x, double y, double z,
-                                      long armedAtMillis) {
+    private record FlashTameWaitState(UUID ownerId, long armedAtMillis) {
     }
 
     private record PendingMaceShieldBreak(UUID attackerUuid, UUID targetUuid, String roomId,

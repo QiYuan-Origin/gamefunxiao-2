@@ -88,6 +88,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "endflashcompass", "efcompass", "终章指南针" -> handleEndFlashCompass(sender);
             case "endflashdebug", "endflashtest", "tuneendflash", "efdebug", "调终章", "终章调试" -> handleEndFlashDebug(sender);
             case "flashuse", "flashtest", "flashitems" -> handleFlashUse(sender, args);
+            case "railgun", "chargedrailgun", "轨道炮", "充能轨道炮" -> handleChargedRailgun(sender);
             case "unstablemace", "unstable", "不稳定重锤", "重锤" -> handleRemovedUnstableMace(sender);
             case "wiki", "bookwiki", "flashwiki", "guidebook", "guide", "手册", "书wiki", "闪光手册" -> handleFlashWikiBook(sender);
             case "wikiopen", "openwiki", "flashwikiopen", "打开书wiki" -> handleOpenFlashWikiBook(sender, args);
@@ -177,6 +178,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             entries.add("§e/gamefunxiao endflashkit remove <kitId> §7- §f删除 Kit");
             entries.add("§e/gamefunxiao 调终章 §7- §f请求 gameing 进入固定终章调试世界");
             entries.add("§e/gamefunxiao flashuse <on|off|toggle|status> [玩家] §7- §f切换闪光测试能力");
+            entries.add("§e/gamefunxiao railgun §7- §f获得一把已充能的轨道炮");
             entries.add("§e/gamefunxiao flashmusic all <歌曲名> [Mall] §7- §f给全服播放闪光音符盒音乐");
             entries.add("§e/gamefunxiao flashmusic nearby <范围> <歌曲名> [Mall] §7- §f给附近玩家播放闪光音符盒音乐");
             entries.add("§e/gamefunxiao flashmusic stopall §7- §f停止所有闪光音符盒播放");
@@ -204,6 +206,30 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         plugin.getTabHeaderFooterManager().start();
 
         sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.reload_success"));
+    }
+
+    private void handleChargedRailgun(CommandSender sender) {
+        if (!sender.hasPermission("gamefunxiao.admin.railgun")) {
+            sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_only"));
+            return;
+        }
+
+        ItemStack railgun = plugin.getFlashModeManager().createChargedRailgun();
+        Map<Integer, ItemStack> leftovers = player.getInventory().addItem(railgun);
+        if (leftovers.isEmpty()) {
+            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.command_given"));
+        } else {
+            leftovers.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
+            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.command_dropped"));
+        }
+        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.72F, 1.42F);
+        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_PISTON_EXTEND, 0.55F, 0.82F);
+        Bukkit.getScheduler().runTaskLater(plugin, () ->
+                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_ACTIVATE, 0.48F, 1.68F), 3L);
     }
 
     private void handleLobbyInteractionRegion(CommandSender sender, String[] args) {
@@ -2141,6 +2167,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                     completions.add("endflashdebug");
                     completions.add("efdebug");
                     completions.add("coins");
+                }
+                if (sender.hasPermission("gamefunxiao.admin.railgun")) {
+                    completions.add("railgun");
+                    completions.add("轨道炮");
                 }
         } else if (args.length == 2) {
             if (isFlashMusicCommand(args[0])) {

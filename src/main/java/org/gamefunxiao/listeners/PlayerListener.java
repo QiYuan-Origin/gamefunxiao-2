@@ -1196,9 +1196,8 @@ public class PlayerListener implements Listener {
                         compassDropCount.remove(uuid);
                         lastCompassDrop.remove(uuid);
 
-                        if (room.isHunter(uuid) && plugin.getFlashModeManager().isHunterWithinPreyDistance(room, player, 70.0D)) {
-                            player.sendMessage(plugin.getConfigManager().getHunterGamePrefix() + "§x§F§F§8§8§5§5⚠ §c你距离猎物太近，70格内不能传送到其他猎人身边。");
-                            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.8f, 0.82f);
+                        if (room.isHunter(uuid)
+                                && plugin.getFlashModeManager().denyHunterCompassUseNearPrey(player, room)) {
                             return;
                         }
 

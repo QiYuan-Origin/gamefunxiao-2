@@ -9929,10 +9929,11 @@ public class GameManager {
                 lore.add("§f- §e主手或副手持有");
                 lore.add("§f- §a显示最近猎物距离");
                 lore.add("§f- §d连续扔掉两次获得TP");
+                lore.add("§f- §c距离猎物100格内不能传送队友");
                 if (mode.isFlashLike()) {
                     lore.add("§f- §b右键打开6行共享背包");
                     lore.add("§f- §d左键打开3行个人背包");
-                    lore.add("§f- §c距离猎物70格内不能传送队友");
+                    lore.add("§f- §c100格内同样不能使用两个背包");
                 }
                 lore.add("§8· · · · · · · · · · · · · ·");
                 meta.setLore(lore);
@@ -10979,7 +10980,9 @@ public class GameManager {
                     Location target = nearestPrey.getLocation().clone();
 
                     if (!tournamentCompass) {
-                        String cooldownText = plugin.getPlayerListener().getCompassTpRemainingDisplay(hunter.getUniqueId());
+                        String cooldownText = plugin.getFlashModeManager().isHunterCompassUseBlockedNearPrey(hunter, room)
+                                ? "§c距离过近"
+                                : plugin.getPlayerListener().getCompassTpRemainingDisplay(hunter.getUniqueId());
                         hunter.sendActionBar("§e🧭 距离最近猎物: §b" + String.format("%.1f", displayDistance) + " §e格"
                                 + " §8| §d传送: §f" + cooldownText);
                     }
