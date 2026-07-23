@@ -3222,7 +3222,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度45%/65%/50%。甜浆果可切换跟随/等待；只有接触水流才会结束等待并回到主人身边，实体推动不会触发。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
-        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；副手拿物品时会替换宠物副手；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽；主手盾牌或副手拿的普通物品进副手，其余主手物品进主手；旧物品返还。小白弩内闪光载荷会优先发射。"));
+        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；副手拿物品时会替换宠物副手；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽；主手盾牌或副手拿的普通物品进副手，其余主手物品进主手；旧物品返还。主手弩+副手闪光弹药交给小白时，会自动把副手弹药装入弩并优先发射。"));
         pages.add(guideBookQuickPage(60, "乐魂速度挽具", "迅捷潜行书+乐魂挽具", "铁砧强化挽具。", "消耗附魔书", "无", "1/2/3级速度约×1.25/1.50/2.00。"));
         pages.add(guideBookQuickPage(61, "乐魂喂养", "金苹果或雪块+乐魂", "蹲下右键乐魂回血或加生命。", "消耗材料", "金苹果最多80次", "雪块可给失水乐魂直接回复10点。"));
         pages.add(guideBookQuickPage(62, "乐魂装备成长", "胸甲/雪块+乐魂", "胸甲继承护甲路线，雪块加速成长。", "消耗/装备", "成长最多减到约3分钟", "乐魂胸甲会继承TNT、末影、图腾等护层。"));
@@ -21858,6 +21858,61 @@ public class FlashModeManager {
         return true;
     }
 
+    private TamedCrossbowPayloadLoad loadTamedSkeletonCrossbowPayloadFromPlayerOffhand(Player player,
+                                                                                       ItemStack crossbow,
+                                                                                       EquipmentSlot sourceHand) {
+        if (player == null || isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW
+                || sourceHand != EquipmentSlot.HAND
+                || !(crossbow.getItemMeta() instanceof CrossbowMeta meta)
+                || meta.hasChargedProjectiles()
+                || getCrossbowPayload(crossbow) != null) {
+            return null;
+        }
+        ItemStack offhand = player.getInventory().getItemInOffHand();
+        if (isEmpty(offhand)) {
+            return null;
+        }
+        CrossbowPayload payload = resolveCrossbowPayload(offhand);
+        if (payload == null || payload == CrossbowPayload.TMT
+                || (payload == CrossbowPayload.TRIDENT && isRiptideTridentCooldownActive(player, offhand))) {
+            return null;
+        }
+
+        ItemStack payloadItem = offhand.clone();
+        payloadItem.setAmount(1);
+        ItemStack loaded = crossbow.clone();
+        loaded.setAmount(1);
+        CrossbowMeta loadedMeta = (CrossbowMeta) meta.clone();
+        loadedMeta.setChargedProjectiles(List.of(new ItemStack(Material.ARROW)));
+        loadedMeta.getPersistentDataContainer().set(crossbowPayloadTypeKey, PersistentDataType.STRING, payload.name());
+        loadedMeta.getPersistentDataContainer().set(crossbowPayloadDataKey, PersistentDataType.BYTE_ARRAY,
+                payloadItem.serializeAsBytes());
+        if (payload == CrossbowPayload.WIND_CHARGE || payload == CrossbowPayload.ENHANCED_WIND_CHARGE) {
+            loadedMeta.getPersistentDataContainer().set(windChargedCrossbowKey, PersistentDataType.BYTE, (byte) 1);
+        } else {
+            loadedMeta.getPersistentDataContainer().remove(windChargedCrossbowKey);
+        }
+        loaded.setItemMeta(loadedMeta);
+        consumeHandItem(player, EquipmentSlot.OFF_HAND, 1);
+        return new TamedCrossbowPayloadLoad(loaded, payload, payloadItem);
+    }
+
+    private String describeCrossbowPayload(CrossbowPayload payload) {
+        if (payload == null) {
+            return "闪光";
+        }
+        return switch (payload) {
+            case WIND_CHARGE -> "风弹";
+            case ENHANCED_WIND_CHARGE -> "强化风弹";
+            case TNT -> "TNT";
+            case TMT -> "TMT";
+            case FOOD -> "食物";
+            case SWORD -> "飞剑";
+            case ENDER_PEARL -> "末影珍珠";
+            case TRIDENT -> "三叉戟";
+        };
+    }
+
     private boolean clearFlashTamedPetMainHand(Player player, LivingEntity pet) {
         if (player == null || pet == null || pet.getEquipment() == null) {
             return false;
@@ -21915,6 +21970,15 @@ public class FlashModeManager {
         EntityEquipment equipment = pet.getEquipment();
         ItemStack equipped = source.clone();
         equipped.setAmount(1);
+        TamedCrossbowPayloadLoad attachedPayload = null;
+        if (pet instanceof AbstractSkeleton
+                && targetSlot == EquipmentSlot.HAND
+                && equipped.getType() == Material.CROSSBOW) {
+            attachedPayload = loadTamedSkeletonCrossbowPayloadFromPlayerOffhand(player, equipped, sourceHand);
+            if (attachedPayload != null) {
+                equipped = attachedPayload.crossbow();
+            }
+        }
         ItemStack previous = equipment.getItem(targetSlot);
         equipment.setItem(targetSlot, equipped, true);
         equipment.setDropChance(targetSlot, 1.0F);
@@ -21951,9 +22015,15 @@ public class FlashModeManager {
                     && !isEmpty(getCrossbowPayloadItem(equipped));
             sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
                     + "§x§B§B§D§D§F§F✦ §b小白已接过弩§8，§f会射击你锁定的敌人"
-                    + (hasFlashPayload ? "§8，§d弩内闪光弹药会优先发射" : "§8，§7空弩会自动装填普通箭")
+                    + (attachedPayload != null
+                    ? "§8，§d已从副手装入" + describeCrossbowPayload(attachedPayload.payload()) + "§d弹药"
+                    : hasFlashPayload ? "§8，§d弩内闪光弹药会优先发射" : "§8，§7空弩会自动装填普通箭")
                     + returnedText + "§f。");
             pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_CROSSBOW_LOADING_START, 0.82F, 1.22F);
+            if (attachedPayload != null) {
+                pet.getWorld().playSound(pet.getLocation(), attachedPayload.payload().loadSound(), 0.72F, attachedPayload.payload().loadPitch());
+                pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_CROSSBOW_LOADING_END, 0.66F, 1.18F);
+            }
             pet.getWorld().playSound(pet.getLocation(), Sound.ENTITY_ALLAY_ITEM_GIVEN, 0.46F, 1.42F);
         } else if (targetSlot == EquipmentSlot.HAND) {
             sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
@@ -25610,6 +25680,9 @@ public class FlashModeManager {
         double n = Math.abs(rel.dot(plane.normal()));
         double normalLimit = plane.vertical() ? 1.35D : 1.75D;
         return n <= normalLimit && a + b <= radius + 1.25D;
+    }
+
+    private record TamedCrossbowPayloadLoad(ItemStack crossbow, CrossbowPayload payload, ItemStack payloadItem) {
     }
 
     private enum CrossbowPayload {
