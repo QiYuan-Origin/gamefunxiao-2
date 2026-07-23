@@ -929,6 +929,12 @@ public class GameRoom {
         return flashDifficultyFinalized;
     }
 
+    public void resetFlashDifficultyVoteState() {
+        flashDifficultyVotes.clear();
+        flashDifficulty = FlashDifficulty.NORMAL;
+        flashDifficultyFinalized = false;
+    }
+
     private FlashDifficulty resolveFlashDifficultyVotes() {
         int normalVotes = getFlashDifficultyVoteCount(FlashDifficulty.NORMAL);
         int easyVotes = getFlashDifficultyVoteCount(FlashDifficulty.EASY);

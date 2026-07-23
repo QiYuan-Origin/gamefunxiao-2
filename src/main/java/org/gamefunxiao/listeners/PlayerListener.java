@@ -46,6 +46,7 @@ import org.gamefunxiao.game.GameRoom;
 import org.gamefunxiao.game.RoomState;
 import org.gamefunxiao.menu.hunter.EndFlashKitDetailMenu;
 import org.gamefunxiao.menu.hunter.InvitePlayerMenu;
+import org.gamefunxiao.menu.hunter.LeaderboardDetailMenu;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -76,6 +77,7 @@ public class PlayerListener implements Listener {
     private static final long RECENT_COMBAT_HIT_EXPIRE_MS = 15000L;
     private final Map<UUID, org.bukkit.GameMode> dimensionGameModeRestore = new HashMap<>();
     private final Map<UUID, Long> flashTournamentPreyInputUntil = new HashMap<>();
+    private final Set<UUID> roomLobbyVoidRecoveries = new HashSet<>();
     // 传送门位置缓存：玩家UUID -> 传送门位置（用于下界门串联）
     private final Map<UUID, org.bukkit.Location> portalLocationCache = new HashMap<>();
 
@@ -83,22 +85,239 @@ public class PlayerListener implements Listener {
         this.plugin = plugin;
     }
 
-    private Location getWorldSelectionPreySafeLocation(GameRoom room, Location viewSource) {
-        if (room == null || room.getGameWorld() == null) {
+    private World getWorldSelectionPreyWorld(GameRoom room, Player player, Location viewSource) {
+        if (room != null && room.getGameWorld() != null) {
+            return room.getGameWorld();
+        }
+        if (player != null && player.getWorld() != null) {
+            return player.getWorld();
+        }
+        return viewSource == null ? null : viewSource.getWorld();
+    }
+
+    private Location getWorldSelectionPreySafeLocation(GameRoom room, Player player, Location viewSource) {
+        World world = getWorldSelectionPreyWorld(room, player, viewSource);
+        return getWorldSelectionSafeLocation(world, viewSource);
+    }
+
+    private Location getRoomLobbySafeLocation(GameRoom room, Location viewSource) {
+        if (room == null) {
             return null;
         }
-        Location spawn = room.getGameWorld().getSpawnLocation().clone();
-        spawn.setX(spawn.getBlockX() + 0.5D);
-        spawn.setZ(spawn.getBlockZ() + 0.5D);
-        if (viewSource != null) {
-            spawn.setYaw(viewSource.getYaw());
-            spawn.setPitch(viewSource.getPitch());
+        return plugin.getWorldManager().getLobbySpawnLocation(room.getRoomId(), room.getGameMode());
+    }
+
+    private Location getWorldSelectionSafeLocation(World world, Location viewSource) {
+        if (world == null) {
+            return null;
         }
+
+        Location spawn = world.getSpawnLocation().clone();
+        int x = spawn.getBlockX();
+        int z = spawn.getBlockZ();
+        int minY = world.getMinHeight() + 2;
+        int maxY = world.getMaxHeight() - 3;
+        int baseY = Math.max(minY, Math.min(maxY, spawn.getBlockY()));
+        for (int offset = 0; offset <= 16; offset++) {
+            int[] candidates = offset == 0 ? new int[]{baseY} : new int[]{baseY + offset, baseY - offset};
+            for (int candidateY : candidates) {
+                if (candidateY < minY || candidateY > maxY || !isWorldSelectionStandingLocation(world, x, candidateY, z)) {
+                    continue;
+                }
+                spawn.setX(x + 0.5D);
+                spawn.setY(candidateY);
+                spawn.setZ(z + 0.5D);
+                applyWorldSelectionView(spawn, viewSource);
+                return spawn;
+            }
+        }
+
+        // 正常世界有地形，虚空/未加载地图则使用高于世界下限的悬空安全点，选择阶段本来就允许飞行。
+        spawn.setX(x + 0.5D);
+        spawn.setY(Math.max(world.getMinHeight() + 8.0D,
+                Math.min(world.getMaxHeight() - 3.0D, spawn.getY())));
+        spawn.setZ(z + 0.5D);
+        applyWorldSelectionView(spawn, viewSource);
         return spawn;
     }
 
+    private boolean isRoomLobbyWorld(GameRoom room, World world) {
+        if (room == null || world == null) {
+            return false;
+        }
+        World lobbyWorld = plugin.getWorldManager().getLobbyWorld(room.getRoomId());
+        return lobbyWorld != null && lobbyWorld.equals(world);
+    }
+
+    private boolean isRoomLobbyVoidProtectionActive(GameRoom room) {
+        if (room == null) {
+            return false;
+        }
+        return room.getState() == RoomState.WAITING
+                || room.getState() == RoomState.STARTING
+                || room.getState() == RoomState.SELECTING
+                || (room.getState() == RoomState.PLAYING && !room.isGameActuallyStarted());
+    }
+
+    private boolean isNearWorldVoid(Location location, Location spawnLocation) {
+        if (location == null || spawnLocation == null || spawnLocation.getWorld() == null
+                || location.getWorld() == null || !spawnLocation.getWorld().equals(location.getWorld())) {
+            return false;
+        }
+        return location.getY() <= -64.0D;
+    }
+
+    private boolean shouldReturnRoomLobbyPlayer(GameRoom room, Location to) {
+        if (room == null || to == null || !isRoomLobbyWorld(room, to.getWorld())) {
+            return false;
+        }
+        Location lobbySpawn = getRoomLobbySafeLocation(room, null);
+        return lobbySpawn != null && isNearWorldVoid(to, lobbySpawn);
+    }
+
+    private void returnRoomLobbyPlayer(Player player, GameRoom room, Location viewSource, boolean feedback) {
+        if (player == null || room == null || !roomLobbyVoidRecoveries.add(player.getUniqueId())) {
+            return;
+        }
+        Location safe = getRoomLobbySafeLocation(room, viewSource);
+        if (safe == null || safe.getWorld() == null) {
+            roomLobbyVoidRecoveries.remove(player.getUniqueId());
+            return;
+        }
+        player.setFallDistance(0.0F);
+        player.setNoDamageTicks(Math.max(player.getNoDamageTicks(), 20));
+        player.setVelocity(new Vector(0.0D, 0.0D, 0.0D));
+        detachPlayerFromLobbyVehicle(player);
+        player.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        if (feedback) {
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.28f);
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.34f, 1.72f);
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> verifyRoomLobbyRecovery(player, room), 1L);
+    }
+
+    private void verifyRoomLobbyRecovery(Player player, GameRoom room) {
+        UUID uuid = player == null ? null : player.getUniqueId();
+        try {
+            if (player == null || !player.isOnline() || room == null
+                    || plugin.getRoomManager().getPlayerRoom(player.getUniqueId()) != room
+                    || !isRoomLobbyVoidProtectionActive(room)
+                    || !isRoomLobbyWorld(room, player.getWorld())) {
+                return;
+            }
+            Location safe = getRoomLobbySafeLocation(room, null);
+            if (safe == null || safe.getWorld() == null) {
+                return;
+            }
+            if (!isRoomLobbyWorld(room, player.getWorld())
+                    || shouldReturnRoomLobbyPlayer(room, player.getLocation())) {
+                player.setFallDistance(0.0F);
+                player.setVelocity(new Vector(0.0D, 0.0D, 0.0D));
+                detachPlayerFromLobbyVehicle(player);
+                player.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN);
+            }
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (!player.isOnline() || plugin.getRoomManager().getPlayerRoom(player.getUniqueId()) != room
+                        || !isRoomLobbyVoidProtectionActive(room)) {
+                    return;
+                }
+                Location retry = getRoomLobbySafeLocation(room, null);
+                if (retry != null && retry.getWorld() != null
+                        && (!isRoomLobbyWorld(room, player.getWorld())
+                        || shouldReturnRoomLobbyPlayer(room, player.getLocation()))) {
+                    player.setFallDistance(0.0F);
+                    player.setVelocity(new Vector(0.0D, 0.0D, 0.0D));
+                    detachPlayerFromLobbyVehicle(player);
+                    player.teleport(retry, PlayerTeleportEvent.TeleportCause.PLUGIN);
+                }
+            }, 2L);
+        } finally {
+            if (uuid != null) {
+                Bukkit.getScheduler().runTaskLater(plugin, () -> roomLobbyVoidRecoveries.remove(uuid), 4L);
+            }
+        }
+    }
+
+    private void detachPlayerFromLobbyVehicle(Player player) {
+        if (player == null) {
+            return;
+        }
+        if (player.isInsideVehicle()) {
+            player.leaveVehicle();
+        }
+        player.eject();
+    }
+
+    private boolean isWorldSelectionStandingLocation(World world, int x, int y, int z) {
+        if (world == null || y <= world.getMinHeight() + 1 || y + 1 >= world.getMaxHeight()) {
+            return false;
+        }
+        Material ground = world.getBlockAt(x, y - 1, z).getType();
+        return ground.isSolid()
+                && ground != Material.WATER
+                && ground != Material.LAVA
+                && world.getBlockAt(x, y, z).isPassable()
+                && world.getBlockAt(x, y + 1, z).isPassable();
+    }
+
+    private void applyWorldSelectionView(Location target, Location viewSource) {
+        if (target == null || viewSource == null) {
+            return;
+        }
+        target.setYaw(viewSource.getYaw());
+        target.setPitch(viewSource.getPitch());
+    }
+
+    private boolean isWorldSelectionPrey(Player player, GameRoom room) {
+        return player != null
+                && room != null
+                && room.getState() == RoomState.SELECTING
+                && room.isPrey(player.getUniqueId());
+    }
+
+    private boolean shouldReturnWorldSelectionPrey(GameRoom room, Player player, Location to) {
+        World world = getWorldSelectionPreyWorld(room, player, to);
+        return world != null && shouldReturnWorldSelectionPrey(room, to, world.getSpawnLocation());
+    }
+
+    private boolean recoverWorldSelectionPreyFromVoid(Player player, GameRoom room, Location viewSource, boolean feedback) {
+        if (!isWorldSelectionPrey(player, room)) {
+            return false;
+        }
+        Location safe = getWorldSelectionPreySafeLocation(room, player, viewSource);
+        if (safe == null || safe.getWorld() == null) {
+            return false;
+        }
+        player.setFallDistance(0.0F);
+        player.setNoDamageTicks(Math.max(player.getNoDamageTicks(), 20));
+        player.setVelocity(new Vector(0.0D, 0.0D, 0.0D));
+        player.teleport(safe);
+        restoreWorldSelectionPreyControls(player, room);
+        if (feedback) {
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.28f);
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.34f, 1.72f);
+        }
+
+        // Multiverse/跨服传送可能在同一 tick 重新写入位置，再补一次只针对选择阶段的安全校正。
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            GameRoom currentRoom = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+            if (!player.isOnline() || !isWorldSelectionPrey(player, currentRoom)
+                    || !shouldReturnWorldSelectionPrey(currentRoom, player, player.getLocation())) {
+                return;
+            }
+            Location retry = getWorldSelectionPreySafeLocation(currentRoom, player, player.getLocation());
+            if (retry != null && retry.getWorld() != null) {
+                player.setFallDistance(0.0F);
+                player.setVelocity(new Vector(0.0D, 0.0D, 0.0D));
+                player.teleport(retry);
+                restoreWorldSelectionPreyControls(player, currentRoom);
+            }
+        }, 1L);
+        return true;
+    }
+
     private void returnWorldSelectionPrey(Player player, GameRoom room, Location viewSource, boolean feedback) {
-        Location safe = getWorldSelectionPreySafeLocation(room, viewSource);
+        Location safe = getWorldSelectionPreySafeLocation(room, player, viewSource);
         if (safe == null || safe.getWorld() == null) {
             return;
         }
@@ -131,11 +350,14 @@ public class PlayerListener implements Listener {
         if (room == null || to == null || spawnLoc == null || spawnLoc.getWorld() == null || to.getWorld() == null) {
             return false;
         }
+        // 选择阶段还在房间大厅时，由大厅虚空保护负责回大厅出生点，不能误传到游戏世界。
+        if (room != null && isRoomLobbyWorld(room, to.getWorld())) {
+            return false;
+        }
         if (!to.getWorld().equals(spawnLoc.getWorld())) {
             return true;
         }
-        World world = spawnLoc.getWorld();
-        return to.getY() < spawnLoc.getY() - 1.15D || to.getY() <= world.getMinHeight() + 6.0D;
+        return isNearWorldVoid(to, spawnLoc);
     }
 
     private boolean isSwapHoldingPlayer(GameRoom room, Player player) {
@@ -272,6 +494,23 @@ public class PlayerListener implements Listener {
         event.setCancelled(true);
         event.setUseInteractedBlock(Event.Result.DENY);
         event.setUseItemInHand(Event.Result.DENY);
+    }
+
+    private boolean allowEndFlashStartupPearlUse(PlayerInteractEvent event, Player player, GameRoom room) {
+        if (!plugin.getFlashModeManager().isEndFlashStartupPhase(player, room)
+                || event.getItem() == null
+                || event.getItem().getType() != Material.ENDER_PEARL
+                || (event.getAction() != Action.RIGHT_CLICK_AIR
+                && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
+            return false;
+        }
+
+        event.setCancelled(false);
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+            event.setUseInteractedBlock(Event.Result.DENY);
+        }
+        event.setUseItemInHand(Event.Result.ALLOW);
+        return true;
     }
 
     private boolean shouldCancelProtectedEntityInteract(Player player, Entity entity) {
@@ -487,6 +726,7 @@ public class PlayerListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        resumeAdvancementMessages(player.getUniqueId());
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline() && plugin.getFlashModeManager() != null) {
                 plugin.getFlashModeManager().syncFlashItemLore(player);
@@ -573,6 +813,7 @@ public class PlayerListener implements Listener {
         UUID playerId = player.getUniqueId();
         cancelEndFlashHunterRespawnCountdown(playerId);
         InvitePlayerMenu.cancelSearchInput(plugin, player, false);
+        LeaderboardDetailMenu.cancelSearchInput(plugin, player, false);
         EndFlashKitDetailMenu.cancelRenameInput(plugin, player, false);
         EndFlashKitDetailMenu.cancelGuideInput(plugin, player, false);
 
@@ -631,6 +872,9 @@ public class PlayerListener implements Listener {
             return;
         }
         if (isFlashPreGameInteractionLocked(player, room)) {
+            if (allowEndFlashStartupPearlUse(event, player, room)) {
+                return;
+            }
             ItemStack preGameItem = event.getItem();
             int preGameModelData = 0;
             if (preGameItem != null && preGameItem.hasItemMeta()
@@ -1302,7 +1546,12 @@ public class PlayerListener implements Listener {
         if (room == null) return;
 
         if (room.getState() == RoomState.SELECTING && room.isPrey(player.getUniqueId())) {
-            Location safe = getWorldSelectionPreySafeLocation(room, event.getRespawnLocation());
+            Location respawnSource = event.getRespawnLocation();
+            boolean respawnInRoomLobby = isRoomLobbyWorld(room, player.getWorld())
+                    || isRoomLobbyWorld(room, respawnSource == null ? null : respawnSource.getWorld());
+            Location safe = respawnInRoomLobby
+                    ? getRoomLobbySafeLocation(room, respawnSource)
+                    : getWorldSelectionPreySafeLocation(room, player, respawnSource);
             if (safe != null && safe.getWorld() != null) {
                 event.setRespawnLocation(safe);
             }
@@ -2005,6 +2254,13 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onAsyncChatPlayer(AsyncChatEvent event) {
         Player player = event.getPlayer();
+        if (LeaderboardDetailMenu.isWaitingSearchInput(player.getUniqueId())) {
+            event.setCancelled(true);
+            String plainContent = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message());
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> LeaderboardDetailMenu.handleSearchChatInput(plugin, player, plainContent));
+            return;
+        }
         if (InvitePlayerMenu.isWaitingSearchInput(player.getUniqueId())) {
             event.setCancelled(true);
             String plainContent = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message());
@@ -2650,7 +2906,7 @@ public class PlayerListener implements Listener {
         return shouldLockWorldInteraction(attacker, world, room);
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     public void onPlayerVoidDamage(org.bukkit.event.entity.EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
 
@@ -2659,6 +2915,12 @@ public class PlayerListener implements Listener {
 
         GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         if (room == null) return;
+
+        if (isRoomLobbyVoidProtectionActive(room) && isRoomLobbyWorld(room, player.getWorld())) {
+            event.setCancelled(true);
+            returnRoomLobbyPlayer(player, room, player.getLocation(), true);
+            return;
+        }
 
         if (room.getGameMode().isStandaloneMiniGame() && room.getState() == RoomState.PLAYING) {
             event.setCancelled(true);
@@ -2683,22 +2945,14 @@ public class PlayerListener implements Listener {
 
         if (room.getState() == RoomState.SELECTING && room.isPrey(player.getUniqueId())) {
             event.setCancelled(true);
-            returnWorldSelectionPrey(player, room, player.getLocation(), true);
+            recoverWorldSelectionPreyFromVoid(player, room, player.getLocation(), true);
             return;
         }
 
         // 在大厅中掉入虚空时，传送回出生点
         if (room.getState() == RoomState.WAITING || room.getState() == RoomState.STARTING) {
             event.setCancelled(true);
-
-            // 获取大厅世界
-            org.bukkit.World lobbyWorld = plugin.getWorldManager().getLobbyWorld(room.getRoomId());
-            if (lobbyWorld != null) {
-                // 重置摔落距离，防止摔伤
-                player.setFallDistance(0);
-                player.teleport(lobbyWorld.getSpawnLocation());
-                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
-            }
+            returnRoomLobbyPlayer(player, room, player.getLocation(), true);
         }
     }
 
@@ -2764,6 +3018,36 @@ public class PlayerListener implements Listener {
         if (room.getState() == RoomState.SELECTING && room.isPrey(player.getUniqueId())) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    public void onRoomLobbyVoidMove(PlayerMoveEvent event) {
+        Player player = event.getPlayer();
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        Location to = event.getTo();
+        if (!isRoomLobbyVoidProtectionActive(room)
+                || !isRoomLobbyWorld(room, player.getWorld())
+                || !shouldReturnRoomLobbyPlayer(room, to)) {
+            return;
+        }
+
+        event.setCancelled(true);
+        returnRoomLobbyPlayer(player, room, to, true);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    public void onWorldSelectionPreyVoidMove(PlayerMoveEvent event) {
+        Player player = event.getPlayer();
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (!isWorldSelectionPrey(player, room) || event.getTo() == null
+                || !shouldReturnWorldSelectionPrey(room, player, event.getTo())) {
+            return;
+        }
+
+        event.setCancelled(true);
+        // 取消移动只会阻止本次位置同步，不能保证已经接近虚空的玩家脱离危险；
+        // 必须显式传送到安全点，才能覆盖 Leaf、反作弊和跨世界传送的事件顺序。
+        recoverWorldSelectionPreyFromVoid(player, room, event.getTo(), true);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -2843,27 +3127,21 @@ public class PlayerListener implements Listener {
             // 只限制猎物的移动
             if (!room.isPrey(player.getUniqueId())) return;
 
+            // 猎物尚未被传送出等待大厅时，只由大厅虚空保护处理，不要提前传到游戏世界。
+            if (isRoomLobbyWorld(room, player.getWorld())) return;
+
             // 获取移动前后的位置
             org.bukkit.Location from = event.getFrom();
 
-            // 获取世界出生点（世界可能还在生成中）
-            if (room.getGameWorld() == null) return;
-            org.bukkit.Location spawnLoc = room.getGameWorld().getSpawnLocation();
+            // 获取世界出生点；世界尚未完成绑定时使用玩家当前世界，避免放弃虚空保护。
+            World selectionWorld = getWorldSelectionPreyWorld(room, player, to);
+            if (selectionWorld == null) return;
+            org.bukkit.Location spawnLoc = selectionWorld.getSpawnLocation();
 
-            if (shouldReturnWorldSelectionPrey(room, to, spawnLoc)) {
-                org.bukkit.Location safe = getWorldSelectionPreySafeLocation(room, to);
-                if (safe != null) {
-                    player.setFallDistance(0.0F);
-                    player.setVelocity(new Vector(0.0D, 0.0D, 0.0D));
-                    if (player.getWorld().equals(safe.getWorld())) {
-                        event.setTo(safe);
-                    } else {
-                        player.teleport(safe);
-                    }
-                    player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.58f, 1.32f);
-                    player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.26f, 1.88f);
-                    return;
-                }
+            if (shouldReturnWorldSelectionPrey(room, player, to)) {
+                event.setCancelled(true);
+                recoverWorldSelectionPreyFromVoid(player, room, to, true);
+                return;
             }
 
             // 计算XZ距离
@@ -2935,6 +3213,7 @@ public class PlayerListener implements Listener {
     public void onPlayerToggleSneak(PlayerToggleSneakEvent event) {
         if (event.isSneaking()) {
             InvitePlayerMenu.cancelSearchInput(plugin, event.getPlayer(), true);
+            LeaderboardDetailMenu.cancelSearchInput(plugin, event.getPlayer(), true);
             EndFlashKitDetailMenu.cancelRenameInput(plugin, event.getPlayer(), true);
             EndFlashKitDetailMenu.cancelGuideInput(plugin, event.getPlayer(), true);
         }

@@ -449,9 +449,9 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
         title: '终章命令',
         html: `
           <table class="wikitable"><thead><tr><th>命令</th><th>说明</th></tr></thead><tbody>
-            <tr><td><code>/ec</code></td><td>终章正式开始后，玩家距离同世界猎物 <b>100~170 格</b> 时可以打开自己的末影箱；记分板会提示这个短命令。</td></tr>
-        <tr><td><code>/enderchest</code></td><td>终章末影箱完整命令，效果和 <code>/ec</code> 一样。</td></tr>
-        <tr><td><code>/gamefunxiao endflashender</code></td><td>旧入口仍可用，同样打开终章末影箱。</td></tr>
+            <tr><td><code>/ec</code></td><td>终章准备阶段可直接打开自己的末影箱；正式开始后，玩家距离同世界猎物 <b>100~170 格</b> 时才可以打开，记分板会提示这个短命令。</td></tr>
+        <tr><td><code>/enderchest</code></td><td>终章末影箱完整命令，准备阶段直接可用，正式开始后和 <code>/ec</code> 一样走距离限制。</td></tr>
+        <tr><td><code>/gamefunxiao endflashender</code></td><td>旧入口仍可用，同样打开终章末影箱；不代表普通闪光可以使用末影箱命令。</td></tr>
             <tr><td><code>/gamefunxiao endflashcompass</code></td><td>终章中指南针丢失时补发；猎人拿追踪指南针，双/三猎物拿猎物队友指南针。</td></tr>
           </tbody></table>
         `
@@ -889,7 +889,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
         title: '剑和斧头强化',
         html: `
           <table class="wikitable"><thead><tr><th>斧头</th><th>材料</th><th>伤害</th><th>额外冷却</th></tr></thead><tbody>
-            <tr><td>木斧</td><td>木头、木板、菌柄等木质材料</td><td>+10%</td><td>+30%</td></tr>
+            <tr><td>木斧</td><td>原木、木头、菌柄等木质材料（不含木板）</td><td>+10%</td><td>+30%</td></tr>
             <tr><td>石斧</td><td>圆石</td><td>+15%</td><td>+30%</td></tr>
             <tr><td>铜斧</td><td>铜块</td><td>+10%</td><td>+30%</td></tr>
             <tr><td>铁斧</td><td>铁块</td><td>+30%</td><td>+80%</td></tr>
@@ -1305,9 +1305,9 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
         title: '驯服方式',
         html: `
           <table class="wikitable"><thead><tr><th>生物</th><th>物品</th><th>正常 / FlashSMP</th><th>简单</th><th>驯服后</th></tr></thead><tbody>
-            <tr><td>小白</td><td>箭</td><td>20%</td><td>25%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 4 格左右。</td></tr>
-            <tr><td>末影人</td><td>黑曜石</td><td>15%</td><td>45%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 6 格左右，并继承末影人传送特性。</td></tr>
-            <tr><td>僵尸</td><td>牛排</td><td>20%</td><td>30%</td><td>驯服成功后帮主人打架；再次右键可以骑乘。</td></tr>
+            <tr><td>小白</td><td>箭</td><td>20%</td><td>45%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 4 格左右。</td></tr>
+            <tr><td>末影人</td><td>黑曜石</td><td>15%</td><td>65%</td><td>驯服成功后不会自动骑乘；再次右键才会坐到头上，会跟随主人 6 格左右，并继承末影人传送特性。</td></tr>
+            <tr><td>僵尸</td><td>牛排</td><td>20%</td><td>50%</td><td>驯服成功后帮主人打架；再次右键可以骑乘。</td></tr>
             <tr><td>狼等原版已驯服生物</td><td>主人右键交互</td><td>已有主人</td><td>已有主人</td><td>会接入闪光宠物强化，可以喂金苹果和剑。</td></tr>
           </tbody></table>
         `
@@ -1466,7 +1466,7 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
             <li>1 张纸 + 3 根线，可以合成羽笔。原物品是 paper，item_model 是 feather。</li>
             <li>1 根木棍 + 1 个羽笔，可以合成画笔。原物品是 paper，item_model 是 brush。</li>
             <li>画笔打上附魔改装后会变成魔法画笔，并且不可堆叠。</li>
-            <li>闪光模式里可堆叠的合成产物会变成双倍，不可堆叠的特殊物品不会强行双倍。</li>
+            <li>闪光模式里可堆叠的合成产物会变成双倍，不可堆叠的特殊物品不会强行双倍；终章准备阶段同样吃闪光双倍合成，Shift 批量合成也会按一次性结果结算。</li>
             <li>下界合金和下界合金升级模板默认不会吃闪光双倍；猎物使用下界合金碎片合成下界合金锭时，可以额外触发最多 3 次双倍。</li>
             <li>铁粒 ↔ 铁锭 ↔ 铁块这类可反复拆合的循环配方，只允许少量双倍次数，之后会回到原版一倍，防止刷资源。</li>
             <li>Shift + 左键批量拿取合成结果时也会触发双倍，但会一次性计算产出和消耗，避免批量合成拉高 MSPT/TPS。</li>
@@ -3691,12 +3691,3 @@ window.addEventListener('hashchange', () => {
   renderPage();
   setMobileSidebar(false);
 });
-
-
-
-
-
-
-
-
-

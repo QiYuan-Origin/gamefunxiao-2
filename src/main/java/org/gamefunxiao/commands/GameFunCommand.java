@@ -135,7 +135,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         entries.add("§e/gamefunxiao leave §7- §f离开当前房间");
         entries.add("§e/gamefunxiao rejoin §7- §f重新加入游戏（猎人断线后使用）");
         entries.add("§e/gamefunxiao endflashkit list §7- §f查看终章闪光 Kit");
-        entries.add("§e/ec §7- §f终章中距离猎物100~170格打开末影箱");
+        entries.add("§e/ec §7- §f终章准备阶段直接打开，正式开始后需距离猎物100~170格");
         entries.add("§e/enderchest §7- §f终章末影箱完整命令");
         entries.add("§e/gamefunxiao endflashender §7- §f同样可以打开终章末影箱");
         entries.add("§e/gamefunxiao endflashcompass §7- §f终章中重新获取指南针");
@@ -938,13 +938,19 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             return;
         }
         var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
-        if (room == null || room.getGameMode() != GameMode.END_FLASH || room.getState() != org.gamefunxiao.game.RoomState.PLAYING
-                || plugin.getFlashModeManager().isEndFlashStartupPhase(player, room)
-                || !room.isGameActuallyStarted()) {
-            player.sendMessage(plugin.getConfigManager().getHunterGamePrefix() + "§x§F§F§8§8§8§8⚠ §c只有终章 · 闪光正式开始后才能使用。");
+        if (room == null || room.getGameMode() != GameMode.END_FLASH
+                || room.getState() != org.gamefunxiao.game.RoomState.PLAYING) {
+            player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§F§F§8§8§8§8⚠ §c只有终章 · 闪光中才能使用末影箱。");
             return;
         }
-        if (!room.isPrey(player.getUniqueId())) {
+        boolean startupPhase = plugin.getFlashModeManager().isEndFlashStartupPhase(player, room);
+        if (!startupPhase && !room.isGameActuallyStarted()) {
+            player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§F§F§8§8§8§8⚠ §c终章尚未进入准备阶段，请稍后再使用。");
+            return;
+        }
+        if (!startupPhase && !room.isPrey(player.getUniqueId())) {
             double distance = nearestPreyDistance(room, player);
             if (distance < 100.0D || distance > 170.0D) {
                 player.sendMessage(plugin.getConfigManager().getHunterGamePrefix()

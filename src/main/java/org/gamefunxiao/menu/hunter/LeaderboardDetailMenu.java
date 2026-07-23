@@ -1,11 +1,15 @@
 package org.gamefunxiao.menu.hunter;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.gamefunxiao.GameFunXiao;
 import org.gamefunxiao.data.PlayerData;
 import org.gamefunxiao.game.GameMode;
@@ -19,13 +23,16 @@ import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class LeaderboardDetailMenu extends BaseMenu {
 
     private static final int ITEMS_PER_PAGE = 21;
+    private static final Map<UUID, LeaderboardDetailMenu> WAITING_SEARCH_INPUTS = new ConcurrentHashMap<>();
     private static final int[] DATA_SLOTS = {
             10, 11, 12, 13, 14, 15, 16,
             19, 20, 21, 22, 23, 24, 25,
@@ -40,6 +47,7 @@ public class LeaderboardDetailMenu extends BaseMenu {
     private String timeRange = "total";
     private String roleType = "all";
     private String fastestModeId = "all";
+    private String searchKeyword = "";
     private int page = 0;
 
     public LeaderboardDetailMenu(GameFunXiao plugin, Player player, String type) {
@@ -130,6 +138,7 @@ public class LeaderboardDetailMenu extends BaseMenu {
         }
 
         inventory.setItem(45, createBackButton());
+        inventory.setItem(47, createSearchButton());
         inventory.setItem(49, createInfoItem());
     }
 
@@ -228,21 +237,38 @@ public class LeaderboardDetailMenu extends BaseMenu {
     }
 
     private void displayLeaderboardData() {
-        List<PlayerData> data = getLeaderboardData();
+        List<PlayerData> allData = getUnfilteredLeaderboardData();
+        List<PlayerData> data = filterLeaderboardData(allData);
         int startIndex = page * ITEMS_PER_PAGE;
 
         for (int i = 0; i < DATA_SLOTS.length && startIndex + i < data.size(); i++) {
-            inventory.setItem(DATA_SLOTS[i], createPlayerHead(data.get(startIndex + i), startIndex + i + 1));
+            PlayerData entry = data.get(startIndex + i);
+            int actualRank = allData.indexOf(entry) + 1;
+            inventory.setItem(DATA_SLOTS[i], createPlayerHead(entry, Math.max(1, actualRank)));
         }
 
         if (data.isEmpty()) {
             inventory.setItem(22, createItem(Material.STRUCTURE_VOID,
                     "   §8[§7暂无数据§8]",
                     "§8· · · · · · · · · · · · · ·",
-                    "§f- §c当前条件下暂无数据",
-                    "§f- §e去开几把再回来看看吧",
+                    searchKeyword.isBlank()
+                            ? "§f- §c当前条件下暂无数据"
+                            : "§f- §c没有找到名称包含 §e" + searchKeyword + " §c的玩家",
+                    searchKeyword.isBlank()
+                            ? "§f- §e去开几把再回来看看吧"
+                            : "§f- §7可以清空关键字后显示全部记录",
                     "§8· · · · · · · · · · · · · ·"));
         }
+    }
+
+    private ItemStack createSearchButton() {
+        return createItem(Material.OAK_SIGN,
+                "   §8[§x§F§F§E§E§5§5⌕ §x§F§F§D§D§7§7搜§x§F§F§C§C§9§9索§x§F§F§B§B§B§B玩§x§F§F§A§A§D§D家§8]",
+                "§8· · · · · · · · · · · · · ·",
+                "§f- §e当前关键字: §b" + (searchKeyword.isBlank() ? "无" : searchKeyword),
+                "§f- §a点击后在聊天框输入玩家名",
+                "§f- §7支持输入部分名称进行筛选",
+                "§8· · · · · · · · · · · · · ·");
     }
 
     private ItemStack createPlayerHead(PlayerData data, int rank) {
@@ -319,6 +345,10 @@ public class LeaderboardDetailMenu extends BaseMenu {
     }
 
     private List<PlayerData> getLeaderboardData() {
+        return filterLeaderboardData(getUnfilteredLeaderboardData());
+    }
+
+    private List<PlayerData> getUnfilteredLeaderboardData() {
         return plugin.getLeaderboardManager().getLeaderboard(
                 type,
                 timeRange,
@@ -326,6 +356,17 @@ public class LeaderboardDetailMenu extends BaseMenu {
                 fastestModeId,
                 getModeIdFilter()
         );
+    }
+
+    private List<PlayerData> filterLeaderboardData(List<PlayerData> data) {
+        if (searchKeyword == null || searchKeyword.isBlank()) {
+            return data;
+        }
+        String normalized = searchKeyword.toLowerCase(Locale.ROOT);
+        return data.stream()
+                .filter(entry -> entry.getPlayerName() != null
+                        && entry.getPlayerName().toLowerCase(Locale.ROOT).contains(normalized))
+                .toList();
     }
 
     private Set<String> getModeIdFilter() {
@@ -505,7 +546,89 @@ public class LeaderboardDetailMenu extends BaseMenu {
                     new LeaderboardMenu(plugin, player, menuSection, modeFilter).open();
                 }
             }
+            case 47 -> {
+                playClickSound();
+                startSearchInput();
+            }
         }
+    }
+
+    private void startSearchInput() {
+        WAITING_SEARCH_INPUTS.put(player.getUniqueId(), this);
+        player.closeInventory();
+        applyInputState(player);
+        player.sendTitle("§x§8§8§D§D§F§F⌕ 请输入玩家名", "§7输入 §ecancel §7或蹲下取消，输入 §e清空 §7显示全部", 5, 80, 10);
+        player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.leaderboard_search_prompt"));
+        player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.62f, 1.52f);
+
+        UUID uuid = player.getUniqueId();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            LeaderboardDetailMenu waiting = WAITING_SEARCH_INPUTS.get(uuid);
+            Player online = Bukkit.getPlayer(uuid);
+            if (waiting != this || online == null || !online.isOnline()) {
+                return;
+            }
+            WAITING_SEARCH_INPUTS.remove(uuid);
+            clearInputState(online);
+            online.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.leaderboard_search_timeout"));
+            online.playSound(online.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.76f, 0.72f);
+            open();
+        }, 30L * 20L);
+    }
+
+    public static boolean isWaitingSearchInput(UUID uuid) {
+        return uuid != null && WAITING_SEARCH_INPUTS.containsKey(uuid);
+    }
+
+    public static boolean handleSearchChatInput(GameFunXiao plugin, Player player, String input) {
+        LeaderboardDetailMenu menu = WAITING_SEARCH_INPUTS.remove(player.getUniqueId());
+        if (menu == null) {
+            return false;
+        }
+        clearInputState(player);
+        String keyword = input == null ? "" : input.trim();
+        if (keyword.equalsIgnoreCase("cancel") || keyword.equalsIgnoreCase("取消")) {
+            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.leaderboard_search_cancelled"));
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.8f);
+            menu.open();
+            return true;
+        }
+        if (keyword.equalsIgnoreCase("clear") || keyword.equalsIgnoreCase("清空") || keyword.equalsIgnoreCase("全部")) {
+            keyword = "";
+        }
+        menu.searchKeyword = keyword;
+        menu.page = 0;
+        Map<String, String> placeholders = Map.of("keyword", keyword.isBlank() ? "无" : keyword);
+        player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix(
+                "game.leaderboard_search_set", placeholders));
+        player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.72f, 1.62f);
+        menu.open();
+        return true;
+    }
+
+    public static boolean cancelSearchInput(GameFunXiao plugin, Player player, boolean reopenMenu) {
+        LeaderboardDetailMenu menu = WAITING_SEARCH_INPUTS.remove(player.getUniqueId());
+        if (menu == null) {
+            return false;
+        }
+        clearInputState(player);
+        player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.leaderboard_search_cancelled"));
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.78f, 0.8f);
+        if (reopenMenu) {
+            menu.open();
+        }
+        return true;
+    }
+
+    private static void applyInputState(Player player) {
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 30 * 20, 6, false, false, false));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 30 * 20, 0, false, false, false));
+    }
+
+    private static void clearInputState(Player player) {
+        player.removePotionEffect(PotionEffectType.SLOWNESS);
+        player.removePotionEffect(PotionEffectType.DARKNESS);
+        player.resetTitle();
     }
 
     private void handleSwitchButton(InventoryClickEvent event) {
@@ -541,4 +664,3 @@ public class LeaderboardDetailMenu extends BaseMenu {
         setupItems();
     }
 }
-

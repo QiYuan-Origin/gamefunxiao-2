@@ -31,6 +31,16 @@ public class RoomManager {
         return mode != null && mode.isLegacyRemovedMode();
     }
 
+    private void resetRoomToWaiting(GameRoom room) {
+        if (room == null) {
+            return;
+        }
+        room.setState(RoomState.WAITING);
+        if (room.getGameMode().supportsFlashDifficultyVote()) {
+            room.resetFlashDifficultyVoteState();
+        }
+    }
+
 
     public enum InviteResult {
         SUCCESS,
@@ -664,7 +674,7 @@ public class RoomManager {
             // 倒计时中，如果人数不足2人，取消倒计时
             if (room.getPlayerCount() < getMinimumPlayersForMode(room.getGameMode())) {
                 plugin.getGameManager().cancelCountdown(room);
-                room.setState(RoomState.WAITING);
+                resetRoomToWaiting(room);
                 room.broadcast(getRoomMessageWithPrefix(room, "game.countdown_cancelled"));
             }
         } else if (currentState == RoomState.PLAYING) {
@@ -738,7 +748,7 @@ public class RoomManager {
         } else if (currentState == RoomState.SELECTING) {
             // 世界选择阶段，如果猎物退出，取消游戏
             if (wasPrey) {
-                room.setState(RoomState.WAITING);
+                resetRoomToWaiting(room);
                 room.broadcast(getRoomMessageWithPrefix(room, "game.cancelled"));
                 // 传送所有玩家回大厅
                 for (UUID uuid : room.getAllPlayerUUIDs()) {
@@ -809,11 +819,11 @@ public class RoomManager {
         } else if (currentState == RoomState.STARTING) {
             if (room.getPlayerCount() < getMinimumPlayersForMode(room.getGameMode())) {
                 plugin.getGameManager().cancelCountdown(room);
-                room.setState(RoomState.WAITING);
+                resetRoomToWaiting(room);
                 room.broadcast(getRoomMessageWithPrefix(room, "game.countdown_cancelled"));
             }
         } else if (currentState == RoomState.SELECTING && wasPrey) {
-            room.setState(RoomState.WAITING);
+            resetRoomToWaiting(room);
             room.broadcast(getRoomMessageWithPrefix(room, "game.cancelled"));
         }
 
@@ -865,7 +875,7 @@ public class RoomManager {
         } else if (currentState == RoomState.STARTING) {
             if (room.getPlayerCount() < getMinimumPlayersForMode(room.getGameMode())) {
                 plugin.getGameManager().cancelCountdown(room);
-                room.setState(RoomState.WAITING);
+                resetRoomToWaiting(room);
                 room.broadcast(getRoomMessageWithPrefix(room, "game.countdown_cancelled"));
             }
         }
@@ -1006,7 +1016,12 @@ public class RoomManager {
         }
 
         // 传送玩家
-        Location spawnLoc = lobbyWorld.getSpawnLocation();
+        Location spawnLoc = plugin.getWorldManager().getLobbySpawnLocation(room.getRoomId(), room.getGameMode());
+        if (spawnLoc == null || spawnLoc.getWorld() == null) {
+            plugin.getLogger().severe("无法解析房间 " + room.getRoomId() + " 的等待大厅安全出生点");
+            player.sendMessage(getRoomMessageWithPrefix(room, "room.lobby_creation_failed"));
+            return;
+        }
         plugin.getLogger().info("传送玩家 " + player.getName() + " 到大厅世界 " + lobbyWorld.getName() +
                                " 坐标: " + spawnLoc.getBlockX() + ", " + spawnLoc.getBlockY() + ", " + spawnLoc.getBlockZ());
         clearRoleNameTag(player);
@@ -1719,6 +1734,12 @@ public class RoomManager {
         Set<NamespacedKey> recipeSnapshot = room.getPreviousRecipes(player.getUniqueId());
         if (recipeSnapshot != null && !recipeSnapshot.isEmpty()) {
             player.discoverRecipes(new ArrayList<>(recipeSnapshot));
+        }
+
+        if (plugin.getPlayerListener() != null) {
+            UUID playerId = player.getUniqueId();
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> plugin.getPlayerListener().resumeAdvancementMessages(playerId));
         }
     }
 

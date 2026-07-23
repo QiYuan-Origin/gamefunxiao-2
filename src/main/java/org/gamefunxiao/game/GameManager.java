@@ -344,7 +344,7 @@ public class GameManager {
             player.getInventory().setItem(4, forceStart);
         }
 
-        // 普通闪光和终章闪光第8格固定为难度投票；赛事明确不提供该投票。
+        // 普通闪光和终章闪光第7格为宣传、第8格为难度投票；赛事不提供投票。
         if (room.getGameMode().supportsFlashDifficultyVote()) {
             player.getInventory().setItem(6, createAdvertiseRoomItem("§f- §e右键发送宣传消息", "§f- §7冷却时间: 30秒"));
             player.getInventory().setItem(7, createFlashDifficultyVoteItem(room, player));
@@ -12135,7 +12135,7 @@ public class GameManager {
             case THUNDER_MARK -> {
                 world.spawnParticle(Particle.ELECTRIC_SPARK, center, 36, 0.45D, 0.5D, 0.45D, 0.08D);
                 world.spawnParticle(Particle.FLASH, center, 1,
-                        0.0D, 0.0D, 0.0D, 0.0D, Color.fromRGB(190, 225, 255));
+                        0.0D, 0.0D, 0.0D, 0.0D);
                 playKillEffectNearbySound(center, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.45f, 1.35f, 20.0D);
             }
             case BLOOD_BLOOM -> {
@@ -12161,7 +12161,7 @@ public class GameManager {
                 world.spawnParticle(Particle.DUST, center, 28, 0.36D, 0.24D, 0.36D,
                         new Particle.DustOptions(Color.fromRGB(255, 184, 52), 1.75f));
                 world.spawnParticle(Particle.FLASH, center, 1,
-                        0.0D, 0.0D, 0.0D, 0.0D, Color.fromRGB(255, 176, 72));
+                        0.0D, 0.0D, 0.0D, 0.0D);
                 playKillEffectNearbySound(center, Sound.ITEM_FIRECHARGE_USE, 0.82f, 1.28f, 18.0D);
             }
             case WITCH_CURSE -> {
@@ -12228,7 +12228,7 @@ public class GameManager {
                 if (tick > 100) {
                     world.playSound(center, Sound.ENTITY_GENERIC_EXPLODE, 0.8f, 0.7f);
                     world.spawnParticle(Particle.FLASH, center, 1,
-                            0.0D, 0.0D, 0.0D, 0.0D, Color.fromRGB(104, 72, 168));
+                            0.0D, 0.0D, 0.0D, 0.0D);
                     cancel();
                     return;
                 }
@@ -12562,4 +12562,3 @@ public class GameManager {
         }.runTaskTimer(plugin, 0L, 2L);
     }
 }
-

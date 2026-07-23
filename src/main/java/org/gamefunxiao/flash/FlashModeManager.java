@@ -453,6 +453,8 @@ public class FlashModeManager {
     private static final double TAME_SKELETON_CROSSBOW_ARROW_SPEED = 3.15D;
     private static final double TAME_SKELETON_CROSSBOW_FIREWORK_SPEED = 1.62D;
     private static final double TAME_SKELETON_CROSSBOW_MAX_RANGE_SQUARED = 64.0D * 64.0D;
+    private static final double TAME_SKELETON_MELEE_SWITCH_DISTANCE_SQUARED = 25.0D;
+    private static final double TAME_SKELETON_RANGED_SWITCH_DISTANCE_SQUARED = 36.0D;
     private static final long AXE_SHIELD_BREAK_MACE_COMBO_WINDOW_MS = 3200L;
     private static final float MACE_SMASH_MIN_FALL_DISTANCE = 1.50F;
     private static final double NORMAL_MACE_SMASH_MULTIPLIER = 1.25D;
@@ -1130,7 +1132,7 @@ public class FlashModeManager {
 
     /**
      * 终章玩家传送到末地后、正式 GO 前的准备阶段。
-     * 这个阶段允许原版工作台合成，但不能使用正式游戏能力或打开末影箱。
+     * 这个阶段允许原版工作台合成、末影珍珠和末影箱，但不能使用正式游戏能力。
      */
     public boolean isEndFlashStartupPhase(Player player, GameRoom room) {
         return player != null
@@ -2466,8 +2468,18 @@ public class FlashModeManager {
             player.setVelocity(velocity);
             player.setFallDistance(0.0F);
         }
-        player.setFoodLevel(Math.min(20, player.getFoodLevel() + Math.max(1, profile.nutrition())));
-        player.setSaturation(Math.min(20.0F, player.getSaturation() + Math.max(0.1F, profile.saturation())));
+        int requestedNutrition = Math.max(0, profile.nutrition());
+        int currentFoodLevel = Math.max(0, Math.min(20, player.getFoodLevel()));
+        int restoredFood = Math.min(requestedNutrition, 20 - currentFoodLevel);
+        if (restoredFood > 0) {
+            int updatedFoodLevel = currentFoodLevel + restoredFood;
+            float saturationGain = requestedNutrition <= 0
+                    ? 0.0F
+                    : Math.max(0.0F, profile.saturation()) * restoredFood / requestedNutrition;
+            player.setFoodLevel(updatedFoodLevel);
+            player.setSaturation(Math.min((float) updatedFoodLevel,
+                    player.getSaturation() + saturationGain));
+        }
         Location center = player.getLocation().add(0.0D, 1.0D, 0.0D);
         if (profile.particle().getDataType() == Float.class) {
             player.getWorld().spawnParticle(profile.particle(), center,
@@ -3172,7 +3184,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(18, "同路线削弱", "金苹果/附魔金苹果护甲", "攻击目标穿同路线护甲时自动计算。", "无", "无", "对应增伤削弱25%，路线对抗会影响收益。"));
         pages.add(guideBookQuickPage(19, "红石稳定器", "红石相关材料+剑/斧", "给武器做攻速微调。", "每把一次", "无", "攻击速度+10%，不会无限叠。"));
         pages.add(guideBookQuickPage(20, "剑材料强化", "对应材料块+对应剑", "铁砧强化剑攻速。", "消耗材料", "无", "攻速提高，伤害会按材料路线下降。"));
-        pages.add(guideBookQuickPage(21, "斧材料强化", "木斧可用任意木板/木质材料；其余斧使用对应材料", "背包内用材料右键斧头。", "消耗1个材料", "攻击冷却变长", "木板可稳定强化木斧；合金斧增伤最高，但冷却代价也最大。"));
+        pages.add(guideBookQuickPage(21, "斧材料强化", "木斧可用原木、木头、菌柄、竹块等木质材料（不含木板）；其余斧使用对应材料", "背包内用材料右键斧头。", "消耗1个材料", "攻击冷却变长", "木质材料可强化木斧；合金斧增伤最高，但冷却代价也最大。"));
         pages.add(guideBookQuickPage(22, "材料护层", "对应材料+盔甲", "铁砧给盔甲打材料护层。", "消耗材料", "无", "抵消强化斧额外伤害，通用受伤最多-10%。"));
         pages.add(guideBookQuickPage(23, "TNT护层", "TNT+盔甲", "铁砧叠爆炸免疫层。", "每层1个", "无", "每件最多40层，全身最高按80%减爆。"));
         pages.add(guideBookQuickPage(24, "羊毛羽毛鞋", "羊毛/羽毛+靴子", "分别打一层，凑齐后触发轻步。", "各1层", "无", "摔落伤害-40%，幽匿振动静音。"));
@@ -3207,10 +3219,10 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
         pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域；聚焦实体会直接灼烧。", "无", "聚焦触发", "实体蓄力时会被环形火粒子包裹，触发后受伤并燃烧。"));
-        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度25%/45%/30%。甜浆果可切换跟随/等待；只有接触水流才会结束等待并回到主人身边，实体推动不会触发。"));
+        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度45%/65%/50%。甜浆果可切换跟随/等待；只有接触水流才会结束等待并回到主人身边，实体推动不会触发。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
-        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽、盾牌进副手，其余任意物品进主手；旧物品返还。小白弩内闪光载荷会优先发射。"));
+        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；副手拿物品时会替换宠物副手；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽；主手盾牌或副手拿的普通物品进副手，其余主手物品进主手；旧物品返还。小白弩内闪光载荷会优先发射。"));
         pages.add(guideBookQuickPage(60, "乐魂速度挽具", "迅捷潜行书+乐魂挽具", "铁砧强化挽具。", "消耗附魔书", "无", "1/2/3级速度约×1.25/1.50/2.00。"));
         pages.add(guideBookQuickPage(61, "乐魂喂养", "金苹果或雪块+乐魂", "蹲下右键乐魂回血或加生命。", "消耗材料", "金苹果最多80次", "雪块可给失水乐魂直接回复10点。"));
         pages.add(guideBookQuickPage(62, "乐魂装备成长", "胸甲/雪块+乐魂", "胸甲继承护甲路线，雪块加速成长。", "消耗/装备", "成长最多减到约3分钟", "乐魂胸甲会继承TNT、末影、图腾等护层。"));
@@ -3510,7 +3522,8 @@ public class FlashModeManager {
             if (isEmpty(template) || template.getType() != Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE) {
                 return null;
             }
-            if (hasPersistentDouble(sword, materialSwordSpeedBonusKey)
+            if (isUpgradeApplied(sword)
+                    || hasPersistentDouble(sword, materialSwordSpeedBonusKey)
                     || hasPersistentDouble(sword, materialSwordDamagePenaltyKey)
                     || hasPersistentByte(sword, redstoneStabilizerKey)) {
                 return null;
@@ -5021,6 +5034,9 @@ public class FlashModeManager {
     }
 
     private ItemStack applyUpgradeMark(ItemStack base) {
+        if (isStableSword(base)) {
+            return null;
+        }
         ItemStack result = base.clone();
         ItemMeta meta = result.getItemMeta();
         if (meta == null) {
@@ -10114,9 +10130,11 @@ public class FlashModeManager {
 
         Vector velocity = arrow.getVelocity();
         if (velocity.lengthSquared() > 0.001D) {
-            double multiplier = (dragonBreath ? DRAGON_BREATH_ARROW_MULTIPLIER : 1.0D)
-                    * (crossbow && dragonBreath ? DRAGON_BREATH_CROSSBOW_SPEED_MULTIPLIER : 1.0D)
-                    * (amethyst ? AMETHYST_CROSSBOW_SPEED_MULTIPLIER : 1.0D);
+            // 龙息弩的 -35% 是相对于原版弩箭速度计算，不能把弓的 +25% 再叠加进来。
+            double multiplier = dragonBreath
+                    ? (crossbow ? DRAGON_BREATH_CROSSBOW_SPEED_MULTIPLIER : DRAGON_BREATH_ARROW_MULTIPLIER)
+                    : 1.0D;
+            multiplier *= amethyst ? AMETHYST_CROSSBOW_SPEED_MULTIPLIER : 1.0D;
             arrow.setVelocity(velocity.multiply(multiplier));
         }
         if (dragonBreath) {
@@ -13546,7 +13564,11 @@ public class FlashModeManager {
             boolean easyDifficulty = isEasyFlashDifficulty(room);
             for (LivingEntity living : world.getLivingEntities()) {
                 if (living instanceof AbstractSkeleton skeleton && isFlashTamed(skeleton)) {
-                    tickFlashTamedSkeletonCrossbow(skeleton, now);
+                    if (easyDifficulty) {
+                        disableEasyFlashTamedSkeletonCrossbow(skeleton);
+                    } else {
+                        tickFlashTamedSkeletonCrossbow(skeleton, now);
+                    }
                     continue;
                 }
                 if (easyDifficulty) {
@@ -13613,16 +13635,28 @@ public class FlashModeManager {
         }
         UUID skeletonId = skeleton.getUniqueId();
         EntityEquipment equipment = skeleton.getEquipment();
-        ItemStack crossbow = equipment.getItemInMainHand();
-        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW) {
-            flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
-            return;
-        }
-
         UUID ownerId = getFlashTameOwner(skeleton);
         Player owner = ownerId == null ? null : Bukkit.getPlayer(ownerId);
         LivingEntity target = getFlashTamedSkeletonLockedTarget(skeleton, owner);
         if (owner == null || target == null) {
+            return;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(ownerId);
+        if (isEasyFlashDifficulty(room)) {
+            disableEasyFlashTamedSkeletonCrossbow(skeleton);
+            return;
+        }
+        if (isFlashSmpTamedSkeleton(owner, room, skeleton)
+                && switchFlashSmpTamedSkeletonWeapon(skeleton, target)) {
+            if (skeleton.getEquipment().getItemInMainHand().getType() != Material.CROSSBOW) {
+                flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
+                return;
+            }
+        }
+
+        ItemStack crossbow = equipment.getItemInMainHand();
+        if (isEmpty(crossbow) || crossbow.getType() != Material.CROSSBOW) {
+            flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
             return;
         }
         maintainFlashTamedSkeletonCrossbowDistance(skeleton, target);
@@ -13706,6 +13740,98 @@ public class FlashModeManager {
             equipment.setItemInMainHand(spentCrossbow, true);
             equipment.setItemInMainHandDropChance(1.0F);
             flashTamedSkeletonRangedShotCooldowns.put(skeletonId, now + 250L);
+        }
+    }
+
+    private boolean isFlashSmpTamedSkeleton(Player owner, GameRoom room, AbstractSkeleton skeleton) {
+        return owner != null && room == null && skeleton instanceof Skeleton
+                && isStandaloneFlashContext(owner);
+    }
+
+    private boolean switchFlashSmpTamedSkeletonWeapon(AbstractSkeleton skeleton, LivingEntity target) {
+        if (!(skeleton instanceof Skeleton) || target == null || skeleton.getEquipment() == null
+                || !skeleton.getWorld().equals(target.getWorld())) {
+            return false;
+        }
+        EntityEquipment equipment = skeleton.getEquipment();
+        ItemStack mainHand = equipment.getItemInMainHand();
+        ItemStack offHand = equipment.getItemInOffHand();
+        double distanceSquared = skeleton.getLocation().distanceSquared(target.getLocation());
+
+        if (distanceSquared <= TAME_SKELETON_MELEE_SWITCH_DISTANCE_SQUARED
+                && mainHand.getType() == Material.CROSSBOW
+                && isFlashTamedMeleeWeapon(offHand)) {
+            equipment.setItemInMainHand(offHand.clone(), true);
+            equipment.setItemInOffHand(mainHand.clone(), true);
+            equipment.setItemInMainHandDropChance(1.0F);
+            equipment.setItemInOffHandDropChance(1.0F);
+            skeleton.getPathfinder().stopPathfinding();
+            skeleton.swingMainHand();
+            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_ARMOR_EQUIP_GENERIC, 0.72F, 1.28F);
+            return true;
+        }
+
+        if (distanceSquared >= TAME_SKELETON_RANGED_SWITCH_DISTANCE_SQUARED
+                && isFlashTamedMeleeWeapon(mainHand)
+                && offHand.getType() == Material.CROSSBOW) {
+            equipment.setItemInMainHand(offHand.clone(), true);
+            equipment.setItemInOffHand(mainHand.clone(), true);
+            equipment.setItemInMainHandDropChance(1.0F);
+            equipment.setItemInOffHandDropChance(1.0F);
+            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_LOADING_START, 0.72F, 1.18F);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isFlashTamedMeleeWeapon(ItemStack item) {
+        if (isEmpty(item)) {
+            return false;
+        }
+        Material type = item.getType();
+        return isSword(item) || isAxe(item) || isSpear(item)
+                || type == Material.MACE || type == Material.TRIDENT;
+    }
+
+    private void disableEasyFlashTamedSkeletonCrossbow(AbstractSkeleton skeleton) {
+        if (!(skeleton instanceof Skeleton) || skeleton.getEquipment() == null) {
+            return;
+        }
+        EntityEquipment equipment = skeleton.getEquipment();
+        Player owner = null;
+        UUID ownerId = getFlashTameOwner(skeleton);
+        if (ownerId != null) {
+            owner = Bukkit.getPlayer(ownerId);
+        }
+        boolean removed = false;
+        ItemStack mainHand = equipment.getItemInMainHand();
+        if (!isEmpty(mainHand) && mainHand.getType() == Material.CROSSBOW) {
+            equipment.setItemInMainHand(null, true);
+            returnFlashTamedCrossbow(owner, skeleton, mainHand);
+            removed = true;
+        }
+        ItemStack offHand = equipment.getItemInOffHand();
+        if (!isEmpty(offHand) && offHand.getType() == Material.CROSSBOW) {
+            equipment.setItemInOffHand(null, true);
+            returnFlashTamedCrossbow(owner, skeleton, offHand);
+            removed = true;
+        }
+        if (removed) {
+            flashTamedSkeletonRangedShotCooldowns.remove(skeleton.getUniqueId());
+        }
+    }
+
+    private void returnFlashTamedCrossbow(Player owner, AbstractSkeleton skeleton, ItemStack crossbow) {
+        if (isEmpty(crossbow)) {
+            return;
+        }
+        ItemStack returned = crossbow.clone();
+        returned.setAmount(1);
+        if (owner != null && owner.isOnline()) {
+            giveOrDrop(owner, returned);
+            owner.playSound(owner.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.62F, 1.18F);
+        } else if (skeleton != null && skeleton.getWorld() != null) {
+            skeleton.getWorld().dropItemNaturally(skeleton.getLocation(), returned);
         }
     }
 
@@ -13953,8 +14079,8 @@ public class FlashModeManager {
                 default -> new ItemStack(Material.ARROW);
             };
             arrowItem.setAmount(1);
-            double dragonSpeed = dragonBreath
-                    ? DRAGON_BREATH_ARROW_MULTIPLIER * DRAGON_BREATH_CROSSBOW_SPEED_MULTIPLIER : 1.0D;
+            // 龙息弩的 -35% 直接作用于原版弩箭速度；伤害仍保留龙息强化的 +25%。
+            double dragonSpeed = dragonBreath ? DRAGON_BREATH_CROSSBOW_SPEED_MULTIPLIER : 1.0D;
             Vector velocity = shotDirection.multiply(TAME_SKELETON_CROSSBOW_ARROW_SPEED * speedMultiplier * dragonSpeed);
             AbstractArrow arrow;
             if (arrowItem.getType() == Material.SPECTRAL_ARROW) {
@@ -17222,7 +17348,7 @@ public class FlashModeManager {
                 target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 45, 0, false, true, true));
                 target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 70, 2, false, true, true));
                 target.getWorld().spawnParticle(Particle.FLASH, target.getEyeLocation(), 1,
-                        0.0D, 0.0D, 0.0D, 0.0D, Color.WHITE);
+                        0.0D, 0.0D, 0.0D, 0.0D);
             }
             case DIAMOND_HOE -> {
                 target.addPotionEffect(new PotionEffect(PotionEffectType.LEVITATION, 18, 0, false, true, true));
@@ -18703,7 +18829,15 @@ public class FlashModeManager {
     }
 
     private int getUnstableMaceLevel(ItemStack item) {
-        return 0;
+        if (item == null || item.getType() != Material.MACE || !item.hasItemMeta()) {
+            return 0;
+        }
+        Integer level = item.getItemMeta().getPersistentDataContainer().get(
+                unstableMaceLevelKey, PersistentDataType.INTEGER);
+        if (level == null || level <= 0) {
+            return 0;
+        }
+        return Math.min(UNSTABLE_MACE_MAX_LEVEL, level);
     }
 
     private boolean isFeatherQuill(ItemStack item) {
@@ -18968,15 +19102,14 @@ public class FlashModeManager {
         if (material == null) {
             return false;
         }
-        if (Tag.ITEMS_PLANKS.isTagged(material)) {
-            return true;
-        }
         String name = material.name();
+        if (Tag.ITEMS_PLANKS.isTagged(material) || name.endsWith("_PLANKS")) {
+            return false;
+        }
         return name.endsWith("_LOG")
                 || name.endsWith("_WOOD")
                 || name.endsWith("_STEM")
                 || name.endsWith("_HYPHAE")
-                || name.endsWith("_PLANKS")
                 || name.equals("BAMBOO_BLOCK")
                 || name.equals("STRIPPED_BAMBOO_BLOCK");
     }
@@ -20946,6 +21079,13 @@ public class FlashModeManager {
         ItemStack item = player.getInventory().getItem(event.getHand());
         if (isEmpty(item)) {
             if (event.getHand() == EquipmentSlot.HAND && player.isSneaking() && isFlashTamedBy(living, player)) {
+                ItemStack offhandItem = player.getInventory().getItemInOffHand();
+                if (isDirectFlashTameOffhandEquipment(offhandItem)) {
+                    event.setCancelled(true);
+                    player.swingHand(event.getHand());
+                    equipFlashTamedPetItem(player, living, offhandItem, EquipmentSlot.OFF_HAND);
+                    return true;
+                }
                 event.setCancelled(true);
                 player.swingHand(event.getHand());
                 clearFlashTamedPetMainHand(player, living);
@@ -20986,6 +21126,22 @@ public class FlashModeManager {
             player.swingHand(event.getHand());
         }
 
+        // 甜浆果固定用于切换跟随状态，蹲下时也不能被误装进宠物手中。
+        if (isFlashTamedBy(living, player) && item.getType() == Material.SWEET_BERRIES) {
+            event.setCancelled(true);
+            player.swingHand(event.getHand());
+            toggleFlashTameFollowing(player, living);
+            return true;
+        }
+
+        if (player.isSneaking() && isFlashTamedBy(living, player)
+                && event.getHand() == EquipmentSlot.OFF_HAND) {
+            event.setCancelled(true);
+            player.swingHand(event.getHand());
+            equipFlashTamedPetItem(player, living, item, EquipmentSlot.OFF_HAND);
+            return true;
+        }
+
         if (event.getHand() == EquipmentSlot.HAND && player.isSneaking() && isFlashTamedBy(living, player)) {
             event.setCancelled(true);
             player.swingHand(event.getHand());
@@ -21011,7 +21167,7 @@ public class FlashModeManager {
             event.setCancelled(true);
             player.swingHand(event.getHand());
             consumeHandItem(player, event.getHand(), 1);
-            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.25D : 0.20D)) {
+            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.45D : 0.20D)) {
                 tameFlashMob(player, skeleton, 4.0D, true);
                 sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§F§F§F§4§8§D✦ §f箭矢驯服成功，§e小白§f现在听你的。§7再次右键可以坐上去。");
                 player.playSound(player.getLocation(), Sound.ENTITY_SKELETON_CONVERTED_TO_STRAY, 0.75f, 1.55f);
@@ -21026,7 +21182,7 @@ public class FlashModeManager {
             event.setCancelled(true);
             player.swingHand(event.getHand());
             consumeHandItem(player, event.getHand(), 1);
-            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.45D : 0.15D)) {
+            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.65D : 0.15D)) {
                 tameFlashMob(player, enderman, 6.0D, true);
                 sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§9§7§7§7§F§F✦ §5黑曜石驯服成功，§d末影人§5会跟着你。§7再次右键可以坐上去。");
                 player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.85f, 1.18f);
@@ -21041,7 +21197,7 @@ public class FlashModeManager {
             event.setCancelled(true);
             player.swingHand(event.getHand());
             consumeHandItem(player, event.getHand(), 1);
-            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.30D : 0.20D)) {
+            if (ThreadLocalRandom.current().nextDouble() < (isEasyFlashDifficulty(room) ? 0.50D : 0.20D)) {
                 tameFlashMob(player, zombie, 4.6D, true);
                 sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix() + "§x§A§6§F§F§8§8✦ §a牛排驯服成功，§2僵尸§a会帮你打架。§7再次右键可以坐上去。");
                 player.playSound(player.getLocation(), Sound.ENTITY_ZOMBIE_VILLAGER_CURE, 0.72f, 1.42f);
@@ -21054,13 +21210,6 @@ public class FlashModeManager {
 
         if (!isFlashTamedBy(living, player)) {
             return false;
-        }
-
-        if (item.getType() == Material.SWEET_BERRIES) {
-            event.setCancelled(true);
-            player.swingHand(event.getHand());
-            toggleFlashTameFollowing(player, living);
-            return true;
         }
 
         if (item.getType() == Material.GOLDEN_APPLE) {
@@ -21595,8 +21744,7 @@ public class FlashModeManager {
         }
 
         Location current = entity.getLocation();
-        boolean touchedWater = entity.isInWater() || current.getBlock().getType() == Material.WATER;
-        if (!touchedWater) {
+        if (!isTouchedByFlowingWater(entity)) {
             return;
         }
 
@@ -21614,6 +21762,34 @@ public class FlashModeManager {
         entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.32f);
         sendFlashMessage(owner, plugin.getConfigManager().getHunterGamePrefix()
                 + "§x§9§9§F§F§A§A✦ §a宠物已恢复跟随 §8| §7接触水流后§f回到了你身边。");
+    }
+
+    private boolean isTouchedByFlowingWater(LivingEntity entity) {
+        if (entity == null || entity.getWorld() == null) {
+            return false;
+        }
+        BoundingBox box = entity.getBoundingBox();
+        int minX = (int) Math.floor(box.getMinX() + 0.001D);
+        int maxX = (int) Math.floor(box.getMaxX() - 0.001D);
+        int minY = Math.max(entity.getWorld().getMinHeight(), (int) Math.floor(box.getMinY() + 0.001D));
+        int maxY = Math.min(entity.getWorld().getMaxHeight() - 1, (int) Math.floor(box.getMaxY() - 0.001D));
+        int minZ = (int) Math.floor(box.getMinZ() + 0.001D);
+        int maxZ = (int) Math.floor(box.getMaxZ() - 0.001D);
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    Block block = entity.getWorld().getBlockAt(x, y, z);
+                    if (block.getType() != Material.WATER
+                            || !(block.getBlockData() instanceof org.bukkit.block.data.Levelled water)) {
+                        continue;
+                    }
+                    if (water.getLevel() > 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private boolean increaseFlashTameHealth(Player player, LivingEntity entity) {
@@ -21648,6 +21824,38 @@ public class FlashModeManager {
             return EquipmentSlot.OFF_HAND;
         }
         return EquipmentSlot.HAND;
+    }
+
+    private EquipmentSlot getFlashTameEquipmentSlot(ItemStack item, EquipmentSlot sourceHand) {
+        if (isEmpty(item)) {
+            return null;
+        }
+        EquipmentSlot armorSlot = getArmorEquipmentSlot(item.getType());
+        if (armorSlot != null) {
+            return armorSlot;
+        }
+        if (item.getType() == Material.SHIELD) {
+            return EquipmentSlot.OFF_HAND;
+        }
+        if (sourceHand == EquipmentSlot.OFF_HAND && isDirectFlashTameOffhandEquipment(item)) {
+            return EquipmentSlot.OFF_HAND;
+        }
+        return EquipmentSlot.HAND;
+    }
+
+    private boolean isDirectFlashTameOffhandEquipment(ItemStack item) {
+        if (isEmpty(item)) {
+            return false;
+        }
+        Material type = item.getType();
+        if (type == Material.SWEET_BERRIES || type == Material.GOLDEN_APPLE
+                || type == Material.BOW || type == Material.ARROW
+                || type == Material.CROSSBOW
+                || type == Material.OBSIDIAN || type == Material.COOKED_BEEF
+                ) {
+            return false;
+        }
+        return true;
     }
 
     private boolean clearFlashTamedPetMainHand(Player player, LivingEntity pet) {
@@ -21691,7 +21899,15 @@ public class FlashModeManager {
         if (player == null || pet == null || isEmpty(source) || pet.getEquipment() == null) {
             return false;
         }
-        EquipmentSlot targetSlot = getFlashTameEquipmentSlot(source);
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (pet instanceof Skeleton && source.getType() == Material.CROSSBOW
+                && isEasyFlashDifficulty(room)) {
+            sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
+                    + "§x§F§F§B§B§6§6✦ §e简单难度的小白不会使用弩，弩没有被消耗。§f");
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.58F, 0.82F);
+            return false;
+        }
+        EquipmentSlot targetSlot = getFlashTameEquipmentSlot(source, sourceHand);
         if (targetSlot == null) {
             return false;
         }
@@ -21703,6 +21919,15 @@ public class FlashModeManager {
         equipment.setItem(targetSlot, equipped, true);
         equipment.setDropChance(targetSlot, 1.0F);
         pet.setCanPickupItems(false);
+        boolean flashSmpSkeleton = isFlashSmpTamedSkeleton(player, room, pet instanceof AbstractSkeleton skeleton ? skeleton : null);
+        if (flashSmpSkeleton && targetSlot == EquipmentSlot.HAND
+                && equipped.getType() == Material.CROSSBOW
+                && isFlashTamedMeleeWeapon(previous)
+                && isEmpty(equipment.getItemInOffHand())) {
+            equipment.setItemInOffHand(previous.clone(), true);
+            equipment.setItemInOffHandDropChance(1.0F);
+            previous = null;
+        }
         if (pet instanceof AbstractSkeleton skeleton && targetSlot == EquipmentSlot.HAND) {
             flashTamedSkeletonRangedShotCooldowns.remove(pet.getUniqueId());
             if (isFlashGlobalMobGear(equipment.getItemInOffHand())) {
@@ -21738,7 +21963,7 @@ public class FlashModeManager {
             pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_TRIDENT_THROW, 0.24F, 1.62F);
         } else if (targetSlot == EquipmentSlot.OFF_HAND) {
             sendFlashMessage(player, plugin.getConfigManager().getHunterGamePrefix()
-                    + "§x§B§B§F§F§D§D✦ §b" + petName + "已装备副手盾牌" + returnedText + "§f。");
+                    + "§x§B§B§F§F§D§D✦ §b" + petName + "已装备副手物品" + returnedText + "§f。§7副手物品可直接替换。 ");
             pet.getWorld().playSound(pet.getLocation(), Sound.ITEM_ARMOR_EQUIP_IRON, 0.72F, 1.24F);
             pet.getWorld().playSound(pet.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.28F, 1.72F);
         } else {
@@ -23169,19 +23394,24 @@ public class FlashModeManager {
         UUID targetId = target.getUniqueId();
         World world = target.getWorld();
         Location center = target.getLocation().add(0.0D, 1.0D, 0.0D);
-        if (!unstableCoreShieldImmuneBreakUsed.contains(targetId)) {
-            unstableCoreShieldImmuneBreakUsed.add(targetId);
-            unstableCoreShieldVanillaDisableCancelUntil.put(targetId, System.currentTimeMillis() + 350L);
+        long now = System.currentTimeMillis();
+        Long cancelUntil = unstableCoreShieldVanillaDisableCancelUntil.get(targetId);
+        boolean sameFirstBreak = cancelUntil != null && cancelUntil > now;
+        boolean firstBreak = unstableCoreShieldImmuneBreakUsed.add(targetId);
+        if (sameFirstBreak || firstBreak) {
+            unstableCoreShieldVanillaDisableCancelUntil.put(targetId, now + 350L);
             event.setDamage(0.0D);
             event.setCancelled(true);
             target.setCooldown(Material.SHIELD, 0);
-            world.spawnParticle(Particle.ELECTRIC_SPARK, center, 24, 0.30D, 0.24D, 0.30D, 0.07D);
-            world.spawnParticle(Particle.GUST, center, 16, 0.26D, 0.18D, 0.26D, 0.04D);
-            world.playSound(target.getLocation(), Sound.ITEM_SHIELD_BLOCK, 0.92f, 0.62f);
-            world.playSound(target.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.44f, 1.34f);
-            attacker.playSound(attacker.getLocation(), Sound.BLOCK_ANVIL_LAND, 0.34f, 1.78f);
-            target.sendActionBar("§x§6§0§6§0§6§0沉重盾牌承受破盾 §8| §7本次免疫，继续举盾会触发重破");
-            attacker.sendActionBar("§x§8§8§8§8§8§8沉重盾牌没有放下 §8| §7下一次破盾才会震开");
+            if (firstBreak) {
+                world.spawnParticle(Particle.ELECTRIC_SPARK, center, 24, 0.30D, 0.24D, 0.30D, 0.07D);
+                world.spawnParticle(Particle.GUST, center, 16, 0.26D, 0.18D, 0.26D, 0.04D);
+                world.playSound(target.getLocation(), Sound.ITEM_SHIELD_BLOCK, 0.92f, 0.62f);
+                world.playSound(target.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.44f, 1.34f);
+                attacker.playSound(attacker.getLocation(), Sound.BLOCK_ANVIL_LAND, 0.34f, 1.78f);
+                target.sendActionBar("§x§6§0§6§0§6§0沉重盾牌承受破盾 §8| §7本次免疫，继续举盾会触发重破");
+                attacker.sendActionBar("§x§8§8§8§8§8§8沉重盾牌没有放下 §8| §7下一次破盾才会震开");
+            }
             keepUnstableCoreShieldRaised(target, shield);
             return true;
         }
@@ -24685,8 +24915,24 @@ public class FlashModeManager {
         if (plugin.getWorldManager().isEndFlashTuningWorld(world)) {
             return true;
         }
+        if (isStandaloneFlashWorld(world)) {
+            return true;
+        }
         GameRoom room = getFlashRoomByWorld(world);
         return isFlashRoomFeaturePhase(room);
+    }
+
+    private boolean isStandaloneFlashWorld(World world) {
+        if (world == null || standaloneFlashUsers.isEmpty()) {
+            return false;
+        }
+        for (UUID playerId : standaloneFlashUsers) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline() && world.equals(player.getWorld())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isSpear(ItemStack item) {
@@ -25880,14 +26126,3 @@ public class FlashModeManager {
     private record MaterialUpgradeMatch(ItemStack result, String kind, double damageOrSpeedBonus, double cooldownIncrease) {
     }
 }
-
-
-
-
-
-
-
-
-
-
-

@@ -545,7 +545,7 @@ const flashControlsPage = {
           <tr><td>追踪 / 共鸣指南针</td><td>连续尝试丢出两次</td><td>打开同阵营队友传送菜单。</td></tr>
           <tr><td>主手空弩 + 副手特殊物品</td><td>右键装填</td><td>装入剑、风弹、TNT、食物、三叉戟、末影珍珠等对应载荷。</td></tr>
           <tr><td>甜浆果 + 自己的宠物</td><td>普通右键</td><td>在跟随与等待之间切换。</td></tr>
-          <tr><td>任意装备 / 物品 + 自己的宠物</td><td>蹲下右键</td><td>复制到宠物对应装备槽，不清除玩家鼠标或手上的原物品。</td></tr>
+          <tr><td>任意装备 / 物品 + 自己的宠物</td><td>蹲下右键</td><td>消耗手中 1 件并装备到宠物对应槽；旧装备会返还，背包满时掉落。</td></tr>
           <tr><td>空手 + 自己的宠物</td><td>蹲下右键</td><td>取回宠物主手中的自定义物品。</td></tr>
         </tbody></table>
       `
@@ -596,10 +596,10 @@ const flashControlsPage = {
         <table class="wikitable"><thead><tr><th>操作</th><th>结果</th><th>注意</th></tr></thead><tbody>
           <tr><td>甜浆果普通右键</td><td>切换宠物跟随 / 等待。</td><td>等待时关闭 AI 与寻路。</td></tr>
           <tr><td>等待宠物接触水流</td><td>自动恢复跟随并传送回主人。</td><td>被玩家或其他实体推动不会取消等待。</td></tr>
-          <tr><td>蹲下 + 盔甲右键</td><td>复制到合适的盔甲槽。</td><td>旧装备返还，背包满时掉在脚下。</td></tr>
-          <tr><td>蹲下 + 盾牌右键</td><td>复制到宠物副手。</td><td>玩家手上原物品不会被清空。</td></tr>
-          <tr><td>蹲下 + 其他物品右键</td><td>复制到宠物主手。</td><td>可自定义驯服怪物手里拿什么。</td></tr>
-          <tr><td>蹲下 + 空手右键</td><td>取回宠物主手物品。</td><td>不会顺带删除其他装备。</td></tr>
+          <tr><td>蹲下 + 盔甲右键</td><td>消耗手中 1 件并装备到对应盔甲槽。</td><td>旧装备返还背包，背包满时掉在脚下。</td></tr>
+          <tr><td>蹲下 + 盾牌右键</td><td>消耗手中 1 件并替换宠物副手。</td><td>旧副手返还背包，背包满时掉在脚下。</td></tr>
+          <tr><td>蹲下 + 其他物品右键</td><td>消耗手中 1 件并放到宠物主手；若玩家副手操作则放到宠物副手。</td><td>可自定义驯服怪物主手/副手拿什么。</td></tr>
+          <tr><td>蹲下 + 空手右键</td><td>取回宠物主手物品。</td><td>不会顺带删除其他装备；清空/替换都会返还旧物品。</td></tr>
           <tr><td>金苹果右键</td><td>每次增加 5 点最大生命并治疗，最多强化 10 次。</td><td>不会让玩家自己开始吃苹果。</td></tr>
           <tr><td>剑 / 弓右键</td><td>近战宠物吃剑强化；小白吃弓并继承相关远程附魔加成。</td><td>小白不走喂剑路线。</td></tr>
         </tbody></table>
@@ -609,9 +609,9 @@ const flashControlsPage = {
       title: '驯服概率',
       html: `
         <table class="wikitable"><thead><tr><th>宠物</th><th>驯服物品</th><th>正常 / FlashSMP</th><th>简单</th></tr></thead><tbody>
-          <tr><td>小白</td><td>箭</td><td>20%</td><td>25%</td></tr>
-          <tr><td>末影人</td><td>黑曜石</td><td>15%</td><td>45%</td></tr>
-          <tr><td>僵尸</td><td>牛排</td><td>20%</td><td>30%</td></tr>
+          <tr><td>小白</td><td>箭</td><td>20%</td><td>45%</td></tr>
+          <tr><td>末影人</td><td>黑曜石</td><td>15%</td><td>65%</td></tr>
+          <tr><td>僵尸</td><td>牛排</td><td>20%</td><td>50%</td></tr>
         </tbody></table>
         <p>驯服成功后不会强制立刻骑乘；再次按对应交互才进入骑乘。原版已有主人的狼等宠物也可接入闪光强化。</p>
       `
@@ -632,8 +632,8 @@ const flashControlsPage = {
       title: '终章专用命令',
       html: `
         <table class="wikitable"><thead><tr><th>命令</th><th>可用条件与效果</th></tr></thead><tbody>
-          <tr><td><code>/ec</code></td><td>终章正式开始后，玩家距离同世界猎物 100～170 格时打开自己的末影箱。</td></tr>
-          <tr><td><code>/enderchest</code></td><td>与 <code>/ec</code> 相同的完整命令。</td></tr>
+          <tr><td><code>/ec</code></td><td>终章准备阶段可直接打开自己的末影箱；正式开始后，玩家距离同世界猎物 100～170 格时才可打开。</td></tr>
+          <tr><td><code>/enderchest</code></td><td>与 <code>/ec</code> 相同：终章准备阶段直接可用，正式开始后走距离限制。</td></tr>
           <tr><td><code>/gamefunxiao endflashender</code></td><td>保留的旧入口，执行相同末影箱检查。</td></tr>
           <tr><td><code>/gamefunxiao endflashcompass</code></td><td>终章指南针丢失时补发；猎人获得追踪指南针，多猎物获得队友指南针。</td></tr>
         </tbody></table>

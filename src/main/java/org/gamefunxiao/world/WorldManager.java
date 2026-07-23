@@ -39,11 +39,11 @@ public class WorldManager {
     private static final String LOBBY_PREFIX = "gamefun_lobby_";
     private static final String GAME_PREFIX = "gamefun_game_";
     private static final String END_FLASH_TUNING_WORLD_NAME = "gamefun_end_flash_debug_lobby";
-
     private final GameFunXiao plugin;
     private World templateLobbyWorld;
     private World endFlashTuningWorld;
     private final Map<String, World> lobbyWorlds = new HashMap<>();
+    private final Map<String, Location> normalizedLobbySpawns = new HashMap<>();
     private final Map<String, World> gameWorlds = new HashMap<>();
     private final Map<String, World> netherWorlds = new HashMap<>();
     private final Map<String, World> endWorlds = new HashMap<>();
@@ -144,6 +144,7 @@ public class WorldManager {
         if (existingWorld != null) {
             plugin.getLogger().info("大厅世界已存在，直接使用: " + lobbyWorldName);
             applyLobbyWorldRules(existingWorld);
+            normalizeLobbySpawn(existingWorld, mode, null);
             lobbyWorlds.put(roomId, existingWorld);
             return existingWorld;
         }
@@ -211,6 +212,7 @@ public class WorldManager {
                 lobbyWorld.setSpawnLocation(lobbySpawn);
             }
         }
+        normalizeLobbySpawn(lobbyWorld, mode, sourceTemplateWorld);
         lobbyWorlds.put(roomId, lobbyWorld);
         plugin.getLogger().info("世界加载成功: " + lobbyWorld.getName() + " (UUID: " + lobbyWorld.getUID() + ")");
         plugin.getLogger().info("房间大厅世界已创建并注册: " + lobbyWorldName + " -> 房间ID: " + roomId);
@@ -527,6 +529,68 @@ public class WorldManager {
 
     public World getLobbyWorld(String roomId) {
         return lobbyWorlds.get(roomId);
+    }
+
+    /**
+     * 返回房间等待大厅的实际安全出生点。大厅虚空保护和玩家进入大厅必须共用这个方法，
+     * 不能分别读取游戏世界出生点或玩家当前坐标。
+     */
+    public Location getLobbySpawnLocation(String roomId, GameMode mode) {
+        World lobbyWorld = getLobbyWorld(roomId);
+        if (lobbyWorld == null) {
+            return null;
+        }
+        Location cached = normalizedLobbySpawns.get(lobbyWorld.getName());
+        if (cached != null && cached.getWorld() != null && cached.getWorld().equals(lobbyWorld)) {
+            return cached.clone();
+        }
+        Location safe = normalizeLobbySpawn(lobbyWorld, mode, null);
+        return safe == null ? null : safe.clone();
+    }
+
+    public Location getLobbySpawnLocation(String roomId) {
+        return getLobbySpawnLocation(roomId, null);
+    }
+
+    private Location normalizeLobbySpawn(World world, GameMode mode, World sourceTemplateWorld) {
+        if (world == null) {
+            return null;
+        }
+
+        String worldName = world.getName();
+        Location cached = normalizedLobbySpawns.get(worldName);
+        if (cached != null && cached.getWorld() != null && cached.getWorld().equals(world)) {
+            return cached.clone();
+        }
+        normalizedLobbySpawns.remove(worldName);
+
+        Location resolved = null;
+        if (mode != null && mode.isMiniGameMapEditableMode() && plugin.getMiniGameMapManager() != null) {
+            MiniGameMapManager.MapDefinition map = plugin.getMiniGameMapManager().findUsableMap(mode, 1);
+            if (map != null && map.lobbySpawn() != null) {
+                resolved = map.lobbySpawn().toLocation(world);
+            }
+        }
+        if (resolved == null && sourceTemplateWorld != null) {
+            resolved = copyLocationToWorld(sourceTemplateWorld.getSpawnLocation(), world);
+        }
+        if (resolved == null && templateLobbyWorld != null
+                && (mode == null || !mode.isMiniGameMapEditableMode())) {
+            resolved = copyLocationToWorld(templateLobbyWorld.getSpawnLocation(), world);
+        }
+        if (resolved == null) {
+            resolved = world.getSpawnLocation().clone();
+        }
+        normalizedLobbySpawns.put(worldName, resolved.clone());
+        return resolved;
+    }
+
+    private Location copyLocationToWorld(Location source, World targetWorld) {
+        if (source == null || targetWorld == null) {
+            return null;
+        }
+        return new Location(targetWorld, source.getX(), source.getY(), source.getZ(),
+                source.getYaw(), source.getPitch());
     }
 
     public World getGameWorld(String roomId) {
@@ -918,6 +982,7 @@ public class WorldManager {
     public void deleteLobbyWorld(String roomId) {
         World world = lobbyWorlds.remove(roomId);
         if (world != null) {
+            normalizedLobbySpawns.remove(world.getName());
             deleteWorld(world);
         }
     }
@@ -959,6 +1024,7 @@ public class WorldManager {
         }
         World lobby = lobbyWorlds.remove(roomId);
         if (lobby != null) {
+            normalizedLobbySpawns.remove(lobby.getName());
             worlds.add(lobby);
         }
 
@@ -1175,6 +1241,7 @@ public class WorldManager {
         }
 
         lobbyWorlds.clear();
+        normalizedLobbySpawns.clear();
         gameWorlds.clear();
         netherWorlds.clear();
         endWorlds.clear();

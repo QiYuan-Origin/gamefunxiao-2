@@ -247,6 +247,10 @@ game:
   leaderboard_footer: "§x§F§F§D§7§0§0· · · · · · · · · · · · · · ·\n"
   leaderboard_prey_row: "  {rank} §a[猎物] §f{name}  §7攻击猎人: §e{attacks} §7伤害猎人: §c{damage} §7移动距离: §a{distance}m"
   leaderboard_hunter_row: "  {rank} §c[猎人] §f{name}  §7攻击猎物: §e{attacks} §7伤害猎物: §c{damage} §7移动距离: §a{distance}m"
+  leaderboard_search_prompt: "§x§8§8§D§D§F§F⌕ §b请在聊天框输入玩家名称；输入 §ecancel §b或蹲下取消，输入 §e清空 §b显示全部记录。"
+  leaderboard_search_set: "§x§5§5§F§F§A§A✔ §a排行榜搜索已设置为：§e{keyword}"
+  leaderboard_search_cancelled: "§x§F§F§B§B§6§6↩ §e已取消排行榜搜索输入。"
+  leaderboard_search_timeout: "§x§F§F§8§8§5§5⌛ §c搜索输入超时，已返回排行榜。"
 
 # 表现值消息
 points:

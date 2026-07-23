@@ -401,13 +401,41 @@ public class EndFlashKitManager {
             updateLoadedFileState();
             return;
         }
-        if (config.isConfigurationSection("selections")) {
-            migratedLegacyFormat = true;
+        Map<UUID, Map<Role, String>> loadedSelections = new HashMap<>();
+        ConfigurationSection selectionSection = config.getConfigurationSection("selections");
+        if (selectionSection != null) {
+            for (String rawUuid : selectionSection.getKeys(false)) {
+                UUID uuid;
+                try {
+                    uuid = UUID.fromString(rawUuid);
+                } catch (IllegalArgumentException ignored) {
+                    migratedLegacyFormat = true;
+                    continue;
+                }
+                Map<Role, String> playerSelections = new HashMap<>();
+                for (Role role : Role.values()) {
+                    String kitId = config.getString("selections." + rawUuid + "." + role.id());
+                    if (kitId == null || kitId.isBlank()) {
+                        continue;
+                    }
+                    String normalizedId = kitId.toLowerCase(Locale.ROOT);
+                    Kit selectedKit = loadedKits.get(normalizedId);
+                    if (selectedKit != null && selectedKit.role() == role) {
+                        playerSelections.put(role, normalizedId);
+                    } else {
+                        migratedLegacyFormat = true;
+                    }
+                }
+                if (!playerSelections.isEmpty()) {
+                    loadedSelections.put(uuid, playerSelections);
+                }
+            }
         }
 
         kits.clear();
         kits.putAll(loadedKits);
         selections.clear();
+        selections.putAll(loadedSelections);
         updateLoadedFileState();
         if (migratedLegacyFormat) {
             save(false);
@@ -442,6 +470,12 @@ public class EndFlashKitManager {
             config.set(path + "ender_chest_size", kit.enderChestSize());
             config.set(path + "ender_chest_slots", encodeSlotArray(kit.enderChestContents()));
             config.set(path + "ender_chest", encodeItems(kit.enderChestItems()));
+        }
+        for (Map.Entry<UUID, Map<Role, String>> playerEntry : selections.entrySet()) {
+            for (Map.Entry<Role, String> selectionEntry : playerEntry.getValue().entrySet()) {
+                config.set("selections." + playerEntry.getKey() + "." + selectionEntry.getKey().id(),
+                        selectionEntry.getValue());
+            }
         }
         try {
             File parent = file.getParentFile();
@@ -815,23 +849,51 @@ public class EndFlashKitManager {
         return name == null || name.isBlank() ? "未知管理员" : name;
     }
 
-    public void setSelection(UUID uuid, Role role, String kitId) {
+    public synchronized void setSelection(UUID uuid, Role role, String kitId) {
         reloadIfChanged();
         if (uuid == null || role == null) {
             return;
         }
+        if (kitId == null || kitId.isBlank()) {
+            Map<Role, String> selected = selections.get(uuid);
+            if (selected != null) {
+                selected.remove(role);
+                if (selected.isEmpty()) {
+                    selections.remove(uuid);
+                }
+            }
+            save();
+            return;
+        }
+
+        String normalizedId = kitId.toLowerCase(Locale.ROOT);
+        Kit kit = kits.get(normalizedId);
+        if (kit == null || kit.role() != role) {
+            return;
+        }
+        selections.computeIfAbsent(uuid, ignored -> new HashMap<>()).put(role, normalizedId);
+        save();
+    }
+
+    public synchronized String getSelection(UUID uuid, Role role) {
+        reloadIfChanged();
+        if (uuid == null || role == null) {
+            return null;
+        }
         Map<Role, String> selected = selections.get(uuid);
-        if (selected != null) {
+        if (selected == null) {
+            return null;
+        }
+        String kitId = selected.get(role);
+        Kit kit = kitId == null ? null : kits.get(kitId);
+        if (kit == null || kit.role() != role) {
             selected.remove(role);
             if (selected.isEmpty()) {
                 selections.remove(uuid);
             }
+            return null;
         }
-        save();
-    }
-
-    public String getSelection(UUID uuid, Role role) {
-        return null;
+        return kitId;
     }
 
     public Kit getKit(String kitId) {
