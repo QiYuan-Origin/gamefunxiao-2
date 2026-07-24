@@ -480,6 +480,10 @@ public class FlashModeManager {
     private static final int FLASH_RECYCLABLE_DOUBLE_CRAFT_LIMIT = 2;
     private static final int FLASH_PREY_NETHERITE_DOUBLE_CRAFT_LIMIT = 2;
     private static final double FLASH_HOE_TRAP_TRIGGER_RADIUS = 0.86D;
+    private static final long FLASH_HOE_TRAP_CHAIN_WINDOW_MILLIS = 5000L;
+    private static final int FLASH_HOE_TRAP_CHAIN_MAX_STACKS = 3;
+    private static final double FLASH_HOE_TRAP_CHAIN_SECOND_DURATION_MULTIPLIER = 1.25D;
+    private static final double FLASH_HOE_TRAP_CHAIN_THIRD_EXTRA_DAMAGE = 2.0D;
     private static final int FLASH_COARSE_DIRT_MAX_RADIUS = 80;
     private static final int FLASH_COARSE_DIRT_RADIUS_PER_BONEMEAL = 4;
     private static final int[][] FLASH_COARSE_DIRT_GROWTH_OFFSETS = {
@@ -773,6 +777,7 @@ public class FlashModeManager {
     private final Map<UUID, Long> coreShieldWindChargeCooldowns = new HashMap<>();
     private final Map<UUID, BrushDrawingSession> magicBrushDrawings = new HashMap<>();
     private final Map<String, HoeTrap> flashHoeTraps = new HashMap<>();
+    private final Map<UUID, HoeTrapChainState> flashHoeTrapChains = new HashMap<>();
     private final Map<String, CoalPickaxeFireTrap> coalPickaxeFireTraps = new HashMap<>();
     private final Map<UUID, TmtMinecartTrap> tmtMinecartTraps = new HashMap<>();
     private final Map<String, FishingHeatData> flashFishingHeat = new HashMap<>();
@@ -3235,8 +3240,8 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；碰到方块或实体会爆炸并造成范围伤害，FlashUse不破坏方块，游戏中和FlashSMP会破坏方块。"));
         pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度再次强化、伤害+74%，命中追加20%破甲伤害。"));
         pages.add(guideBookQuickPage(42, "Q丢剑气", "非稳定剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "稳定剑按Q只会正常掉落，不会变成剑气。"));
-        pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "敌人踩中后触发并消失，适合封路。"));
-        pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "不同材质决定伤害和控制。", "同上", "同上", "金偏失明，钻偏漂浮，合金偏黑暗和强拉。"));
+        pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "只会触发敌人；自己、同队和旁观者不会触发，FlashSMP同步。"));
+        pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "木缠绕、石重压、铜导电、铁夹锁、金致盲、钻弹飞、合金强拉。", "同上", "5秒连锁", "第2次控制时长+25%，第3次及以后额外+2伤害。"));
         pages.add(guideBookQuickPage(45, "矿车雷锄", "锄头+TNT矿车", "按Q放雷，踩中延迟爆炸。", "消耗材料", "触发一次", "TMT不再能打到锄头上。"));
         pages.add(guideBookQuickPage(46, "唱片机光环", "唱片机+唱片", "播放唱片后扫描约80格光环。", "唱片播放", "周期刷新", "不同唱片给近战、远程、减伤、修耐久等修正。"));
         pages.add(guideBookQuickPage(47, "强唱片", "Pigstep/Precipice/Otherside等", "放入唱片机播放。", "唱片播放", "周期刷新", "Pigstep偏综合爆发，Creator偏抗性和修耐久。"));
@@ -6096,7 +6101,7 @@ public class FlashModeManager {
                     : minecartTrap
                     ? "§x§F§F§A§A§4§4⌑ §eTNT矿车雷" + getHoeDisplayName(hoeType) + " §f已绑定落点方块 §8| §71.5秒延迟爆炸"
                     : "§x§8§A§F§F§D§2⌑ §x§B§B§8§8§F§F" + getHoeDisplayName(hoeType)
-                    + "陷阱 §f已绑定落点方块 §8| §a永久存在");
+                    + "陷阱 §f已绑定落点方块 §8| §a" + getHoeTrapRoleName(hoeType));
         }
     }
 
@@ -10625,6 +10630,7 @@ public class FlashModeManager {
         coreShieldWindChargeSessions.remove(uuid);
         coreShieldWindChargeCooldowns.remove(uuid);
         magicBrushDrawings.remove(uuid);
+        flashHoeTrapChains.remove(uuid);
         flashHoeTraps.entrySet().removeIf(entry -> entry.getValue() == null || uuid.equals(entry.getValue().ownerUuid()));
         coalPickaxeFireTraps.entrySet().removeIf(entry -> entry.getValue() == null || uuid.equals(entry.getValue().ownerUuid()));
         tmtMinecartTraps.entrySet().removeIf(entry -> entry.getValue() == null || uuid.equals(entry.getValue().ownerUuid()));
@@ -16743,6 +16749,7 @@ public class FlashModeManager {
             return;
         }
         long now = System.currentTimeMillis();
+        pruneHoeTrapChains(now);
         List<String> expired = new ArrayList<>();
         for (Map.Entry<String, HoeTrap> entry : flashHoeTraps.entrySet()) {
             HoeTrap trap = entry.getValue();
@@ -16829,8 +16836,10 @@ public class FlashModeManager {
         tickCoalPickaxeFireTraps(pulse);
         tickTmtMinecartTraps(pulse);
         if (flashHoeTraps.isEmpty()) {
+            pruneHoeTrapChains(System.currentTimeMillis());
             return;
         }
+        pruneHoeTrapChains(System.currentTimeMillis());
         Iterator<Map.Entry<String, HoeTrap>> iterator = flashHoeTraps.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, HoeTrap> entry = iterator.next();
@@ -17439,11 +17448,15 @@ public class FlashModeManager {
             return false;
         }
         if (trap.ownerUuid().equals(target.getUniqueId())) {
-            return trap.tmt() || trap.minecart();
+            return false;
         }
         if (room == null) {
             Player owner = Bukkit.getPlayer(trap.ownerUuid());
-            return owner != null && canDamage(null, owner, target);
+            return owner != null
+                    && owner.isOnline()
+                    && isStandaloneFlashContext(owner)
+                    && plugin.getRoomManager().getPlayerRoom(target.getUniqueId()) == null
+                    && canDamage(null, owner, target);
         }
         if (!room.getAllPlayerUUIDs().contains(trap.ownerUuid()) || !room.getAllPlayerUUIDs().contains(target.getUniqueId())) {
             return false;
@@ -17452,10 +17465,7 @@ public class FlashModeManager {
             return false;
         }
         if (room.isHunter(trap.ownerUuid()) && room.isHunter(target.getUniqueId())) {
-            if (room.getGameMode().isFlashTournament()) {
-                return true;
-            }
-            return plugin.getConfigManager().getConfig().getBoolean("hunter_game.pvp.hunter_friendly_fire", false);
+            return false;
         }
         if (room.isPrey(trap.ownerUuid()) && room.isPrey(target.getUniqueId())) {
             return false;
@@ -17484,7 +17494,10 @@ public class FlashModeManager {
             world.playSound(center, Sound.ITEM_TRIDENT_HIT_GROUND, 0.54f, 1.34f);
         }
 
-        double damage = getFlashHoeTrapDamage(trap.hoeType());
+        HoeTrapChainState chain = advanceHoeTrapChain(target.getUniqueId(), System.currentTimeMillis());
+        double durationMultiplier = chain.stacks() >= 2 ? FLASH_HOE_TRAP_CHAIN_SECOND_DURATION_MULTIPLIER : 1.0D;
+        double damage = getFlashHoeTrapDamage(trap.hoeType())
+                + (chain.stacks() >= FLASH_HOE_TRAP_CHAIN_MAX_STACKS ? FLASH_HOE_TRAP_CHAIN_THIRD_EXTRA_DAMAGE : 0.0D);
         if (damage > 0.0D) {
             if (owner != null && owner.isOnline()) {
                 target.damage(damage, owner);
@@ -17492,7 +17505,8 @@ public class FlashModeManager {
                 target.damage(damage);
             }
         }
-        applyHoeTrapEffect(trap.hoeType(), target, center);
+        applyHoeTrapEffect(trap.hoeType(), target, center, durationMultiplier, chain.stacks());
+        sendHoeTrapChainFeedback(trap, target, owner, chain);
     }
 
     private void triggerTmtHoeTrap(HoeTrap trap, Player target, Player owner) {
@@ -17558,44 +17572,89 @@ public class FlashModeManager {
         }.runTaskLater(plugin, TMT_MINECART_TRAP_FUSE_TICKS);
     }
 
-    private void applyHoeTrapEffect(Material hoeType, Player target, Location center) {
-        target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 70, 1, false, true, true));
+    private HoeTrapChainState advanceHoeTrapChain(UUID targetId, long now) {
+        if (targetId == null) {
+            return new HoeTrapChainState(now, 1);
+        }
+        HoeTrapChainState previous = flashHoeTrapChains.get(targetId);
+        int stacks = previous != null && now - previous.lastTriggerMillis() <= FLASH_HOE_TRAP_CHAIN_WINDOW_MILLIS
+                ? Math.min(FLASH_HOE_TRAP_CHAIN_MAX_STACKS, previous.stacks() + 1)
+                : 1;
+        HoeTrapChainState updated = new HoeTrapChainState(now, stacks);
+        flashHoeTrapChains.put(targetId, updated);
+        return updated;
+    }
+
+    private void pruneHoeTrapChains(long now) {
+        if (flashHoeTrapChains.isEmpty()) {
+            return;
+        }
+        flashHoeTrapChains.entrySet().removeIf(entry -> entry.getValue() == null
+                || now - entry.getValue().lastTriggerMillis() > FLASH_HOE_TRAP_CHAIN_WINDOW_MILLIS);
+    }
+
+    private void sendHoeTrapChainFeedback(HoeTrap trap, Player target, Player owner, HoeTrapChainState chain) {
+        if (trap == null || target == null || chain == null) {
+            return;
+        }
+        String role = getHoeTrapRoleName(trap.hoeType());
+        String chainText = chain.stacks() <= 1 ? "§7首触发"
+                : chain.stacks() == 2 ? "§e连锁×2 §8| §f控制时长+25%"
+                : "§c连锁×3 §8| §f额外+2伤害";
+        target.sendActionBar("§x§B§B§8§8§F§F⌑ §f踩中" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| §x§8§A§F§F§D§2" + role + " §8| " + chainText);
+        if (owner != null && owner.isOnline() && !owner.getUniqueId().equals(target.getUniqueId())) {
+            owner.sendActionBar("§x§8§A§F§F§D§2⌑ §f" + target.getName() + " 触发了" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| " + chainText);
+        }
+    }
+
+    private void applyHoeTrapEffect(Material hoeType, Player target, Location center, double durationMultiplier, int chainStacks) {
+        target.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, scaleHoeTrapTicks(60, durationMultiplier), 0, false, true, true));
         switch (hoeType) {
             case WOODEN_HOE -> {
-                target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 60, 0, false, true, true));
-                pullTargetToTrapCenter(target, center, 0.28D, 0.12D);
+                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, scaleHoeTrapTicks(60, durationMultiplier), 1, false, true, true));
+                pullTargetToTrapCenter(target, center, 0.34D, 0.12D);
             }
             case STONE_HOE -> {
-                target.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, 80, 0, false, true, true));
-                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 90, 1, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, scaleHoeTrapTicks(50, durationMultiplier), 2, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, scaleHoeTrapTicks(80, durationMultiplier), 0, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, scaleHoeTrapTicks(60, durationMultiplier), 0, false, true, true));
             }
             case COPPER_HOE -> {
-                target.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 80, 0, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, scaleHoeTrapTicks(120, durationMultiplier), 0, false, true, true));
                 target.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, target.getLocation().add(0.0D, 0.9D, 0.0D), 24, 0.32D, 0.45D, 0.32D, 0.08D);
                 target.getWorld().playSound(target.getLocation(), Sound.BLOCK_COPPER_BULB_TURN_ON, 0.55f, 1.48f);
             }
             case IRON_HOE -> {
-                target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 90, 1, false, true, true));
-                pullTargetToTrapCenter(target, center, 0.36D, 0.08D);
+                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, scaleHoeTrapTicks(40, durationMultiplier), 3, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, scaleHoeTrapTicks(40, durationMultiplier), 128, false, true, true));
+                pullTargetToTrapCenter(target, center, 0.42D, -0.08D);
             }
             case GOLDEN_HOE -> {
-                target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 45, 0, false, true, true));
-                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 70, 2, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, scaleHoeTrapTicks(60, durationMultiplier), 0, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, scaleHoeTrapTicks(40, durationMultiplier), 0, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, scaleHoeTrapTicks(50, durationMultiplier), 1, false, true, true));
                 target.getWorld().spawnParticle(Particle.FLASH, target.getEyeLocation(), 1,
                         0.0D, 0.0D, 0.0D, 0.0D);
             }
             case DIAMOND_HOE -> {
-                target.addPotionEffect(new PotionEffect(PotionEffectType.LEVITATION, 18, 0, false, true, true));
-                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 95, 2, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.LEVITATION, scaleHoeTrapTicks(20, durationMultiplier), 0, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, scaleHoeTrapTicks(45, durationMultiplier), 1, false, true, true));
+                launchTargetFromTrapCenter(target, center, 0.46D, 0.58D);
             }
             case NETHERITE_HOE -> {
-                target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 110, 1, false, true, true));
-                target.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, 55, 0, false, true, true));
-                pullTargetToTrapCenter(target, center, 0.52D, 0.16D);
+                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, scaleHoeTrapTicks(70, durationMultiplier), 2, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, scaleHoeTrapTicks(100, durationMultiplier), 1, false, true, true));
+                target.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, scaleHoeTrapTicks(60, durationMultiplier), 0, false, true, true));
+                pullTargetToTrapCenter(target, center, 0.72D, 0.20D);
             }
             default -> {
+                target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, scaleHoeTrapTicks(60, durationMultiplier), 1, false, true, true));
             }
         }
+    }
+
+    private int scaleHoeTrapTicks(int ticks, double multiplier) {
+        return Math.max(1, (int) Math.round(Math.max(1, ticks) * Math.max(0.1D, multiplier)));
     }
 
     private void pullTargetToTrapCenter(Player target, Location center, double horizontal, double vertical) {
@@ -17609,6 +17668,19 @@ public class FlashModeManager {
         }
         pull.setY(vertical);
         target.setVelocity(target.getVelocity().multiply(0.35D).add(pull));
+    }
+
+    private void launchTargetFromTrapCenter(Player target, Location center, double horizontal, double vertical) {
+        if (target == null || center == null || target.getWorld() != center.getWorld()) {
+            return;
+        }
+        Vector push = target.getLocation().toVector().subtract(center.toVector());
+        push.setY(0.0D);
+        if (push.lengthSquared() > 0.0001D) {
+            push.normalize().multiply(horizontal);
+        }
+        push.setY(vertical);
+        target.setVelocity(target.getVelocity().multiply(0.25D).add(push));
     }
 
     private double getFlashHoeTrapDamage(Material hoeType) {
@@ -17634,6 +17706,19 @@ public class FlashModeManager {
             case DIAMOND_HOE -> "钻石锄";
             case NETHERITE_HOE -> "下界合金锄";
             default -> "锄头";
+        };
+    }
+
+    private String getHoeTrapRoleName(Material hoeType) {
+        return switch (hoeType) {
+            case WOODEN_HOE -> "缠绕";
+            case STONE_HOE -> "重压";
+            case COPPER_HOE -> "导电";
+            case IRON_HOE -> "夹锁";
+            case GOLDEN_HOE -> "致盲";
+            case DIAMOND_HOE -> "弹飞";
+            case NETHERITE_HOE -> "强拉拽";
+            default -> "控制";
         };
     }
 
@@ -26436,6 +26521,9 @@ public class FlashModeManager {
         private HoeTrap withLastTrigger(long millis) {
             return new HoeTrap(ownerUuid, roomId, blockLocation, center, hoeType, createdAtMillis, reusable, tmt, minecart, millis);
         }
+    }
+
+    private record HoeTrapChainState(long lastTriggerMillis, int stacks) {
     }
 
     private record FlashCoarseDirtPatch(UUID ownerUuid, String roomId, Location origin, int radius, long createdAtMillis) {

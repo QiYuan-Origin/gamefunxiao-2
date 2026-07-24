@@ -345,7 +345,7 @@ const flashHunterPage = {
       title: '第一次接战的优先级',
       html: `
         <table class="wikitable"><thead><tr><th>优先级</th><th>目标</th><th>推荐工具</th></tr></thead><tbody>
-          <tr><td>1</td><td>迫使猎物转向或停顿</td><td>远程投射、锄头 Q 陷阱、地形方块、左右交叉压迫。</td></tr>
+          <tr><td>1</td><td>迫使猎物转向或停顿</td><td>远程投射、按材质分工的锄头 Q 陷阱、地形方块、左右交叉压迫。</td></tr>
           <tr><td>2</td><td>消耗位移与防御</td><td>连续但错开的攻击，记录浓缩珍珠、盾牌和关键食物是否已经使用。</td></tr>
           <tr><td>3</td><td>建立破盾窗口</td><td>强化斧完整冷却命中，再由重锤位判断是否进入连段。</td></tr>
           <tr><td>4</td><td>保留追踪连续性</td><td>至少一名猎人不参与同一处近战拥挤，负责猎物脱离后的下一次报点。</td></tr>
@@ -539,7 +539,7 @@ const flashControlsPage = {
         <table class="wikitable"><thead><tr><th>手上物品 / 状态</th><th>操作</th><th>结果</th></tr></thead><tbody>
           <tr><td>非稳定剑</td><td>按 <code>Q</code></td><td>消耗这把剑并释放剑气，不会作为普通掉落物留在地上。</td></tr>
           <tr><td>稳定剑</td><td>按 <code>Q</code></td><td>按原版方式掉落，不会转化为剑气。</td></tr>
-          <tr><td>任意锄头</td><td>按 <code>Q</code> 丢向有效方块</td><td>在落点放置对应锄头陷阱；落到耕地时可形成 3×3 单次陷阱。</td></tr>
+          <tr><td>任意锄头</td><td>按 <code>Q</code> 丢向有效方块</td><td>在落点放置对应锄头陷阱；主人、同队和旁观者不会触发。落到耕地时可形成 3×3 单次陷阱。</td></tr>
           <tr><td>猎人追踪指南针</td><td>左键</td><td>打开自己的 3 行个人背包。</td></tr>
           <tr><td>猎人追踪指南针</td><td>右键</td><td>打开所有猎人共享的 6 行团队背包。</td></tr>
           <tr><td>追踪 / 共鸣指南针</td><td>连续尝试丢出两次</td><td>打开同阵营队友传送菜单。</td></tr>
@@ -672,7 +672,7 @@ const flashLoadoutPage = {
           <tr><td>长期近战主武器</td><td>稳定剑</td><td>按 Q 只会正常掉落，不会误消耗为剑气，并获得独立伤害、攻速与弩剑增益。</td></tr>
           <tr><td>一次性远程压制</td><td>非稳定剑 / 剑气路线</td><td>按 Q 消耗剑并释放剑气，适合封路和打断。</td></tr>
           <tr><td>破盾</td><td>完整冷却的材料强化斧</td><td>强化额外伤害只在攻击冷却结束后结算，可为重锤组合制造窗口。</td></tr>
-          <tr><td>路线控制</td><td>锄头 Q 陷阱、弩载荷、宠物</td><td>让目标转向，给左右翼争取封路时间。</td></tr>
+          <tr><td>路线控制</td><td>锄头 Q 陷阱、弩载荷、宠物</td><td>锄头按材质分工：木缠绕、石重压、铜导电、铁夹锁、金致盲、钻弹飞、合金强拉；5 秒内连锁触发会给控制和伤害奖励。</td></tr>
           <tr><td>持续远程</td><td>弩、弓与对应副手载荷</td><td>可按团队缺口选择飞剑、风弹、TNT、三叉戟或珍珠。</td></tr>
         </tbody></table>
       `
