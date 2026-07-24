@@ -418,7 +418,8 @@ public class FlashModeManager {
             "轨道炮装配三",
             "轨道炮使用",
             "稳定锻造",
-            "怪物长矛",
+            "怪物闪光武器",
+            "小白弩切剑",
     };
     private static final int FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE = 9;
     private static final int FLASH_GUIDE_VOLUME_MAIN = 0;
@@ -428,7 +429,7 @@ public class FlashModeManager {
             "宠物乐魂", "通关农耕", "沉重爆破", "完整目录"
     };
     private static final int[] FLASH_GUIDE_VOLUME_STARTS = {0, 1, 13, 30, 42, 56, 63, 70, 1};
-    private static final int[] FLASH_GUIDE_VOLUME_ENDS = {0, 12, 34, 41, 55, 62, 69, 79, 85};
+    private static final int[] FLASH_GUIDE_VOLUME_ENDS = {0, 12, 34, 41, 55, 62, 69, 79, 86};
     private static final String[] FLASH_GUIDE_VOLUME_HEADERS = {
             "§x§9§8§D§D§F§F§l主 §8§l· §x§F§4§C§3§F§F§l闪光书",
             "§b§l基础规则", "§6§l铁砧强化", "§9§l风弹装填", "§c§l战斗机关",
@@ -534,7 +535,7 @@ public class FlashModeManager {
     private static final int RAILGUN_SINGLE_FUSE_TICKS = 20 * 3;
     private static final float RAILGUN_SINGLE_EXPLOSION_POWER = 4.0F;
     private static final long RAILGUN_USE_DEBOUNCE_MILLIS = 250L;
-    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 8;
+    private static final int FLASH_ROOM_GUIDE_BOOK_CONTENT_VERSION = 9;
     private static final List<RailgunMaterialRequirement> RAILGUN_ASSEMBLY_REQUIREMENTS = List.of(
             new RailgunMaterialRequirement(Material.HONEY_BLOCK, 12),
             new RailgunMaterialRequirement(Material.SLIME_BLOCK, 24),
@@ -2990,14 +2991,15 @@ public class FlashModeManager {
         ));
         List<Component> fullPages = getFlashFullGuidePages();
         List<Component> pages = new ArrayList<>();
-        pages.add(guideBookVolumeDirectory(volume));
+        int directoryPageCount = getFlashGuideVolumeDirectoryPageCount(volume);
+        pages.addAll(createFlashGuideVolumeDirectoryPages(volume, directoryPageCount));
         for (int entry = FLASH_GUIDE_VOLUME_STARTS[volume]; entry <= FLASH_GUIDE_VOLUME_ENDS[volume]; entry++) {
             int fullIndex = entry + getFlashGuideDirectoryPageCount() - 1;
             if (fullIndex >= 0 && fullIndex < fullPages.size()) {
                 pages.add(guideBookVolumeContentPage(fullPages.get(fullIndex)));
             }
         }
-        if (pages.size() == 1) {
+        if (pages.size() == directoryPageCount) {
             pages.add(guideBookPageHeader("§c§l目录为空\n\n§0这个目录暂时没有内容。\n\n")
                     .append(guideBookCommandLine("§8[§b返回主目录§8]", "/gamefunxiao wikiopen main")));
         }
@@ -3030,17 +3032,44 @@ public class FlashModeManager {
         return pages;
     }
 
-    private Component guideBookVolumeDirectory(int volume) {
+    private int getFlashGuideVolumeDirectoryPageCount(int volume) {
         int startEntry = FLASH_GUIDE_VOLUME_STARTS[volume];
         int endEntry = FLASH_GUIDE_VOLUME_ENDS[volume];
-        Component component = guideBookPageHeader(FLASH_GUIDE_VOLUME_HEADERS[volume] + "\n§0本目录收录第 "
+        if (endEntry < startEntry) {
+            return 1;
+        }
+        return Math.max(1, (endEntry - startEntry + FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE)
+                / FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE);
+    }
+
+    private List<Component> createFlashGuideVolumeDirectoryPages(int volume, int pageCount) {
+        List<Component> pages = new ArrayList<>(Math.max(1, pageCount));
+        for (int page = 0; page < Math.max(1, pageCount); page++) {
+            pages.add(guideBookVolumeDirectoryPage(volume, page, Math.max(1, pageCount)));
+        }
+        return pages;
+    }
+
+    private Component guideBookVolumeDirectoryPage(int volume, int pageIndex, int pageCount) {
+        int startEntry = FLASH_GUIDE_VOLUME_STARTS[volume];
+        int endEntry = FLASH_GUIDE_VOLUME_ENDS[volume];
+        int pageStart = startEntry + pageIndex * FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE;
+        int pageEnd = Math.min(endEntry, pageStart + FLASH_MAIN_DIRECTORY_ENTRIES_PER_PAGE - 1);
+        Component component = guideBookPageHeader(FLASH_GUIDE_VOLUME_HEADERS[volume] + " §8" + (pageIndex + 1) + "/" + pageCount
+                + "\n§0本目录收录第 "
                 + String.format(Locale.ROOT, "%02d", startEntry) + "～"
                 + String.format(Locale.ROOT, "%02d", endEntry) + " 条。\n§8点击条目跳转，或返回主书。\n\n")
                 .append(guideBookCommandLine("§8[§b返回主目录§8]", "/gamefunxiao wikiopen main"))
                 .append(LegacyComponentSerializer.legacySection().deserialize("\n"));
-        for (int entry = startEntry; entry <= endEntry; entry++) {
+        for (int entry = pageStart; entry <= pageEnd; entry++) {
             component = component.append(guideBookJumpLine("§8- §0" + String.format(Locale.ROOT, "%02d", entry)
-                    + ". " + guideEntryTitle(entry), entry - startEntry + 2));
+                    + ". " + guideEntryTitle(entry), pageCount + (entry - startEntry) + 1));
+        }
+        if (pageIndex + 1 < pageCount) {
+            component = component.append(guideBookJumpLine("§8[§b下一页目录§8]", pageIndex + 2));
+        }
+        if (pageIndex > 0) {
+            component = component.append(guideBookJumpLine("§8[§b上一页目录§8]", pageIndex));
         }
         return component;
     }
@@ -3164,7 +3193,7 @@ public class FlashModeManager {
 
     private List<Component> createFlashQuickGuidePages() {
         List<Component> pages = new ArrayList<>();
-        pages.add(guideBookQuickPage(1, "本书速查", "闪光书", "打开后点目录数字跳转。", "无", "无", "每页固定写材料、用法、消耗、冷却、注意。"));
+        pages.add(guideBookQuickPage(1, "先看这里", "房间第2格的闪光书", "右键打开；点目录里的数字可跳页。Shift+右键=蹲下右键，Q=丢弃键。", "无", "无", "每页按“拿什么→怎么做→扣什么→冷却→重点”写；看不懂先找对应物品名，再按步骤做。"));
         pages.add(guideBookQuickPage(2, "闪光胜利", "末影龙、龙池传送门", "猎物先击败末影龙，再跳入龙池传送门。", "无", "无", "打死龙不是结束，真正结算在龙池。"));
         pages.add(guideBookQuickPage(3, "龙池结算", "末地龙池传送门", "猎物进入会变旁观并触发猎物胜利。", "无", "无", "猎人进入不会结算，会被动量弹开。"));
         pages.add(guideBookQuickPage(4, "房间内书", "普通闪光/闪光赛事/终章闪光", "进入房间后闪光书固定在物品栏第二格，右键即可打开。", "无", "离开房间恢复", "书不能移动、丢弃或交换；猎物额外获得1个浓缩末影珍珠。"));
@@ -3197,7 +3226,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(31, "空中盾跃", "盾牌+风弹", "空中继续右键可连跳。", "成功才消耗", "概率递减", "每次空中成功后下一次概率减半，落地重置。"));
         pages.add(guideBookQuickPage(32, "弓风弹", "主手弓+副手风弹", "拉弓发射风弹。", "消耗1风弹", "跟随弓", "弩装风弹更快，多重射击可分裂。"));
         pages.add(guideBookQuickPage(33, "弓下压弹射", "弓+副手2风弹", "空中低头到70度及以上拉弓。", "消耗2风弹", "跟随弓", "改为下压弹射，并重置盾风弹空中概率到50%。"));
-        pages.add(guideBookQuickPage(34, "弩副手装填", "主手空弩+副手弹药", "右键把副手特殊物品装入弩。", "多数消耗1个", "弩本身", "支持风弹、末影珍珠、三叉戟、剑、食物等。"));
+        pages.add(guideBookQuickPage(34, "弩副手装填", "主手拿空弩，副手拿弹药", "直接右键。成功后副手物品会写进弩，下一次射击发出特殊弹。", "多数消耗1个", "弩本身", "先把弩清空再装；支持风弹、强化风弹、末影珍珠、三叉戟、剑、食物和TNT。"));
         pages.add(guideBookQuickPage(35, "风弹弩", "弩+风弹/强化风弹", "装填后发射风弹。", "消耗弹药", "弩本身", "弩风弹速度更高，多重射击发3发。"));
         pages.add(guideBookQuickPage(36, "烟花TNT弩", "烟花弩+副手TNT", "发射时把烟花替换为TNT弹。", "消耗TNT", "弩本身", "TMT不再兼容该路线，只能放置。"));
         pages.add(guideBookQuickPage(37, "激流三叉戟弩", "弩+激流三叉戟", "装填后发射并推进玩家。", "不消耗三叉戟", "约1.85秒", "上次修复后不会卡住闪光物品发射冷却。"));
@@ -3219,10 +3248,10 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(53, "水上钓鱼陷阱", "副手特殊钓鱼物+普通钓鱼竿", "抛到水面生成水上陷阱。", "消耗钓鱼物", "触发一次", "3×3加四向突出，踩中有伤害和控制。"));
         pages.add(guideBookQuickPage(54, "海眷桶", "附魔改装+海之眷顾水桶", "倒水时有概率掉随机闪光剑。", "不额外消耗", "约3秒", "会保留桶元数据。"));
         pages.add(guideBookQuickPage(55, "火焰望远镜", "附魔改装+火焰附加望远镜", "聚焦方块生成火焰区域；聚焦实体会直接灼烧。", "无", "聚焦触发", "实体蓄力时会被环形火粒子包裹，触发后受伤并燃烧。"));
-        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度45%/65%/50%。甜浆果可切换跟随/等待；只有接触水流才会结束等待并回到主人身边，实体推动不会触发。"));
+        pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅拿箭；末影人拿黑曜石；僵尸拿牛排", "对准对应怪物普通右键。成功后怪物变成你的宠物，会跟随并帮你打敌人。", "按概率消耗", "无", "正常/FlashSMP：小白20%、小黑15%、僵尸20%；简单：小白45%、小黑65%、僵尸50%。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
-        pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
-        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；副手拿物品时会替换宠物副手；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽；主手盾牌或副手拿的普通物品进副手，其余主手物品进主手；旧物品返还。主手弩+副手闪光弹药交给小白时，会自动把副手弹药装入弩并优先发射；GameFun 房间小白 5 格内只会切副手木剑，FlashSMP 可切副手近战武器。"));
+        pages.add(guideBookQuickPage(58, "宠物喂武器", "近战宠物拿剑；小白拿弓", "普通右键自己的宠物。这个是“强化属性”，不是把武器放到手上。", "消耗武器", "无", "非小白吃剑加近战伤害；小白吃弓加远程伤害，力量/冲击/火矢/无限都会算。"));
+        pages.add(guideBookQuickPage(59, "宠物穿装备", "拿盔甲、盾牌、武器或其它物品", "蹲下右键自己的宠物。盔甲进盔甲槽；盾牌进副手；其它默认进主手。", "每次1件", "无", "如果你用副手物品去蹲下右键，会替换宠物副手；旧装备会返还，背包满就掉地上。"));
         pages.add(guideBookQuickPage(60, "乐魂速度挽具", "迅捷潜行书+乐魂挽具", "铁砧强化挽具。", "消耗附魔书", "无", "1/2/3级速度约×1.25/1.50/2.00。"));
         pages.add(guideBookQuickPage(61, "乐魂喂养", "金苹果或雪块+乐魂", "蹲下右键乐魂回血或加生命。", "消耗材料", "金苹果最多80次", "雪块可给失水乐魂直接回复10点。"));
         pages.add(guideBookQuickPage(62, "乐魂装备成长", "胸甲/雪块+乐魂", "胸甲继承护甲路线，雪块加速成长。", "消耗/装备", "成长最多减到约3分钟", "乐魂胸甲会继承TNT、末影、图腾等护层。"));
@@ -3248,7 +3277,8 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(82, "轨道炮装配三", "TNT矿车3、漏斗12、标靶4", "讲台1、书与笔1、钓鱼竿1", "逐项投入", "无", "拿着当前材料打开背包右键钓鱼竿，只消耗当前手上的材料并保存进度。"));
         pages.add(guideBookQuickPage(83, "轨道炮使用", "已组装的轨道炮", "主手或副手每10秒充1格，共" + RAILGUN_CHARGE_UNITS + "格；充能按百分比显示并同步钓鱼竿耐久。", "发射不扣背包TNT；耐久只剩1点", "每次发射后重新充能", "锁定300格内方块，上方40格生成连续" + RAILGUN_SPIRAL_TURN_COUNT + "匝单臂螺旋TNT（外半径56格、共" + RAILGUN_SINGLE_TNT_COUNT + "个，含中心一枚），自然下落且引信3秒；FlashUse保护方块。"));
         pages.add(guideBookQuickPage(84, "稳定锻造", "正常:合金模板+剑+8恶魂泪；简单:空模板+剑+1恶魂泪", "放入锻造台制作稳定剑。", "按难度扣除", "无", "正常伤害+30%、弩剑距离+100%；简单伤害+20%、距离+50%；攻速+10%、弩剑速度+15%。"));
-        pages.add(guideBookQuickPage(85, "怪物长矛", "正常难度的近战怪物", "怪物生成时自动判定。", "无", "无", "28%概率获得木、石、铜或铁长矛，另有5%概率获得钻石长矛；小白、灾厄弩手、女巫、溺尸等远程生物不会获得。"));
+        pages.add(guideBookQuickPage(85, "怪物闪光武器", "正常难度的近战怪物", "怪物生成时自动抽装备；打人时会按手上闪光物品结算。", "无", "按武器", "近战怪物可能拿材料强化斧/剑/锄或长矛；强化斧会吃材料护甲抵消。远程生物不会追加长矛。"));
+        pages.add(guideBookQuickPage(86, "小白弩切剑", "主手弩；副手放弹药或木剑", "给小白弩时，副手弹药会自动装进弩。副手是木剑时，GameFun房间小白靠近5格会切木剑，拉开6格会切回弩。", "弹药消耗1个；切剑不消耗", "按弩", "简单难度小白不用弩。FlashSMP的小白不只限木剑，可以切副手近战武器。"));
         return pages;
     }
 
@@ -3256,11 +3286,11 @@ public class FlashModeManager {
                                          String cost, String cooldown, String note) {
         String number = String.format(Locale.ROOT, "%02d", entry);
         return guideBookPage("§x§9§8§D§D§F§F§l" + number + ". " + title
-                + "\n\n§6材料: §0" + material
-                + "\n§a用法: §0" + usage
-                + "\n§c消耗: §0" + cost
-                + "\n§e冷却: §0" + cooldown
-                + "\n§7注意: §0" + note);
+                + "\n\n§6①拿什么: §0" + material
+                + "\n§a②怎么做: §0" + usage
+                + "\n§c③扣什么: §0" + cost
+                + "\n§e④冷却: §0" + cooldown
+                + "\n§7⑤重点: §0" + note);
     }
 
     private Component guideBookPage(String legacyText) {
@@ -26131,7 +26161,7 @@ public class FlashModeManager {
         CREATURE("creature", "宠物乐魂", 56, 62, "§a§l宠物乐魂", "§a宠物乐魂"),
         FARM("farm", "通关农耕", 63, 69, "§5§l通关农耕", "§5通关农耕"),
         HEAVY("heavy", "沉重爆破", 70, 79, "§x§6§0§6§0§6§0§l沉重爆破", "§x§6§0§6§0§6§0沉重爆破"),
-        ALL("all", "完整目录", 1, 84, "§f§l完整目录", "§f完整目录");
+        ALL("all", "完整目录", 1, 86, "§f§l完整目录", "§f完整目录");
 
         private final String id;
         private final String displayName;
