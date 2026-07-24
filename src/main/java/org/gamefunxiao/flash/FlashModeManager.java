@@ -3222,7 +3222,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(56, "宠物驯服", "骷髅+箭/末影人+黑曜石/僵尸+牛排", "手持材料右键对应生物。", "按概率消耗", "无", "正常难度20%/15%/20%；简单难度45%/65%/50%。甜浆果可切换跟随/等待；只有接触水流才会结束等待并回到主人身边，实体推动不会触发。"));
         pages.add(guideBookQuickPage(57, "宠物喂金苹果", "金苹果+宠物", "右键强化宠物生命。", "消耗金苹果", "最多10次", "每次最大生命+5并治疗+5。"));
         pages.add(guideBookQuickPage(58, "宠物喂武器", "剑+非骷髅宠物", "右键提高宠物攻击。", "消耗武器", "无", "材质越好越高，锋利每级额外+0.65。"));
-        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；副手拿物品时会替换宠物副手；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽；主手盾牌或副手拿的普通物品进副手，其余主手物品进主手；旧物品返还。主手弩+副手闪光弹药交给小白时，会自动把副手弹药装入弩并优先发射。"));
+        pages.add(guideBookQuickPage(59, "宠物自定义装备", "任意物品+自己的宠物", "蹲下右键把物品放入对应槽；副手拿物品时会替换宠物副手；蹲下空手右键清空主手。", "每次装备1件", "无", "盔甲进护甲槽；主手盾牌或副手拿的普通物品进副手，其余主手物品进主手；旧物品返还。主手弩+副手闪光弹药交给小白时，会自动把副手弹药装入弩并优先发射；GameFun 房间小白 5 格内只会切副手木剑，FlashSMP 可切副手近战武器。"));
         pages.add(guideBookQuickPage(60, "乐魂速度挽具", "迅捷潜行书+乐魂挽具", "铁砧强化挽具。", "消耗附魔书", "无", "1/2/3级速度约×1.25/1.50/2.00。"));
         pages.add(guideBookQuickPage(61, "乐魂喂养", "金苹果或雪块+乐魂", "蹲下右键乐魂回血或加生命。", "消耗材料", "金苹果最多80次", "雪块可给失水乐魂直接回复10点。"));
         pages.add(guideBookQuickPage(62, "乐魂装备成长", "胸甲/雪块+乐魂", "胸甲继承护甲路线，雪块加速成长。", "消耗/装备", "成长最多减到约3分钟", "乐魂胸甲会继承TNT、末影、图腾等护层。"));
@@ -13646,8 +13646,10 @@ public class FlashModeManager {
             disableEasyFlashTamedSkeletonCrossbow(skeleton);
             return;
         }
-        if (isFlashSmpTamedSkeleton(owner, room, skeleton)
-                && switchFlashSmpTamedSkeletonWeapon(skeleton, target)) {
+        if ((isFlashSmpTamedSkeleton(owner, room, skeleton)
+                && switchFlashSmpTamedSkeletonWeapon(skeleton, target))
+                || (isGameFunFlashTamedSkeleton(owner, room, skeleton)
+                && switchGameFunTamedSkeletonWoodSword(skeleton, target))) {
             if (skeleton.getEquipment().getItemInMainHand().getType() != Material.CROSSBOW) {
                 flashTamedSkeletonRangedShotCooldowns.remove(skeletonId);
                 return;
@@ -13748,6 +13750,15 @@ public class FlashModeManager {
                 && isStandaloneFlashContext(owner);
     }
 
+    private boolean isGameFunFlashTamedSkeleton(Player owner, GameRoom room, AbstractSkeleton skeleton) {
+        return owner != null
+                && room != null
+                && skeleton instanceof Skeleton
+                && isFlashRoomFeaturePhase(room)
+                && !isEasyFlashDifficulty(room)
+                && !room.isSpectator(owner.getUniqueId());
+    }
+
     private boolean switchFlashSmpTamedSkeletonWeapon(AbstractSkeleton skeleton, LivingEntity target) {
         if (!(skeleton instanceof Skeleton) || target == null || skeleton.getEquipment() == null
                 || !skeleton.getWorld().equals(target.getWorld())) {
@@ -13767,7 +13778,7 @@ public class FlashModeManager {
             equipment.setItemInOffHandDropChance(1.0F);
             skeleton.getPathfinder().stopPathfinding();
             skeleton.swingMainHand();
-            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_ARMOR_EQUIP_GENERIC, 0.72F, 1.28F);
+            playTamedSkeletonWeaponSwitchSound(skeleton, true);
             return true;
         }
 
@@ -13778,10 +13789,63 @@ public class FlashModeManager {
             equipment.setItemInOffHand(mainHand.clone(), true);
             equipment.setItemInMainHandDropChance(1.0F);
             equipment.setItemInOffHandDropChance(1.0F);
-            skeleton.getWorld().playSound(skeleton.getLocation(), Sound.ITEM_CROSSBOW_LOADING_START, 0.72F, 1.18F);
+            playTamedSkeletonWeaponSwitchSound(skeleton, false);
             return true;
         }
         return false;
+    }
+
+    private boolean switchGameFunTamedSkeletonWoodSword(AbstractSkeleton skeleton, LivingEntity target) {
+        if (!(skeleton instanceof Skeleton) || target == null || skeleton.getEquipment() == null
+                || !skeleton.getWorld().equals(target.getWorld())) {
+            return false;
+        }
+        EntityEquipment equipment = skeleton.getEquipment();
+        ItemStack mainHand = equipment.getItemInMainHand();
+        ItemStack offHand = equipment.getItemInOffHand();
+        double distanceSquared = skeleton.getLocation().distanceSquared(target.getLocation());
+
+        if (distanceSquared <= TAME_SKELETON_MELEE_SWITCH_DISTANCE_SQUARED
+                && mainHand.getType() == Material.CROSSBOW
+                && offHand.getType() == Material.WOODEN_SWORD) {
+            equipment.setItemInMainHand(offHand.clone(), true);
+            equipment.setItemInOffHand(mainHand.clone(), true);
+            equipment.setItemInMainHandDropChance(1.0F);
+            equipment.setItemInOffHandDropChance(1.0F);
+            skeleton.getPathfinder().stopPathfinding();
+            skeleton.swingMainHand();
+            playTamedSkeletonWeaponSwitchSound(skeleton, true);
+            return true;
+        }
+
+        if (distanceSquared >= TAME_SKELETON_RANGED_SWITCH_DISTANCE_SQUARED
+                && mainHand.getType() == Material.WOODEN_SWORD
+                && offHand.getType() == Material.CROSSBOW) {
+            equipment.setItemInMainHand(offHand.clone(), true);
+            equipment.setItemInOffHand(mainHand.clone(), true);
+            equipment.setItemInMainHandDropChance(1.0F);
+            equipment.setItemInOffHandDropChance(1.0F);
+            playTamedSkeletonWeaponSwitchSound(skeleton, false);
+            return true;
+        }
+        return false;
+    }
+
+    private void playTamedSkeletonWeaponSwitchSound(AbstractSkeleton skeleton, boolean melee) {
+        if (skeleton == null || skeleton.getWorld() == null) {
+            return;
+        }
+        Location location = skeleton.getLocation();
+        if (melee) {
+            Location center = location.clone().add(0.0D, Math.min(1.25D, skeleton.getHeight() * 0.62D), 0.0D);
+            skeleton.getWorld().playSound(location, Sound.ITEM_ARMOR_EQUIP_GENERIC, 0.58F, 1.42F);
+            skeleton.getWorld().playSound(location, Sound.ENTITY_PLAYER_ATTACK_SWEEP, 0.74F, 1.68F);
+            skeleton.getWorld().playSound(location, Sound.ITEM_TRIDENT_THROW, 0.32F, 1.92F);
+            skeleton.getWorld().spawnParticle(Particle.SWEEP_ATTACK, center, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        } else {
+            skeleton.getWorld().playSound(location, Sound.ITEM_CROSSBOW_LOADING_START, 0.72F, 1.18F);
+            skeleton.getWorld().playSound(location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.26F, 1.56F);
+        }
     }
 
     private boolean isFlashTamedMeleeWeapon(ItemStack item) {
@@ -14699,6 +14763,61 @@ public class FlashModeManager {
         }
     }
 
+    public void handleFlashMobHeldWeaponDamage(EntityDamageByEntityEvent event) {
+        if (event == null || event.isCancelled() || event.getDamage() <= 0.0D
+                || !(event.getEntity() instanceof LivingEntity victim)
+                || event.getDamager() instanceof Player
+                || event.getDamager() instanceof Projectile
+                || !(event.getDamager() instanceof LivingEntity attacker)) {
+            return;
+        }
+        EntityEquipment equipment = attacker.getEquipment();
+        if (equipment == null) {
+            return;
+        }
+        ItemStack weapon = equipment.getItemInMainHand();
+        if (isEmpty(weapon)) {
+            return;
+        }
+        GameRoom room = getFlashRoomByWorld(attacker.getWorld());
+        if (!isFlashMobHeldWeaponEffectsAvailable(attacker, room)) {
+            return;
+        }
+
+        boolean handled = false;
+        handled |= applyFlashMobHoeMaterialDamage(event, attacker, victim, weapon);
+        handled |= applyFlashMobMaterialAxeBonus(event, attacker, victim, room, weapon);
+        handled |= applyFlashMobSwordPotionHit(event, attacker, victim, room, weapon);
+        handled |= applyFlashMobStormSwordKineticDamage(event, attacker, victim, weapon);
+        if (handled || isFlashEnhancedMeleeWeapon(weapon)) {
+            applyMaterialArmorReduction(event, victim, room);
+        }
+    }
+
+    private boolean isFlashMobHeldWeaponEffectsAvailable(LivingEntity attacker, GameRoom room) {
+        if (attacker == null || attacker instanceof Player || attacker.isDead() || !attacker.isValid()
+                || !isFlashWorldActive(attacker.getWorld())) {
+            return false;
+        }
+        if (room != null) {
+            return isFlashRoomFeaturePhase(room) && (!isEasyFlashDifficulty(room) || isFlashTamed(attacker));
+        }
+        return true;
+    }
+
+    private boolean isFlashEnhancedMeleeWeapon(ItemStack weapon) {
+        if (isEmpty(weapon)) {
+            return false;
+        }
+        return hasPersistentDouble(weapon, materialAxeDamageBonusKey)
+                || hasPersistentDouble(weapon, materialSwordSpeedBonusKey)
+                || hasPersistentByte(weapon, redstoneStabilizerKey)
+                || isStableSword(weapon)
+                || hasPersistentByte(weapon, stormSwordKineticKey)
+                || getSwordPotionUses(weapon, 1) > 0
+                || getSwordPotionUses(weapon, 2) > 0;
+    }
+
     private double getFlashGlobalSkeletonDamageMultiplier(GameRoom room) {
         return room != null && room.getGameMode().supportsFlashDifficultyVote()
                 && room.getFlashDifficulty() == FlashDifficulty.NORMAL ? 0.60D : 1.0D;
@@ -14795,8 +14914,93 @@ public class FlashModeManager {
                 return new ItemStack(spears[random.nextInt(spears.length)]);
             }
         }
+        int flashRoll = random.nextInt(100);
+        if (flashRoll < 34) {
+            return createRandomFlashGlobalMobMaterialAxe(random);
+        }
+        if (flashRoll < 54) {
+            return createRandomFlashGlobalMobMaterialSword(random);
+        }
+        if (flashRoll < 70) {
+            return createRandomFlashGlobalMobHoe(random);
+        }
         Material[] pool = {Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD};
         return new ItemStack(pool[random.nextInt(pool.length)]);
+    }
+
+    private ItemStack createRandomFlashGlobalMobMaterialAxe(ThreadLocalRandom random) {
+        Material[] axes = {
+                Material.WOODEN_AXE, Material.STONE_AXE, Material.COPPER_AXE,
+                Material.IRON_AXE, Material.GOLDEN_AXE, Material.DIAMOND_AXE
+        };
+        Material axeType = axes[random.nextInt(axes.length)];
+        ItemStack axe = new ItemStack(axeType);
+        ItemStack upgraded = tryApplyMaterialAxeUpgrade(axe, getDefaultFlashMaterialUpgradeIngredient(axeType));
+        if (upgraded != null && random.nextDouble() < 0.25D) {
+            RedstoneStabilizerMatch stabilized = createRedstoneStabilizerUpgrade(upgraded, Material.REDSTONE);
+            if (stabilized != null) {
+                upgraded = stabilized.result();
+            }
+        }
+        return upgraded == null ? axe : upgraded;
+    }
+
+    private ItemStack createRandomFlashGlobalMobMaterialSword(ThreadLocalRandom random) {
+        Material[] swords = {
+                Material.WOODEN_SWORD, Material.STONE_SWORD, Material.COPPER_SWORD,
+                Material.IRON_SWORD, Material.GOLDEN_SWORD, Material.DIAMOND_SWORD
+        };
+        Material swordType = swords[random.nextInt(swords.length)];
+        ItemStack sword = new ItemStack(swordType);
+        ItemStack upgraded = tryApplyMaterialSwordUpgrade(sword, getDefaultFlashMaterialUpgradeIngredient(swordType));
+        if (upgraded != null && random.nextDouble() < 0.35D) {
+            RedstoneStabilizerMatch stabilized = createRedstoneStabilizerUpgrade(upgraded, Material.REDSTONE);
+            if (stabilized != null) {
+                upgraded = stabilized.result();
+            }
+        }
+        return upgraded == null ? sword : upgraded;
+    }
+
+    private ItemStack createRandomFlashGlobalMobHoe(ThreadLocalRandom random) {
+        Material[] hoes = {
+                Material.WOODEN_HOE, Material.STONE_HOE, Material.COPPER_HOE,
+                Material.IRON_HOE, Material.GOLDEN_HOE, Material.DIAMOND_HOE
+        };
+        ItemStack hoe = new ItemStack(hoes[random.nextInt(hoes.length)]);
+        if (random.nextDouble() < 0.35D) {
+            hoe.addUnsafeEnchantment(Enchantment.SHARPNESS, random.nextInt(1, 4));
+        }
+        return hoe;
+    }
+
+    private Material getDefaultFlashMaterialUpgradeIngredient(Material weaponType) {
+        if (weaponType == null) {
+            return Material.OAK_LOG;
+        }
+        String name = weaponType.name();
+        if (name.startsWith("WOODEN_")) {
+            return Material.OAK_LOG;
+        }
+        if (name.startsWith("STONE_")) {
+            return Material.COBBLESTONE;
+        }
+        if (name.startsWith("COPPER_")) {
+            return Material.COPPER_BLOCK;
+        }
+        if (name.startsWith("IRON_")) {
+            return Material.IRON_BLOCK;
+        }
+        if (name.startsWith("GOLDEN_")) {
+            return Material.GOLD_BLOCK;
+        }
+        if (name.startsWith("DIAMOND_")) {
+            return Material.DIAMOND_BLOCK;
+        }
+        if (name.startsWith("NETHERITE_")) {
+            return Material.NETHERITE_INGOT;
+        }
+        return Material.OAK_LOG;
     }
 
     private boolean isFlashRangedMob(LivingEntity living) {
@@ -23915,6 +24119,200 @@ public class FlashModeManager {
         player.playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 0.9f, 1.18f);
     }
 
+    private boolean applyFlashMobHoeMaterialDamage(EntityDamageByEntityEvent event, LivingEntity attacker,
+                                                   LivingEntity victim, ItemStack weapon) {
+        if (!isHoe(weapon)) {
+            return false;
+        }
+        double targetBaseDamage = getFlashHoeMaterialDamage(weapon.getType());
+        double currentDamage = event.getDamage();
+        double originalBaseDamage = getOriginalBaseDamage(event, currentDamage);
+        if (originalBaseDamage <= 0.0D) {
+            originalBaseDamage = currentDamage;
+        }
+        double sharpnessBonus = weapon.getEnchantmentLevel(Enchantment.SHARPNESS) * 0.5D;
+        double finalBaseDamage = Math.max(currentDamage, targetBaseDamage + sharpnessBonus);
+        if (finalBaseDamage <= currentDamage + 0.001D) {
+            return false;
+        }
+        if (event.isApplicable(EntityDamageEvent.DamageModifier.BASE)) {
+            try {
+                event.setDamage(EntityDamageEvent.DamageModifier.BASE, Math.max(originalBaseDamage, finalBaseDamage));
+            } catch (IllegalArgumentException | UnsupportedOperationException ignored) {
+                event.setDamage(finalBaseDamage);
+            }
+        } else {
+            event.setDamage(finalBaseDamage);
+        }
+        attacker.getWorld().spawnParticle(Particle.CRIT, victim.getLocation().add(0.0D,
+                Math.min(1.0D, victim.getHeight() * 0.55D), 0.0D), 8, 0.16D, 0.12D, 0.16D, 0.03D);
+        return true;
+    }
+
+    private boolean applyFlashMobMaterialAxeBonus(EntityDamageByEntityEvent event, LivingEntity attacker,
+                                                  LivingEntity victim, GameRoom room, ItemStack weapon) {
+        if (!isAxe(weapon) || !weapon.hasItemMeta()) {
+            return false;
+        }
+        ItemMeta meta = weapon.getItemMeta();
+        Double damageBonus = meta.getPersistentDataContainer().get(materialAxeDamageBonusKey, PersistentDataType.DOUBLE);
+        Double cooldownIncrease = meta.getPersistentDataContainer().get(materialAxeCooldownIncreaseKey, PersistentDataType.DOUBLE);
+        if (damageBonus == null || damageBonus <= 0.0D) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        if (now < materialAxeCooldowns.getOrDefault(attacker.getUniqueId(), 0L)) {
+            return false;
+        }
+
+        double effectiveDamageBonus = damageBonus;
+        if (victim instanceof Player playerVictim) {
+            double armorBonusReduction = getMaterialArmorAxeBonusReduction(playerVictim, room);
+            if (armorBonusReduction > 0.0D) {
+                effectiveDamageBonus = Math.max(0.0D, damageBonus - armorBonusReduction);
+                applyMaterialAxeArmorAdjustment(event, damageBonus, effectiveDamageBonus);
+                playerVictim.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, playerVictim.getLocation().add(0.0D, 1.0D, 0.0D), 10, 0.22D, 0.20D, 0.22D, 0.03D);
+                playerVictim.playSound(playerVictim.getLocation(), Sound.ITEM_ARMOR_EQUIP_DIAMOND, 0.55F, 1.45F);
+                putFlashMobMaterialAxeCooldown(attacker, cooldownIncrease, now);
+                return true;
+            }
+        }
+        if (effectiveDamageBonus <= 0.0D) {
+            if (victim instanceof Player playerVictim && hasMaterialArmorLayer(playerVictim)) {
+                playerVictim.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, playerVictim.getLocation().add(0.0D, 1.0D, 0.0D), 4, 0.18D, 0.16D, 0.18D, 0.02D);
+            }
+            return false;
+        }
+
+        double multiplier = 1.0D + effectiveDamageBonus;
+        double currentDamage = event.getDamage();
+        double originalBaseDamage = getOriginalBaseDamage(event, currentDamage);
+        double boostedBaseDamage = originalBaseDamage * multiplier;
+        if (event.isApplicable(EntityDamageEvent.DamageModifier.BASE)) {
+            try {
+                event.setDamage(EntityDamageEvent.DamageModifier.BASE, boostedBaseDamage);
+            } catch (IllegalArgumentException | UnsupportedOperationException ignored) {
+                event.setDamage(Math.max(currentDamage * multiplier, boostedBaseDamage));
+            }
+        } else {
+            event.setDamage(Math.max(currentDamage * multiplier, boostedBaseDamage));
+        }
+        putFlashMobMaterialAxeCooldown(attacker, cooldownIncrease, now);
+        attacker.getWorld().spawnParticle(Particle.CRIT, victim.getLocation().add(0.0D,
+                Math.min(1.0D, victim.getHeight() * 0.55D), 0.0D), 18, 0.18D, 0.18D, 0.18D, 0.05D);
+        attacker.getWorld().playSound(attacker.getLocation(), Sound.ITEM_AXE_SCRAPE, 0.75F, 1.35F);
+        return true;
+    }
+
+    private void putFlashMobMaterialAxeCooldown(LivingEntity attacker, Double cooldownIncrease, long now) {
+        double increase = Math.max(0.0D, cooldownIncrease == null ? 0.0D : cooldownIncrease);
+        long cooldownMs = Math.max(350L, (long) (700L * (1.0D + increase)));
+        materialAxeCooldowns.put(attacker.getUniqueId(), now + cooldownMs);
+    }
+
+    private boolean applyFlashMobSwordPotionHit(EntityDamageByEntityEvent event, LivingEntity attacker,
+                                                LivingEntity victim, GameRoom room, ItemStack sword) {
+        if (!isSword(sword)) {
+            return false;
+        }
+        boolean anyApplied = false;
+        for (int slot = 1; slot <= 2; slot++) {
+            int uses = getSwordPotionUses(sword, slot);
+            ItemStack potion = getStoredSwordPotion(sword, slot);
+            List<PotionEffect> effects = getPotionEffects(potion);
+            if (uses <= 0 || effects.isEmpty()) {
+                if (uses <= 0 && potion != null) {
+                    setSwordPotionUses(sword, slot, 0);
+                }
+                continue;
+            }
+            if (applySwordPotionEffectsFromMob(event, attacker, victim, room, effects)) {
+                setSwordPotionUses(sword, slot, uses - 1);
+                anyApplied = true;
+            }
+        }
+        if (!anyApplied) {
+            return false;
+        }
+        EntityEquipment equipment = attacker.getEquipment();
+        if (equipment != null) {
+            equipment.setItemInMainHand(sword, true);
+        }
+        attacker.getWorld().spawnParticle(Particle.WITCH, victim.getLocation().add(0.0D,
+                Math.min(1.2D, victim.getHeight() * 0.65D), 0.0D), 18, 0.22D, 0.22D, 0.22D, 0.04D);
+        attacker.getWorld().playSound(attacker.getLocation(), Sound.ENTITY_WITCH_DRINK, 0.55F, 1.28F);
+        return true;
+    }
+
+    private boolean applySwordPotionEffectsFromMob(EntityDamageByEntityEvent event, LivingEntity attacker,
+                                                   LivingEntity victim, GameRoom room, List<PotionEffect> effects) {
+        Player owner = isFlashTamed(attacker) ? resolveDamagePetOwner(attacker) : null;
+        boolean sameTeam = owner != null && victim instanceof Player target && !canDamage(room, owner, target);
+        boolean applied = false;
+        for (PotionEffect effect : effects) {
+            if (effect.getType() == PotionEffectType.INSTANT_HEALTH) {
+                if (sameTeam) {
+                    double maxHealth = victim.getAttribute(Attribute.MAX_HEALTH) == null
+                            ? victim.getHealth()
+                            : victim.getAttribute(Attribute.MAX_HEALTH).getValue();
+                    double heal = Math.min(4.0D, 4.0D * (effect.getAmplifier() + 1));
+                    victim.setHealth(Math.min(maxHealth, victim.getHealth() + heal));
+                    applied = true;
+                }
+                continue;
+            }
+            if (effect.getType() == PotionEffectType.INSTANT_DAMAGE) {
+                if (!sameTeam) {
+                    double bonus = Math.max(1.0D, 3.0D * (effect.getAmplifier() + 1));
+                    event.setDamage(event.getDamage() + bonus);
+                    applied = true;
+                }
+                continue;
+            }
+            boolean beneficial = effect.getType().getEffectCategory() == PotionEffectType.Category.BENEFICIAL;
+            if (!sameTeam || beneficial) {
+                victim.addPotionEffect(effect, true);
+                applied = true;
+            }
+        }
+        return applied;
+    }
+
+    private boolean applyFlashMobStormSwordKineticDamage(EntityDamageByEntityEvent event, LivingEntity attacker,
+                                                         LivingEntity victim, ItemStack weapon) {
+        int level = getStormSwordLevel(weapon);
+        if (level <= 0 || !hasStormSwordKinetic(weapon)) {
+            return false;
+        }
+        StormSpearDamageProfile profile = getStormSpearDamageProfile(weapon);
+        double relativeSpeed = calculateStormSwordSpearRelativeSpeed(attacker, victim);
+        if (relativeSpeed < profile.minRelativeSpeed()) {
+            return false;
+        }
+        double kineticDamage = Math.floor(Math.min(48.0D, relativeSpeed) * profile.damageMultiplier());
+        double extra = Math.max(0.0D, profile.baseDamage() + kineticDamage)
+                * STORM_SWORD_KINETIC_DAMAGE_MULTIPLIER;
+        if (victim instanceof Player victimPlayer) {
+            int stormArmorPieces = countEquippedStormArmorPieces(victimPlayer);
+            double reduction = Math.min(STORM_ARMOR_MAX_REDUCTION,
+                    stormArmorPieces * STORM_ARMOR_REDUCTION_PER_PIECE);
+            extra *= 1.0D - reduction;
+            if (stormArmorPieces > 0) {
+                victimPlayer.getWorld().spawnParticle(Particle.GUST, victimPlayer.getLocation().add(0.0D, 1.0D, 0.0D),
+                        6 + stormArmorPieces * 3, 0.25D, 0.16D, 0.25D, 0.035D);
+            }
+        }
+        if (extra <= 0.05D) {
+            return false;
+        }
+        setEventBaseDamage(event, event.getDamage() + extra);
+        Location hit = victim.getLocation().add(0.0D, Math.min(1.0D, victim.getHeight() * 0.55D), 0.0D);
+        victim.getWorld().spawnParticle(Particle.SWEEP_ATTACK, hit, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        victim.getWorld().spawnParticle(Particle.GUST, hit, 14, 0.22D, 0.16D, 0.22D, 0.04D);
+        attacker.getWorld().playSound(attacker.getLocation(), Sound.ENTITY_BREEZE_WIND_BURST, 0.38F, 1.42F);
+        return true;
+    }
+
     private void applyMaterialAxeBonus(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim, GameRoom room) {
         ItemStack weapon = attacker.getInventory().getItemInMainHand();
         if (!isAxe(weapon) || !weapon.hasItemMeta()) {
@@ -24083,7 +24481,7 @@ public class FlashModeManager {
         return Material.matchMaterial(swordType.name().replace("_SWORD", "_SPEAR"));
     }
 
-    private double calculateStormSwordSpearRelativeSpeed(Player attacker, LivingEntity victim) {
+    private double calculateStormSwordSpearRelativeSpeed(LivingEntity attacker, LivingEntity victim) {
         if (attacker == null) {
             return 0.0D;
         }

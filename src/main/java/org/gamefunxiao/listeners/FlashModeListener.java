@@ -501,6 +501,7 @@ public class FlashModeListener implements Listener {
         }
         plugin.getFlashModeManager().handleFlashTamedDamage(event);
         plugin.getFlashModeManager().handleCondensedEnderPearlEndermanDamage(event);
+        plugin.getFlashModeManager().handleFlashMobHeldWeaponDamage(event);
 
         Player attacker = resolveAttackingPlayer(event.getDamager());
         if (attacker != null && event.getEntity() instanceof LivingEntity victim
