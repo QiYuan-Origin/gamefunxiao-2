@@ -528,7 +528,57 @@ public class WorldManager {
     }
 
     public World getLobbyWorld(String roomId) {
-        return lobbyWorlds.get(roomId);
+        if (roomId == null || roomId.isBlank()) {
+            return null;
+        }
+        World tracked = lobbyWorlds.get(roomId);
+        if (tracked != null) {
+            return tracked;
+        }
+
+        World loaded = Bukkit.getWorld(LOBBY_PREFIX + roomId.toLowerCase(Locale.ROOT));
+        if (loaded != null) {
+            applyLobbyWorldRules(loaded);
+            lobbyWorlds.put(roomId, loaded);
+        }
+        return loaded;
+    }
+
+    public String getLobbyRoomIdByWorld(World world) {
+        if (world == null) {
+            return null;
+        }
+        for (Map.Entry<String, World> entry : lobbyWorlds.entrySet()) {
+            if (world.equals(entry.getValue())) {
+                return entry.getKey();
+            }
+        }
+        String name = world.getName();
+        if (name == null) {
+            return null;
+        }
+        String lowerName = name.toLowerCase(Locale.ROOT);
+        if (!lowerName.startsWith(LOBBY_PREFIX)) {
+            return null;
+        }
+        String roomId = name.substring(LOBBY_PREFIX.length());
+        if (!roomId.isBlank()) {
+            lobbyWorlds.putIfAbsent(roomId, world);
+            applyLobbyWorldRules(world);
+        }
+        return roomId.isBlank() ? null : roomId;
+    }
+
+    public boolean isRoomLobbyWorld(String roomId, World world) {
+        if (roomId == null || roomId.isBlank() || world == null) {
+            return false;
+        }
+        World tracked = getLobbyWorld(roomId);
+        if (tracked != null && tracked.equals(world)) {
+            return true;
+        }
+        String resolvedRoomId = getLobbyRoomIdByWorld(world);
+        return resolvedRoomId != null && resolvedRoomId.equalsIgnoreCase(roomId);
     }
 
     /**
@@ -550,6 +600,11 @@ public class WorldManager {
 
     public Location getLobbySpawnLocation(String roomId) {
         return getLobbySpawnLocation(roomId, null);
+    }
+
+    public Location getLobbySpawnLocationForWorld(World world, GameMode mode) {
+        Location safe = normalizeLobbySpawn(world, mode, null);
+        return safe == null ? null : safe.clone();
     }
 
     private Location normalizeLobbySpawn(World world, GameMode mode, World sourceTemplateWorld) {
@@ -956,10 +1011,9 @@ public class WorldManager {
             return null;
         }
 
-        for (Map.Entry<String, World> entry : lobbyWorlds.entrySet()) {
-            if (world.equals(entry.getValue())) {
-                return entry.getKey();
-            }
+        String lobbyRoomId = getLobbyRoomIdByWorld(world);
+        if (lobbyRoomId != null) {
+            return lobbyRoomId;
         }
         for (Map.Entry<String, World> entry : gameWorlds.entrySet()) {
             if (world.equals(entry.getValue())) {

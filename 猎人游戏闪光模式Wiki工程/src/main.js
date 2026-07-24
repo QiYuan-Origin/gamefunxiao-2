@@ -871,17 +871,18 @@ lp group admin permission set gamefunxiao.flashuse true</code></pre>`
       {
         title: '锄头陷阱',
         html: `
-          <p>闪光模式里，放锄头陷阱统一按 <code>Q</code>：把任意锄头丢到地上，锄头落到的方块会变成陷阱。锄头不额外加飞行速度，只按原版丢出速度飞行；陷阱只会触发敌人，主人、同队玩家和旁观者都不会触发，FlashSMP 同步使用这套保护。</p>
-          <table class="wikitable"><thead><tr><th>锄头</th><th>分工</th><th>触发效果</th></tr></thead><tbody>
-            <tr><td>木锄</td><td>缠绕</td><td>低伤害，缓慢 II 约 3 秒，并把目标往陷阱中心拉。</td></tr>
-            <tr><td>石锄</td><td>重压</td><td>缓慢 III 约 2.5 秒，虚弱 I 约 4 秒，并附带挖掘疲劳压制节奏。</td></tr>
-            <tr><td>铜锄</td><td>导电</td><td>发光约 6 秒，电火花粒子和铜灯音效标记位置。</td></tr>
-            <tr><td>铁锄</td><td>夹锁</td><td>缓慢 IV 约 2 秒，短暂禁跳，并把目标钉回陷阱中心。</td></tr>
-            <tr><td>金锄</td><td>致盲</td><td>失明约 3 秒，黑暗约 2 秒，适合遮视野和断追踪。</td></tr>
-            <tr><td>钻石锄</td><td>弹飞</td><td>短暂漂浮并把目标从陷阱中心弹开，用来破坏冲刺路线。</td></tr>
-            <tr><td>下界合金锄</td><td>强拉拽</td><td>最高伤害，缓慢、虚弱、黑暗约 3 秒，并强力拉回中心。</td></tr>
+          <p>闪光模式里，放锄头陷阱统一按 <code>Q</code>：把任意锄头丢到地上，锄头落到的方块会变成陷阱。锄头不额外加飞行速度，只按原版丢出速度飞行；陷阱只会触发敌人，主人、同队玩家和旁观者都不会触发，FlashSMP 同步使用这套保护。现在用锄头直接近战命中实体时，也会把对应材质的陷阱效果直接套到被攻击实体身上。</p>
+          <table class="wikitable"><thead><tr><th>锄头</th><th>分工</th><th>陷阱裸伤</th><th>破甲档</th><th>触发效果</th></tr></thead><tbody>
+            <tr><td>木锄</td><td>缠绕</td><td>2.6</td><td>25%</td><td>缓慢 II 约 3 秒，并把目标往陷阱中心拉。</td></tr>
+            <tr><td>石锄</td><td>重压</td><td>3.7</td><td>28%</td><td>缓慢 III 约 2.5 秒，虚弱 I 约 4 秒，并附带挖掘疲劳压制节奏。</td></tr>
+            <tr><td>铜锄</td><td>导电</td><td>4.8</td><td>31%</td><td>发光约 6 秒，电火花粒子和铜灯音效标记位置。</td></tr>
+            <tr><td>铁锄</td><td>夹锁</td><td>5.8</td><td>35%</td><td>缓慢 IV 约 2 秒，短暂禁跳，并把目标钉回陷阱中心。</td></tr>
+            <tr><td>金锄</td><td>致盲</td><td>3.4</td><td>38%</td><td>失明约 3 秒，黑暗约 2 秒，适合遮视野和断追踪。</td></tr>
+            <tr><td>钻石锄</td><td>弹飞</td><td>7.5</td><td>42%</td><td>短暂漂浮并把目标从陷阱中心弹开，用来破坏冲刺路线。</td></tr>
+            <tr><td>下界合金锄</td><td>强拉拽</td><td>9.5</td><td>45%</td><td>最高伤害，缓慢、虚弱、黑暗约 3 秒，并强力拉回中心。</td></tr>
           </tbody></table>
-          <div class="wiki-notice success"><b>陷阱连锁：</b>同一目标 5 秒内连续触发普通锄头陷阱会叠连锁。第 2 次起控制时长 +25%，第 3 次及以后额外 +2 点伤害；TMT 和矿车雷不参与普通连锁。</div>
+          <div class="wiki-notice success"><b>陷阱连锁：</b>同一目标 5 秒内连续触发普通锄头陷阱会叠连锁。第 2 次起控制时长 +25%，第 3 次及以后额外 +2 点伤害；直接近战命中也会参与连锁。TMT 和矿车雷不参与普通连锁。</div>
+          <div class="wiki-notice warning"><b>破甲伤：</b>每次触发会按锄头材质进行 25%~45% 概率判定；判定成功后，再追加同档比例的破甲伤害，直接扣生命，护甲不抵消。</div>
           <div class="wiki-notice note"><b>耕地落点：</b>如果锄头落到耕地，会以落点为中心铺开 <b>3×3</b> 耕地陷阱；这 9 格也是每格单次触发，不是无限重复触发。</div>
           <div class="wiki-notice tip"><b>操作确认：</b>普通锄头陷阱和矿车雷锄头陷阱都用 <code>Q</code> 丢出放置，不使用右键放置；TMT 不再能做锄头陷阱，只能作为方块放置。</div>
         `

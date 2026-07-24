@@ -480,6 +480,7 @@ public class FlashModeManager {
     private static final int FLASH_RECYCLABLE_DOUBLE_CRAFT_LIMIT = 2;
     private static final int FLASH_PREY_NETHERITE_DOUBLE_CRAFT_LIMIT = 2;
     private static final double FLASH_HOE_TRAP_TRIGGER_RADIUS = 0.86D;
+    private static final double FLASH_HOE_TRAP_DAMAGE_MULTIPLIER = 1.70D;
     private static final long FLASH_HOE_TRAP_CHAIN_WINDOW_MILLIS = 5000L;
     private static final int FLASH_HOE_TRAP_CHAIN_MAX_STACKS = 3;
     private static final double FLASH_HOE_TRAP_CHAIN_SECOND_DURATION_MULTIPLIER = 1.25D;
@@ -738,6 +739,8 @@ public class FlashModeManager {
     private final Map<UUID, Long> unstableMaceDisplacementLocks = new HashMap<>();
     private final Set<UUID> unstableMaceSpecialDamageGuards = new HashSet<>();
     private final Set<EntityDamageByEntityEvent> processedEasyMaceDamageEvents =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<EntityDamageByEntityEvent> processedHoeTrapHitEvents =
             Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<UUID, PendingMaceShieldBreak> pendingMaceShieldBreaks = new HashMap<>();
     private final Map<UUID, UnstableMacePearlTrigger> unstableMacePearlTriggers = new HashMap<>();
@@ -3240,8 +3243,8 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；碰到方块或实体会爆炸并造成范围伤害，FlashUse不破坏方块，游戏中和FlashSMP会破坏方块。"));
         pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度再次强化、伤害+74%，命中追加20%破甲伤害。"));
         pages.add(guideBookQuickPage(42, "Q丢剑气", "非稳定剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "稳定剑按Q只会正常掉落，不会变成剑气。"));
-        pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱。", "消耗/占用锄头", "触发一次", "只会触发敌人；自己、同队和旁观者不会触发，FlashSMP同步。"));
-        pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "木缠绕、石重压、铜导电、铁夹锁、金致盲、钻弹飞、合金强拉。", "同上", "5秒连锁", "第2次控制时长+25%，第3次及以后额外+2伤害。"));
+        pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱；近战命中也会直接套陷阱。", "消耗/占用锄头", "触发一次", "只触发敌人；自己、同队和旁观者不会触发，5秒连锁第2次控制+25%、第3次额外+2。"));
+        pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "木缠绕、石重压、铜导电、铁夹锁、金致盲、钻弹飞、合金强拉。", "同上", "5秒连锁", "裸伤已+70%；每次触发有25%~45%概率追加同档比例破甲伤。"));
         pages.add(guideBookQuickPage(45, "矿车雷锄", "锄头+TNT矿车", "按Q放雷，踩中延迟爆炸。", "消耗材料", "触发一次", "TMT不再能打到锄头上。"));
         pages.add(guideBookQuickPage(46, "唱片机光环", "唱片机+唱片", "播放唱片后扫描约80格光环。", "唱片播放", "周期刷新", "不同唱片给近战、远程、减伤、修耐久等修正。"));
         pages.add(guideBookQuickPage(47, "强唱片", "Pigstep/Precipice/Otherside等", "放入唱片机播放。", "唱片播放", "周期刷新", "Pigstep偏综合爆发，Creator偏抗性和修耐久。"));
@@ -6211,6 +6214,7 @@ public class FlashModeManager {
             suppressQuickSwapAttributeInheritance(event, attacker);
             boolean maceShieldBreak = applyFlashMaceSmash(event, attacker, victim, room);
             applyFlashHoeMaterialDamage(event, attacker);
+            applyDirectHoeTrapHit(event, attacker, victim, room);
             applyMaterialAxeBonus(event, attacker, victim, room);
             applySwordPotionHit(event, attacker, victim, room);
             applyStormSwordKineticDamage(event, attacker, victim);
@@ -14822,6 +14826,7 @@ public class FlashModeManager {
 
         boolean handled = false;
         handled |= applyFlashMobHoeMaterialDamage(event, attacker, victim, weapon);
+        handled |= applyFlashMobDirectHoeTrapHit(event, attacker, victim, room, weapon);
         handled |= applyFlashMobMaterialAxeBonus(event, attacker, victim, room, weapon);
         handled |= applyFlashMobSwordPotionHit(event, attacker, victim, room, weapon);
         handled |= applyFlashMobStormSwordKineticDamage(event, attacker, victim, weapon);
@@ -17506,7 +17511,8 @@ public class FlashModeManager {
             }
         }
         applyHoeTrapEffect(trap.hoeType(), target, center, durationMultiplier, chain.stacks());
-        sendHoeTrapChainFeedback(trap, target, owner, chain);
+        double piercingDamage = maybeApplyHoeTrapArmorPiercingDamage(target, trap.hoeType(), damage);
+        sendHoeTrapChainFeedback(trap, target, owner, chain, piercingDamage);
     }
 
     private void triggerTmtHoeTrap(HoeTrap trap, Player target, Player owner) {
@@ -17593,7 +17599,7 @@ public class FlashModeManager {
                 || now - entry.getValue().lastTriggerMillis() > FLASH_HOE_TRAP_CHAIN_WINDOW_MILLIS);
     }
 
-    private void sendHoeTrapChainFeedback(HoeTrap trap, Player target, Player owner, HoeTrapChainState chain) {
+    private void sendHoeTrapChainFeedback(HoeTrap trap, Player target, Player owner, HoeTrapChainState chain, double piercingDamage) {
         if (trap == null || target == null || chain == null) {
             return;
         }
@@ -17601,13 +17607,17 @@ public class FlashModeManager {
         String chainText = chain.stacks() <= 1 ? "§7首触发"
                 : chain.stacks() == 2 ? "§e连锁×2 §8| §f控制时长+25%"
                 : "§c连锁×3 §8| §f额外+2伤害";
-        target.sendActionBar("§x§B§B§8§8§F§F⌑ §f踩中" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| §x§8§A§F§F§D§2" + role + " §8| " + chainText);
+        String pierceText = piercingDamage > 0.0D ? " §8| §x§F§F§6§6§6§6破甲+" + formatOneDecimal(piercingDamage) : "";
+        target.sendActionBar("§x§B§B§8§8§F§F⌑ §f踩中" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| §x§8§A§F§F§D§2" + role + " §8| " + chainText + pierceText);
         if (owner != null && owner.isOnline() && !owner.getUniqueId().equals(target.getUniqueId())) {
-            owner.sendActionBar("§x§8§A§F§F§D§2⌑ §f" + target.getName() + " 触发了" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| " + chainText);
+            owner.sendActionBar("§x§8§A§F§F§D§2⌑ §f" + target.getName() + " 触发了" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| " + chainText + pierceText);
         }
     }
 
-    private void applyHoeTrapEffect(Material hoeType, Player target, Location center, double durationMultiplier, int chainStacks) {
+    private void applyHoeTrapEffect(Material hoeType, LivingEntity target, Location center, double durationMultiplier, int chainStacks) {
+        if (target == null || target.isDead() || !target.isValid()) {
+            return;
+        }
         target.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, scaleHoeTrapTicks(60, durationMultiplier), 0, false, true, true));
         switch (hoeType) {
             case WOODEN_HOE -> {
@@ -17657,8 +17667,8 @@ public class FlashModeManager {
         return Math.max(1, (int) Math.round(Math.max(1, ticks) * Math.max(0.1D, multiplier)));
     }
 
-    private void pullTargetToTrapCenter(Player target, Location center, double horizontal, double vertical) {
-        if (target == null || center == null || target.getWorld() != center.getWorld()) {
+    private void pullTargetToTrapCenter(LivingEntity target, Location center, double horizontal, double vertical) {
+        if (target == null || center == null || !target.getWorld().equals(center.getWorld())) {
             return;
         }
         Vector pull = center.toVector().subtract(target.getLocation().toVector());
@@ -17670,8 +17680,8 @@ public class FlashModeManager {
         target.setVelocity(target.getVelocity().multiply(0.35D).add(pull));
     }
 
-    private void launchTargetFromTrapCenter(Player target, Location center, double horizontal, double vertical) {
-        if (target == null || center == null || target.getWorld() != center.getWorld()) {
+    private void launchTargetFromTrapCenter(LivingEntity target, Location center, double horizontal, double vertical) {
+        if (target == null || center == null || !target.getWorld().equals(center.getWorld())) {
             return;
         }
         Vector push = target.getLocation().toVector().subtract(center.toVector());
@@ -17683,8 +17693,40 @@ public class FlashModeManager {
         target.setVelocity(target.getVelocity().multiply(0.25D).add(push));
     }
 
+    private double maybeApplyHoeTrapArmorPiercingDamage(LivingEntity target, Material hoeType, double referenceDamage) {
+        if (target == null || target.isDead() || !target.isValid() || referenceDamage <= 0.0D) {
+            return 0.0D;
+        }
+        double chance = getHoeTrapArmorPierceRate(hoeType);
+        if (chance <= 0.0D || ThreadLocalRandom.current().nextDouble() >= chance) {
+            return 0.0D;
+        }
+        double piercingDamage = referenceDamage * chance;
+        if (piercingDamage <= 0.0D) {
+            return 0.0D;
+        }
+        applyHoeTrapArmorPiercingHealthDamage(target, piercingDamage);
+        Location location = target.getLocation().add(0.0D, Math.min(1.1D, target.getHeight() * 0.62D), 0.0D);
+        target.getWorld().spawnParticle(Particle.CRIT, location, 10, 0.18D, 0.16D, 0.18D, 0.04D);
+        target.getWorld().spawnParticle(Particle.ELECTRIC_SPARK, location, 6, 0.16D, 0.14D, 0.16D, 0.035D);
+        target.getWorld().playSound(target.getLocation(), Sound.ITEM_ARMOR_EQUIP_NETHERITE, 0.46F, 1.72F);
+        return piercingDamage;
+    }
+
+    private void applyHoeTrapArmorPiercingHealthDamage(LivingEntity target, double piercingDamage) {
+        if (target == null || target.isDead() || !target.isValid() || piercingDamage <= 0.0D) {
+            return;
+        }
+        double nextHealth = target.getHealth() - piercingDamage;
+        if (nextHealth <= 0.0D) {
+            target.setHealth(0.0D);
+            return;
+        }
+        target.setHealth(Math.max(0.01D, nextHealth));
+    }
+
     private double getFlashHoeTrapDamage(Material hoeType) {
-        return switch (hoeType) {
+        double base = switch (hoeType) {
             case WOODEN_HOE -> 1.5D;
             case STONE_HOE -> 2.2D;
             case COPPER_HOE -> 2.8D;
@@ -17693,6 +17735,20 @@ public class FlashModeManager {
             case DIAMOND_HOE -> 4.4D;
             case NETHERITE_HOE -> 5.6D;
             default -> 1.0D;
+        };
+        return base * FLASH_HOE_TRAP_DAMAGE_MULTIPLIER;
+    }
+
+    private double getHoeTrapArmorPierceRate(Material hoeType) {
+        return switch (hoeType) {
+            case WOODEN_HOE -> 0.25D;
+            case STONE_HOE -> 0.28D;
+            case COPPER_HOE -> 0.31D;
+            case IRON_HOE -> 0.35D;
+            case GOLDEN_HOE -> 0.38D;
+            case DIAMOND_HOE -> 0.42D;
+            case NETHERITE_HOE -> 0.45D;
+            default -> 0.25D;
         };
     }
 
@@ -19312,7 +19368,11 @@ public class FlashModeManager {
     }
 
     private boolean isHoe(ItemStack item) {
-        return item != null && item.getType() != Material.AIR && item.getType().name().endsWith("_HOE");
+        return item != null && isHoeMaterial(item.getType());
+    }
+
+    private boolean isHoeMaterial(Material material) {
+        return material != null && material != Material.AIR && material.name().endsWith("_HOE");
     }
 
     private boolean isArmor(ItemStack item) {
@@ -24264,6 +24324,29 @@ public class FlashModeManager {
         return true;
     }
 
+    private boolean applyFlashMobDirectHoeTrapHit(EntityDamageByEntityEvent event, LivingEntity attacker,
+                                                  LivingEntity victim, GameRoom room, ItemStack weapon) {
+        if (event == null || event.isCancelled() || event.getDamage() <= 0.0D
+                || attacker == null || victim == null || !isHoe(weapon)) {
+            return false;
+        }
+        Player owner = isFlashTamed(attacker) ? resolveDamagePetOwner(attacker) : null;
+        if (owner != null) {
+            if (victim instanceof Player target && !canDamage(room, owner, target)) {
+                return false;
+            }
+            if (!(victim instanceof Player) && isOwnedOrFriendlyTame(owner.getUniqueId(), victim)) {
+                return false;
+            }
+        } else if (victim instanceof Player target && room != null && room.isSpectator(target.getUniqueId())) {
+            return false;
+        }
+        if (!claimHoeTrapHitEvent(event)) {
+            return false;
+        }
+        return applyDirectHoeTrapToVictim(event, attacker, victim, weapon.getType(), owner);
+    }
+
     private boolean applyFlashMobMaterialAxeBonus(EntityDamageByEntityEvent event, LivingEntity attacker,
                                                   LivingEntity victim, GameRoom room, ItemStack weapon) {
         if (!isAxe(weapon) || !weapon.hasItemMeta()) {
@@ -24537,6 +24620,74 @@ public class FlashModeManager {
             }
         }
         event.setDamage(finalBaseDamage);
+    }
+
+    private void applyDirectHoeTrapHit(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim, GameRoom room) {
+        if (event == null || event.isCancelled() || event.getDamage() <= 0.0D || attacker == null || victim == null) {
+            return;
+        }
+        ItemStack weapon = attacker.getInventory().getItemInMainHand();
+        if (!isHoe(weapon) || !isRecordedAttackWeapon(attacker, weapon)) {
+            return;
+        }
+        if (victim instanceof Player target && !canDamage(room, attacker, target)) {
+            return;
+        }
+        if (!(victim instanceof Player) && isOwnedOrFriendlyTame(attacker.getUniqueId(), victim)) {
+            return;
+        }
+        if (!claimHoeTrapHitEvent(event)) {
+            return;
+        }
+        applyDirectHoeTrapToVictim(event, attacker, victim, weapon.getType(), attacker);
+    }
+
+    private boolean claimHoeTrapHitEvent(EntityDamageByEntityEvent event) {
+        if (event == null || !processedHoeTrapHitEvents.add(event)) {
+            return false;
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> processedHoeTrapHitEvents.remove(event));
+        return true;
+    }
+
+    private boolean applyDirectHoeTrapToVictim(EntityDamageByEntityEvent event, LivingEntity attacker,
+                                              LivingEntity victim, Material hoeType, Player owner) {
+        if (event == null || attacker == null || victim == null || !isHoeMaterial(hoeType)) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        HoeTrapChainState chain = advanceHoeTrapChain(victim.getUniqueId(), now);
+        double durationMultiplier = chain.stacks() >= 2 ? FLASH_HOE_TRAP_CHAIN_SECOND_DURATION_MULTIPLIER : 1.0D;
+        double trapDamage = getFlashHoeTrapDamage(hoeType)
+                + (chain.stacks() >= FLASH_HOE_TRAP_CHAIN_MAX_STACKS ? FLASH_HOE_TRAP_CHAIN_THIRD_EXTRA_DAMAGE : 0.0D);
+        setEventBaseDamage(event, Math.max(event.getDamage(), trapDamage));
+        Location center = attacker.getLocation().clone().add(0.0D, Math.min(0.75D, attacker.getHeight() * 0.35D), 0.0D);
+        applyHoeTrapEffect(hoeType, victim, center, durationMultiplier, chain.stacks());
+        double piercingDamage = maybeApplyHoeTrapArmorPiercingDamage(victim, hoeType, trapDamage);
+        sendDirectHoeTrapFeedback(attacker, victim, hoeType, chain, piercingDamage, owner);
+        return true;
+    }
+
+    private void sendDirectHoeTrapFeedback(LivingEntity attacker, LivingEntity victim, Material hoeType,
+                                           HoeTrapChainState chain, double piercingDamage, Player owner) {
+        if (attacker == null || victim == null || chain == null) {
+            return;
+        }
+        String chainText = chain.stacks() <= 1 ? "§7首触发"
+                : chain.stacks() == 2 ? "§e连锁×2 §8| §f控制+25%"
+                : "§c连锁×3 §8| §f额外+2伤害";
+        String pierceText = piercingDamage > 0.0D ? " §8| §x§F§F§6§6§6§6破甲+" + formatOneDecimal(piercingDamage) : "";
+        String message = "§x§8§A§F§F§D§2⌑ §f" + getHoeDisplayName(hoeType) + "近战触发 §x§B§B§8§8§F§F"
+                + getHoeTrapRoleName(hoeType) + " §8| " + chainText + pierceText;
+        if (owner != null && owner.isOnline()) {
+            owner.sendActionBar(message);
+        } else if (attacker instanceof Player player) {
+            player.sendActionBar(message);
+        }
+        if (victim instanceof Player target) {
+            target.sendActionBar("§x§B§B§8§8§F§F⌑ §f被" + getHoeDisplayName(hoeType) + "命中，陷阱效果已触发 §8| "
+                    + chainText + pierceText);
+        }
     }
 
     private void applyStormSwordKineticDamage(EntityDamageByEntityEvent event, Player attacker, LivingEntity victim) {

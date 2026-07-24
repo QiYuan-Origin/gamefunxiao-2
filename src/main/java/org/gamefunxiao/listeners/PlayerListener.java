@@ -83,6 +83,7 @@ public class PlayerListener implements Listener {
 
     public PlayerListener(GameFunXiao plugin) {
         this.plugin = plugin;
+        Bukkit.getScheduler().runTaskTimer(plugin, this::recoverLobbyVoidPlayersTick, 1L, 2L);
     }
 
     private World getWorldSelectionPreyWorld(GameRoom room, Player player, Location viewSource) {
@@ -104,7 +105,17 @@ public class PlayerListener implements Listener {
         if (room == null) {
             return null;
         }
-        return plugin.getWorldManager().getLobbySpawnLocation(room.getRoomId(), room.getGameMode());
+        Location safe = plugin.getWorldManager().getLobbySpawnLocation(room.getRoomId(), room.getGameMode());
+        World sourceWorld = viewSource == null ? null : viewSource.getWorld();
+        if ((safe == null || safe.getWorld() == null)
+                && sourceWorld != null
+                && plugin.getWorldManager().isRoomLobbyWorld(room.getRoomId(), sourceWorld)) {
+            safe = plugin.getWorldManager().getLobbySpawnLocationForWorld(sourceWorld, room.getGameMode());
+        }
+        if (safe != null) {
+            applyWorldSelectionView(safe, viewSource);
+        }
+        return safe;
     }
 
     private Location getWorldSelectionSafeLocation(World world, Location viewSource) {
@@ -145,8 +156,7 @@ public class PlayerListener implements Listener {
         if (room == null || world == null) {
             return false;
         }
-        World lobbyWorld = plugin.getWorldManager().getLobbyWorld(room.getRoomId());
-        return lobbyWorld != null && lobbyWorld.equals(world);
+        return plugin.getWorldManager().isRoomLobbyWorld(room.getRoomId(), world);
     }
 
     private boolean isRoomLobbyVoidProtectionActive(GameRoom room) {
@@ -176,10 +186,17 @@ public class PlayerListener implements Listener {
     }
 
     private void returnRoomLobbyPlayer(Player player, GameRoom room, Location viewSource, boolean feedback) {
-        if (player == null || room == null || !roomLobbyVoidRecoveries.add(player.getUniqueId())) {
+        if (room == null) {
             return;
         }
-        Location safe = getRoomLobbySafeLocation(room, viewSource);
+        returnLobbyLikeWorldPlayer(player, room, viewSource, feedback);
+    }
+
+    private void returnLobbyLikeWorldPlayer(Player player, GameRoom room, Location viewSource, boolean feedback) {
+        if (player == null || !roomLobbyVoidRecoveries.add(player.getUniqueId())) {
+            return;
+        }
+        Location safe = getLobbyLikeSafeLocation(room, viewSource);
         if (safe == null || safe.getWorld() == null) {
             roomLobbyVoidRecoveries.remove(player.getUniqueId());
             return;
@@ -193,7 +210,66 @@ public class PlayerListener implements Listener {
             player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.72f, 1.28f);
             player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.34f, 1.72f);
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> verifyRoomLobbyRecovery(player, room), 1L);
+        if (room != null) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> verifyRoomLobbyRecovery(player, room), 1L);
+        } else {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> roomLobbyVoidRecoveries.remove(player.getUniqueId()), 4L);
+        }
+    }
+
+    private Location getLobbyLikeSafeLocation(GameRoom room, Location viewSource) {
+        Location safe = room == null ? null : getRoomLobbySafeLocation(room, viewSource);
+        World sourceWorld = viewSource == null ? null : viewSource.getWorld();
+        if ((safe == null || safe.getWorld() == null)
+                && sourceWorld != null
+                && plugin.getWorldManager().isLobbyLikeWorld(sourceWorld)) {
+            safe = plugin.getWorldManager().getLobbySpawnLocationForWorld(sourceWorld,
+                    room == null ? null : room.getGameMode());
+            if (safe != null) {
+                applyWorldSelectionView(safe, viewSource);
+            }
+        }
+        return safe;
+    }
+
+    private void recoverLobbyVoidPlayersTick() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            Location location = player.getLocation();
+            if (!shouldReturnLobbyLikeWorldPlayer(player, location)) {
+                continue;
+            }
+            GameRoom room = resolveRoomLobbyVoidRoom(player, location.getWorld());
+            returnLobbyLikeWorldPlayer(player, room, location, true);
+        }
+    }
+
+    private boolean shouldReturnLobbyLikeWorldPlayer(Player player, Location location) {
+        if (player == null || location == null || location.getWorld() == null || location.getY() > -64.0D) {
+            return false;
+        }
+        GameRoom room = resolveRoomLobbyVoidRoom(player, location.getWorld());
+        if (room != null) {
+            return isRoomLobbyVoidProtectionActive(room) && isRoomLobbyWorld(room, location.getWorld());
+        }
+        return plugin.getWorldManager().isLobbyLikeWorld(location.getWorld());
+    }
+
+    private GameRoom resolveRoomLobbyVoidRoom(Player player, World world) {
+        if (player == null || world == null) {
+            return null;
+        }
+        GameRoom playerRoom = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        if (playerRoom != null && isRoomLobbyWorld(playerRoom, world)) {
+            return playerRoom;
+        }
+        String roomId = plugin.getWorldManager().getLobbyRoomIdByWorld(world);
+        if (roomId != null) {
+            GameRoom worldRoom = plugin.getRoomManager().getRoom(roomId);
+            if (worldRoom != null) {
+                return worldRoom;
+            }
+        }
+        return null;
     }
 
     private void verifyRoomLobbyRecovery(Player player, GameRoom room) {
@@ -2913,7 +2989,15 @@ public class PlayerListener implements Listener {
         // 检查是否是虚空伤害
         if (event.getCause() != org.bukkit.event.entity.EntityDamageEvent.DamageCause.VOID) return;
 
-        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        GameRoom room = resolveRoomLobbyVoidRoom(player, player.getWorld());
+        if (room == null && shouldReturnLobbyLikeWorldPlayer(player, player.getLocation())) {
+            event.setCancelled(true);
+            returnLobbyLikeWorldPlayer(player, null, player.getLocation(), true);
+            return;
+        }
+        if (room == null) {
+            room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        }
         if (room == null) return;
 
         if (isRoomLobbyVoidProtectionActive(room) && isRoomLobbyWorld(room, player.getWorld())) {
@@ -3023,16 +3107,17 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     public void onRoomLobbyVoidMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        GameRoom room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
         Location to = event.getTo();
-        if (!isRoomLobbyVoidProtectionActive(room)
-                || !isRoomLobbyWorld(room, player.getWorld())
-                || !shouldReturnRoomLobbyPlayer(room, to)) {
+        if (!shouldReturnLobbyLikeWorldPlayer(player, to)) {
             return;
         }
 
-        event.setCancelled(true);
-        returnRoomLobbyPlayer(player, room, to, true);
+        GameRoom room = resolveRoomLobbyVoidRoom(player, to.getWorld());
+        Location safe = getLobbyLikeSafeLocation(room, to);
+        if (safe != null && safe.getWorld() != null) {
+            event.setTo(safe);
+        }
+        returnLobbyLikeWorldPlayer(player, room, to, true);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
