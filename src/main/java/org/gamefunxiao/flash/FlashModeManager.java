@@ -3243,7 +3243,7 @@ public class FlashModeManager {
         pages.add(guideBookQuickPage(40, "发射器火球", "主手发射器+副手至少2火焰弹", "长按右键蓄满100%，松开发射大火球。", "消耗2火焰弹", "约1.2秒", "必须蓄满2.5秒；碰到方块或实体会爆炸并造成范围伤害，FlashUse不破坏方块，游戏中和FlashSMP会破坏方块。"));
         pages.add(guideBookQuickPage(41, "发射器回响炮", "主手发射器+副手回响碎片", "长按右键蓄满100%，松开发射穿透声波炮。", "消耗1碎片", "约1.2秒", "必须蓄满2.5秒；射程+200%、速度再次强化、伤害+74%，命中追加20%破甲伤害。"));
         pages.add(guideBookQuickPage(42, "Q丢剑气", "非稳定剑", "按Q丢剑触发飞剑/剑气。", "按剑处理", "短冷却", "稳定剑按Q只会正常掉落，不会变成剑气。"));
-        pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱；近战命中也会直接套陷阱。", "消耗/占用锄头", "触发一次", "只触发敌人；自己、同队和旁观者不会触发，5秒连锁第2次控制+25%、第3次额外+2。"));
+        pages.add(guideBookQuickPage(43, "Q丢锄头陷阱", "任意锄头", "按Q丢到方块上生成永久陷阱；近战命中也会直接套陷阱。", "消耗/占用锄头", "触发一次", "所有活体实体都能踩到；自己、同队和旁观者不会触发，5秒连锁第2次控制+25%、第3次额外+2。"));
         pages.add(guideBookQuickPage(44, "锄头陷阱材料", "木/石/铜/铁/金/钻/合金锄", "木缠绕、石重压、铜导电、铁夹锁、金致盲、钻弹飞、合金强拉。", "同上", "5秒连锁", "裸伤已+70%；每次触发有25%~45%概率追加同档比例破甲伤。"));
         pages.add(guideBookQuickPage(45, "矿车雷锄", "锄头+TNT矿车", "按Q放雷，踩中延迟爆炸。", "消耗材料", "触发一次", "TMT不再能打到锄头上。"));
         pages.add(guideBookQuickPage(46, "唱片机光环", "唱片机+唱片", "播放唱片后扫描约80格光环。", "唱片播放", "周期刷新", "不同唱片给近战、远程、减伤、修耐久等修正。"));
@@ -16858,15 +16858,18 @@ public class FlashModeManager {
             }
 
             World world = trap.center().getWorld();
-            Player hitTarget = null;
+            LivingEntity hitTarget = null;
             GameRoom hitRoom = null;
             long now = System.currentTimeMillis();
             if (trap.reusable() && now - trap.lastTriggerMillis() < FLASH_REUSABLE_HOE_TRAP_COOLDOWN_MILLIS) {
                 continue;
             }
-            for (Player candidate : world.getPlayers()) {
-                GameRoom candidateRoom = plugin.getRoomManager().getPlayerRoom(candidate.getUniqueId());
-                if (!isFlashCombatAvailable(candidate, candidateRoom)
+            double scanRadius = FLASH_HOE_TRAP_TRIGGER_RADIUS + 0.72D;
+            for (Entity rawCandidate : world.getNearbyEntities(trap.center(), scanRadius, 1.75D, scanRadius,
+                    entity -> entity instanceof LivingEntity)) {
+                LivingEntity candidate = (LivingEntity) rawCandidate;
+                GameRoom candidateRoom = getHoeTrapCandidateRoom(candidate);
+                if (!isHoeTrapCandidateActive(candidate, candidateRoom)
                         || !isSameHoeTrapRoom(trap, candidateRoom)
                         || !canHoeTrapAffect(trap, candidate, candidateRoom)
                         || !isStandingOnHoeTrap(trap, candidate.getLocation())) {
@@ -17448,37 +17451,64 @@ public class FlashModeManager {
         return trap.roomId().equals(currentRoomId);
     }
 
-    private boolean canHoeTrapAffect(HoeTrap trap, Player target, GameRoom room) {
+    private GameRoom getHoeTrapCandidateRoom(LivingEntity candidate) {
+        if (candidate instanceof Player player) {
+            return plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
+        }
+        return getFlashRoomByWorld(candidate == null ? null : candidate.getWorld());
+    }
+
+    private boolean isHoeTrapCandidateActive(LivingEntity candidate, GameRoom room) {
+        if (candidate == null || candidate.isDead() || !candidate.isValid()) {
+            return false;
+        }
+        if (candidate instanceof Player player) {
+            return isFlashCombatAvailable(player, room);
+        }
+        return isFlashWorldActive(candidate.getWorld());
+    }
+
+    private boolean canHoeTrapAffect(HoeTrap trap, LivingEntity target, GameRoom room) {
         if (trap == null || target == null) {
             return false;
         }
         if (trap.ownerUuid().equals(target.getUniqueId())) {
             return false;
         }
+        if (isOwnedOrFriendlyTame(trap.ownerUuid(), target)) {
+            return false;
+        }
         if (room == null) {
             Player owner = Bukkit.getPlayer(trap.ownerUuid());
-            return owner != null
-                    && owner.isOnline()
-                    && isStandaloneFlashContext(owner)
-                    && plugin.getRoomManager().getPlayerRoom(target.getUniqueId()) == null
-                    && canDamage(null, owner, target);
+            if (owner == null || !owner.isOnline() || !isStandaloneFlashContext(owner)
+                    || !owner.getWorld().equals(target.getWorld())) {
+                return false;
+            }
+            return !(target instanceof Player playerTarget)
+                    || (plugin.getRoomManager().getPlayerRoom(playerTarget.getUniqueId()) == null
+                    && canDamage(null, owner, playerTarget));
         }
-        if (!room.getAllPlayerUUIDs().contains(trap.ownerUuid()) || !room.getAllPlayerUUIDs().contains(target.getUniqueId())) {
+        if (!room.getAllPlayerUUIDs().contains(trap.ownerUuid())) {
             return false;
         }
-        if (room.isSpectator(trap.ownerUuid()) || room.isSpectator(target.getUniqueId())) {
+        if (room.isSpectator(trap.ownerUuid())) {
             return false;
         }
-        if (room.isHunter(trap.ownerUuid()) && room.isHunter(target.getUniqueId())) {
-            return false;
-        }
-        if (room.isPrey(trap.ownerUuid()) && room.isPrey(target.getUniqueId())) {
-            return false;
+        if (target instanceof Player playerTarget) {
+            if (!room.getAllPlayerUUIDs().contains(playerTarget.getUniqueId()) || room.isSpectator(playerTarget.getUniqueId())) {
+                return false;
+            }
+            if (room.isHunter(trap.ownerUuid()) && room.isHunter(playerTarget.getUniqueId())) {
+                return false;
+            }
+            if (room.isPrey(trap.ownerUuid()) && room.isPrey(playerTarget.getUniqueId())) {
+                return false;
+            }
         }
         return true;
     }
 
-    private void triggerFlashHoeTrap(HoeTrap trap, Player target, GameRoom room) {
+    private void triggerFlashHoeTrap(HoeTrap trap, LivingEntity target, GameRoom room) {
         Location center = trap.center().clone();
         World world = center.getWorld();
         Player owner = Bukkit.getPlayer(trap.ownerUuid());
@@ -17515,7 +17545,7 @@ public class FlashModeManager {
         sendHoeTrapChainFeedback(trap, target, owner, chain, piercingDamage);
     }
 
-    private void triggerTmtHoeTrap(HoeTrap trap, Player target, Player owner) {
+    private void triggerTmtHoeTrap(HoeTrap trap, LivingEntity target, Player owner) {
         Location center = trap.center().clone();
         World world = center.getWorld();
         if (world == null) {
@@ -17525,8 +17555,8 @@ public class FlashModeManager {
         world.spawnParticle(Particle.SMOKE, center.clone().add(0.0D, 0.18D, 0.0D), 12, 0.34D, 0.08D, 0.34D, 0.02D);
         world.playSound(center, Sound.ENTITY_TNT_PRIMED, 1.0f, 0.82f);
         world.playSound(center, Sound.BLOCK_NOTE_BLOCK_BASEDRUM, 0.72f, 0.62f);
-        if (target != null && target.isOnline()) {
-            target.sendActionBar("§x§F§F§5§5§3§3⚠ §c踩中了TMT锄头陷阱 §8| §f3秒后爆炸");
+        if (target instanceof Player playerTarget && playerTarget.isOnline()) {
+            playerTarget.sendActionBar("§x§F§F§5§5§3§3⚠ §c踩中了TMT锄头陷阱 §8| §f3秒后爆炸");
         }
         new BukkitRunnable() {
             @Override
@@ -17545,7 +17575,7 @@ public class FlashModeManager {
         }.runTaskLater(plugin, TMT_HOE_TRAP_FUSE_TICKS);
     }
 
-    private void triggerTntMinecartHoeTrap(HoeTrap trap, Player target, Player owner) {
+    private void triggerTntMinecartHoeTrap(HoeTrap trap, LivingEntity target, Player owner) {
         Location center = trap.center().clone();
         World world = center.getWorld();
         if (world == null) {
@@ -17558,8 +17588,8 @@ public class FlashModeManager {
         world.playSound(center, Sound.ENTITY_TNT_PRIMED, 0.86f, 1.18f);
         world.playSound(center, Sound.BLOCK_CHAIN_PLACE, 0.54f, 1.18f);
         world.playSound(center, Sound.BLOCK_NOTE_BLOCK_BASEDRUM, 0.58f, 0.72f);
-        if (target != null && target.isOnline()) {
-            target.sendActionBar("§x§F§F§A§A§4§4⚠ §e踩中了TNT矿车雷 §8| §f1.5秒后爆炸");
+        if (target instanceof Player playerTarget && playerTarget.isOnline()) {
+            playerTarget.sendActionBar("§x§F§F§A§A§4§4⚠ §e踩中了TNT矿车雷 §8| §f1.5秒后爆炸");
         }
         new BukkitRunnable() {
             @Override
@@ -17599,7 +17629,7 @@ public class FlashModeManager {
                 || now - entry.getValue().lastTriggerMillis() > FLASH_HOE_TRAP_CHAIN_WINDOW_MILLIS);
     }
 
-    private void sendHoeTrapChainFeedback(HoeTrap trap, Player target, Player owner, HoeTrapChainState chain, double piercingDamage) {
+    private void sendHoeTrapChainFeedback(HoeTrap trap, LivingEntity target, Player owner, HoeTrapChainState chain, double piercingDamage) {
         if (trap == null || target == null || chain == null) {
             return;
         }
@@ -17608,7 +17638,9 @@ public class FlashModeManager {
                 : chain.stacks() == 2 ? "§e连锁×2 §8| §f控制时长+25%"
                 : "§c连锁×3 §8| §f额外+2伤害";
         String pierceText = piercingDamage > 0.0D ? " §8| §x§F§F§6§6§6§6破甲+" + formatOneDecimal(piercingDamage) : "";
-        target.sendActionBar("§x§B§B§8§8§F§F⌑ §f踩中" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| §x§8§A§F§F§D§2" + role + " §8| " + chainText + pierceText);
+        if (target instanceof Player playerTarget) {
+            playerTarget.sendActionBar("§x§B§B§8§8§F§F⌑ §f踩中" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| §x§8§A§F§F§D§2" + role + " §8| " + chainText + pierceText);
+        }
         if (owner != null && owner.isOnline() && !owner.getUniqueId().equals(target.getUniqueId())) {
             owner.sendActionBar("§x§8§A§F§F§D§2⌑ §f" + target.getName() + " 触发了" + getHoeDisplayName(trap.hoeType()) + "陷阱 §8| " + chainText + pierceText);
         }
