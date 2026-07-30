@@ -16,6 +16,9 @@ import java.util.Map;
 
 public class ConfigManager {
 
+    private static final int DEATH_SWAP_THEME_CONFIG_VERSION = 14;
+    private static final String DEATH_SWAP_DEFAULT_PREFIX = "§x§F§F§6§6§0§0死亡互换 §x§F§F§9§9§3§3>> §f";
+
     private final GameFunXiao plugin;
     private FileConfiguration config;
     private final Map<String, FileConfiguration> configs = new HashMap<>();
@@ -34,8 +37,13 @@ public class ConfigManager {
         FileConfiguration defaults = YamlConfiguration.loadConfiguration(
             new InputStreamReader(plugin.getResource("config.yml"), StandardCharsets.UTF_8)
         );
+        int previousMainConfigVersion = config.getInt("config_version", 0);
         config.setDefaults(defaults);
-        if (mergeMissingKeys(config, defaults)) {
+        boolean mainChanged = mergeMissingKeys(config, defaults);
+        if (migrateDeathSwapThemeConfig(config, defaults, previousMainConfigVersion)) {
+            mainChanged = true;
+        }
+        if (mainChanged) {
             plugin.saveConfig();
         }
 
@@ -97,8 +105,13 @@ public class ConfigManager {
         FileConfiguration defaults = YamlConfiguration.loadConfiguration(
             new InputStreamReader(plugin.getResource("config.yml"), StandardCharsets.UTF_8)
         );
+        int previousMainConfigVersion = config.getInt("config_version", 0);
         config.setDefaults(defaults);
-        if (mergeMissingKeys(config, defaults)) {
+        boolean mainChanged = mergeMissingKeys(config, defaults);
+        if (migrateDeathSwapThemeConfig(config, defaults, previousMainConfigVersion)) {
+            mainChanged = true;
+        }
+        if (mainChanged) {
             plugin.saveConfig();
         }
 
@@ -147,6 +160,14 @@ public class ConfigManager {
         return changed;
     }
 
+    private boolean migrateDeathSwapThemeConfig(FileConfiguration target, FileConfiguration defaults, int previousVersion) {
+        if (target == null || defaults == null || previousVersion >= DEATH_SWAP_THEME_CONFIG_VERSION) {
+            return false;
+        }
+        target.set("death_swap_prefix", defaults.getString("death_swap_prefix", DEATH_SWAP_DEFAULT_PREFIX));
+        return true;
+    }
+
     public FileConfiguration getConfig() {
         return config;
     }
@@ -172,7 +193,13 @@ public class ConfigManager {
     }
 
     public String getDeathSwapPrefix() {
-        return config.getString("death_swap_prefix", "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换 §x§8§8§D§D§F§F» §f");
+        String configured = config.getString("death_swap_prefix", DEATH_SWAP_DEFAULT_PREFIX);
+        if (configured == null || configured.isBlank()
+                || configured.contains("§x§8§8§D§D§F§F⟲")
+                || configured.contains("[死亡互换]")) {
+            return DEATH_SWAP_DEFAULT_PREFIX;
+        }
+        return configured;
     }
 
     public String getMiniGameCurrencyName() {

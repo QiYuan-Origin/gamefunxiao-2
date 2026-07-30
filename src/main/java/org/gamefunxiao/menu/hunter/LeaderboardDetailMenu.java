@@ -229,7 +229,7 @@ public class LeaderboardDetailMenu extends BaseMenu {
         int nextIndex = (currentIndex + 1) % modes.length;
 
         return createItem(getFastestModeMaterial(modes[currentIndex]),
-                "   §8[§x§8§8§D§D§F§F✦ §x§9§9§D§D§F§F模§x§A§A§D§D§F§F式§x§B§B§D§D§F§F筛§x§C§C§D§D§F§F选§8]",
+                "   §8[§x§F§F§6§6§0§0✦ §x§F§F§9§9§3§3模式§x§F§F§D§D§5§5筛选§8]",
                 "§8· · · · · · · · · · · · · ·",
                 "§f- §a当前: §b" + getFastestModeName(modes[currentIndex]),
                 "§f- §7上一个: §d" + getFastestModeName(modes[prevIndex]),

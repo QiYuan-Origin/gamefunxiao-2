@@ -53,7 +53,7 @@ public class WorldManager {
     private static final int FLASH_OUTPOST_CANDIDATE_SEARCH_RADIUS_BLOCKS = 1536;
     private static final int FLASH_OUTPOST_SEED_MAX_ATTEMPTS = 1_000_000;
     private static final long FLASH_OUTPOST_SEARCH_TIMEOUT_NANOS = 8_000_000_000L;
-    private static final long DEATH_SWAP_VILLAGE_SEARCH_TIMEOUT_NANOS = 8_000_000_000L;
+    private static final long DEATH_SWAP_VILLAGE_SEARCH_TIMEOUT_NANOS = 4_000_000_000L;
     private static final int FLASH_OUTPOST_VERIFY_WORLD_MAX_ATTEMPTS = 20;
     private static final int FLASH_OUTPOST_SPACING = 32;
     private static final int FLASH_OUTPOST_SEPARATION = 8;
@@ -798,7 +798,7 @@ public class WorldManager {
         int maxAttempts = plugin.getConfigManager().getDeathSwapVillageMaxAttempts();
         int villageSalt = readSpigotStructureSeed(worldName, "seed-village", FLASH_VILLAGE_DEFAULT_SALT);
         plugin.getLogger().info("开始为死亡互换外部算法筛选村庄种子: " + worldName
-                + "，要求出生点附近 " + radiusBlocks + " 格内有村庄候选，筛中前不会创建世界，超过 8 秒就随机世界"
+                + "，要求出生点附近 " + radiusBlocks + " 格内有村庄候选，筛中前不会创建世界，超过 4 秒就随机世界"
                 + "，villageSalt=" + villageSalt);
 
         long searchStartedAt = System.nanoTime();
@@ -806,7 +806,7 @@ public class WorldManager {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             if (isDeathSwapVillageSearchTimedOut(searchStartedAt)) {
                 return createDeathSwapRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
-                        "死亡互换外部筛村庄超过 8 秒，随机创建世界", attempt - 1);
+                        "死亡互换外部筛村庄超过 4 秒，随机创建世界", attempt - 1);
             }
             long seed = nextUniqueGameSeed(attemptedSeeds);
             DeathSwapVillageSeedCandidate candidate = findDeathSwapVillageSeedCandidate(seed, attempt, villageSalt, radiusBlocks);
@@ -838,7 +838,7 @@ public class WorldManager {
             world.setKeepSpawnInMemory(false);
             setupGameWorld(world);
             Location villageLocation = candidate.toLocation(world);
-            Location flatSpawn = findDeathSwapFlatSpawn(world, villageLocation, radiusBlocks);
+            Location flatSpawn = findDeathSwapFlatSpawn(world);
             if (flatSpawn != null) {
                 world.setSpawnLocation(flatSpawn);
             }
@@ -939,7 +939,7 @@ public class WorldManager {
         if (world == null) {
             return null;
         }
-        return findDeathSwapFlatSpawn(world, world.getSpawnLocation(), 128);
+        return findDeathSwapFlatSpawn(world, world.getSpawnLocation(), 16);
     }
 
     private Location findDeathSwapFlatSpawn(World world, Location preferred, int maxRadiusBlocks) {
@@ -951,8 +951,13 @@ public class WorldManager {
                 : preferred;
         int centerX = anchor.getBlockX();
         int centerZ = anchor.getBlockZ();
-        int safeMaxRadius = Math.max(16, Math.min(192, maxRadiusBlocks));
-        int[] radii = {0, 8, 16, 24, 32, 48, 64, 80, 96, 128, 160, 192};
+        int safeMaxRadius = Math.max(0, Math.min(16, maxRadiusBlocks));
+        int centerChunkX = centerX >> 4;
+        int centerChunkZ = centerZ >> 4;
+        if (!world.isChunkLoaded(centerChunkX, centerChunkZ)) {
+            return anchor.clone();
+        }
+        int[] radii = {0, 4, 8, 12, 16};
         int[][] directions = {
                 {0, 0},
                 {1, 0}, {-1, 0}, {0, 1}, {0, -1},
@@ -974,6 +979,9 @@ public class WorldManager {
                 double length = Math.sqrt((double) direction[0] * direction[0] + (double) direction[1] * direction[1]);
                 int x = centerX + (radius == 0 ? 0 : (int) Math.round(radius * direction[0] / length));
                 int z = centerZ + (radius == 0 ? 0 : (int) Math.round(radius * direction[1] / length));
+                if ((x >> 4) != centerChunkX || (z >> 4) != centerChunkZ || !world.isChunkLoaded(x >> 4, z >> 4)) {
+                    continue;
+                }
                 Location candidate = getSurfaceSpawnAt(world, x, z);
                 if (isDeathSwapFlatSpawnCandidate(candidate)) {
                     return candidate;
@@ -996,6 +1004,9 @@ public class WorldManager {
             for (int dz = -2; dz <= 2; dz++) {
                 int x = centerX + dx;
                 int z = centerZ + dz;
+                if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                    return false;
+                }
                 int standY = Math.min(world.getMaxHeight() - 2,
                         Math.max(world.getMinHeight() + 2, world.getHighestBlockYAt(x, z) + 1));
                 Block floor = world.getBlockAt(x, standY - 1, z);
@@ -1719,7 +1730,7 @@ public class WorldManager {
             int centerX = villageBlockX + 8;
             int centerZ = villageBlockZ + 8;
             int y = Math.min(world.getMaxHeight() - 2,
-                    Math.max(world.getMinHeight() + 2, world.getHighestBlockYAt(centerX, centerZ) + 1));
+                    Math.max(world.getMinHeight() + 2, world.getSpawnLocation().getBlockY()));
             return new Location(world, centerX + 0.5D, y, centerZ + 0.5D, 0.0F, 0.0F);
         }
     }

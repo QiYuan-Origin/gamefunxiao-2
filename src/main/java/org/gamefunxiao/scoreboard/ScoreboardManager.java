@@ -208,7 +208,7 @@ public class ScoreboardManager {
         }
         return switch (room.getGameMode()) {
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱";
-            case DEATH_SWAP -> "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换";
+            case DEATH_SWAP -> "§x§F§F§6§6§0§0⟲ §x§F§F§9§9§3§3死§x§F§F§B§B§6§6亡§x§F§F§D§D§5§5互§x§F§F§F§F§9§9换";
             case FLASH -> "§x§F§F§6§6§0§0⚡ §x§F§F§9§9§3§3闪§x§F§F§B§B§5§5光§x§F§F§D§D§8§8公§x§F§F§F§F§A§A式";
             case FLASH_TOURNAMENT -> "§x§F§F§6§6§0§0⚡ §x§F§F§B§B§5§5闪§x§F§F§D§D§8§8光§x§F§F§4§4§4§4赛§x§F§F§7§7§7§7事";
             case END_FLASH -> "§x§8§8§5§5§F§F✦ §x§B§B§8§8§F§F终§x§D§D§A§A§F§F章§x§F§F§D§D§F§F闪§x§F§F§F§F§F§F光";
@@ -697,15 +697,14 @@ public class ScoreboardManager {
         if (room.getState() == RoomState.STARTING) {
             lines.add("§f距开始: §e" + formatCountdown(room.getCountdown()));
         } else {
-            lines.add("§f状态: §b等待死亡互换选手");
+            lines.add("§f状态: §6等待死亡互换选手");
         }
         lines.add("§7");
-        lines.add("§x§8§8§D§D§F§F§l互换投票");
+        lines.add("§x§F§F§9§9§3§3§l互换投票");
         for (int minute : plugin.getConfigManager().getDeathSwapVoteIntervalMinutes()) {
             lines.add("§f- §e" + minute + "分钟 §7" + room.getDeathSwapVoteCount(minute) + "票");
         }
         lines.add("§7");
-        lines.add("§8DeathSwap.server");
         return lines;
     }
 
@@ -737,16 +736,15 @@ public class ScoreboardManager {
         lines.add("§f已进行: §e" + (room.getGameStartTime() <= 0L
                 ? "准备中"
                 : formatElapsedTime(Math.max(0L, System.currentTimeMillis() - room.getGameStartTime()))));
-        lines.add("§f下次互换: §b" + formatCountdown(room.getDeathSwapNextSwapSeconds()));
-        lines.add("§f互换间隔: §d" + formatCountdown(room.getDeathSwapIntervalSeconds()));
+        lines.add("§f下次互换: §e" + formatCountdown(room.getDeathSwapNextSwapSeconds()));
+        lines.add("§f互换间隔: §6" + formatCountdown(room.getDeathSwapIntervalSeconds()));
         lines.add("§f真实PVP: " + (room.isDeathSwapPvpEnabled() ? "§c已开启" : "§a未开启"));
         lines.add("§7");
-        lines.add("§x§8§8§D§D§F§F§l规则");
-        lines.add("§f- §b只有一次生命");
+        lines.add("§x§F§F§9§9§3§3§l规则");
+        lines.add("§f- §e只有一次生命");
         lines.add("§f- §e周期互换位置");
         lines.add("§f- §c两小时未结束平局");
         lines.add("§7");
-        lines.add("§8DeathSwap.server");
         return lines;
     }
 
@@ -890,7 +888,7 @@ public class ScoreboardManager {
             case FLASH_TOURNAMENT -> "§x§F§F§F§F§9§9闪§x§F§F§D§D§5§5光 §c§l赛事";
             case END_FLASH -> "§x§B§B§8§8§F§F终§x§D§D§A§A§F§F章§x§F§F§D§D§8§8·§x§F§F§F§F§A§A闪§x§D§D§F§F§C§C光"; // 终章渐变
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5幸§x§F§F§C§C§6§6运§x§F§F§B§B§7§7之§x§F§F§A§A§8§8柱";
-            case DEATH_SWAP -> "§x§8§8§D§D§F§F死§x§A§A§E§E§F§F亡§x§C§C§F§F§F§F互§x§F§F§D§D§B§B换";
+            case DEATH_SWAP -> "§x§F§F§6§6§0§0死§x§F§F§9§9§3§3亡§x§F§F§B§B§6§6互§x§F§F§D§D§5§5换";
             case LUCKY_PILLARS_PVP -> "§x§F§F§8§8§5§5幸§x§F§F§A§A§6§6运§x§F§F§C§C§7§7之§x§F§F§E§E§8§8柱§x§F§F§6§6§6§6PVP";
             case TNT_RUN -> "§x§F§F§8§8§5§5T§x§F§F§9§9§6§6N§x§F§F§A§A§7§7T§x§F§F§B§B§8§8跑§x§F§F§C§C§9§9酷";
             case BLOCK_PARTY -> "§x§D§D§8§8§F§F方§x§C§C§9§9§F§F块§x§B§B§A§A§F§F派§x§A§A§B§B§F§F对";
@@ -969,7 +967,7 @@ public class ScoreboardManager {
         }
 
         if (room.getGameMode().isDeathSwap()) {
-            lines.add("§x§8§8§D§D§F§F⟲ §b§l死亡互换已结束");
+            lines.add("§x§F§F§9§9§3§3⟲ §e§l死亡互换已结束");
             lines.add("§7");
             String winnerName = "无人";
             List<UUID> alivePlayers = room.getDeathSwapAlivePlayers();
@@ -980,8 +978,6 @@ public class ScoreboardManager {
             lines.add("§f胜者: §a" + winnerName);
             lines.add("§f淘汰玩家: §c" + room.getDeathSwapEliminatedPlayers().size());
             lines.add("§f游戏时长: §e" + formatElapsedTime(Math.max(0L, System.currentTimeMillis() - room.getGameStartTime())));
-            lines.add("§7");
-            lines.add("§8DeathSwap.server");
             lines.add("§7");
             return lines;
         }

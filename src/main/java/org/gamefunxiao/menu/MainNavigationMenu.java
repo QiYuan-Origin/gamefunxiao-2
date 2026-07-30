@@ -87,11 +87,11 @@ public class MainNavigationMenu extends BaseMenu {
         ItemStack item = new ItemStack(Material.ENDER_PEARL);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("   §8[§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换§8]");
+            meta.setDisplayName("   §8[§x§F§F§6§6§0§0⟲ §x§F§F§9§9§3§3死§x§F§F§B§B§6§6亡§x§F§F§D§D§5§5互§x§F§F§F§F§9§9换§8]");
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a周期互换所有存活玩家的位置");
-            lore.add("§f- §b出生点附近会筛非沙漠村庄");
+            lore.add("§f- §e出生点附近会筛村庄");
             lore.add("§f- §c每人只有一次生命，死亡后旁观");
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a点击进入");
@@ -158,8 +158,8 @@ public class MainNavigationMenu extends BaseMenu {
                 plugin.getMenuManager().openLuckyPillarsMenu(player);
             }
             case 22 -> {
-                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.74f, 1.55f);
-                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 0.34f, 1.25f);
+                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.74f, 1.0f);
+                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 0.34f, 1.0f);
                 plugin.getMenuManager().openDeathSwapMenu(player);
             }
             case 44 -> {

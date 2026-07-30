@@ -96,7 +96,7 @@ public class LeaderboardMenu extends BaseMenu {
     private String getTitleText() {
         return switch (menuSection) {
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱榜单";
-            case DEATH_SWAP -> "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换榜单";
+            case DEATH_SWAP -> "§x§F§F§6§6§0§0⟲ §x§F§F§9§9§3§3死§x§F§F§B§B§6§6亡§x§F§F§D§D§5§5互§x§F§F§F§F§9§9换榜单";
             case GENERIC, HUNTER -> "§x§F§F§6§6§0§0⚔ §x§F§F§9§9§3§3猎§x§F§F§C§C§6§6人§x§F§F§F§F§9§9榜§x§C§C§F§F§9§9单";
         };
     }
@@ -132,7 +132,7 @@ public class LeaderboardMenu extends BaseMenu {
     }
 
     private ItemStack createPreyWinsButton() {
-        return createButton(Material.ENDER_EYE, "§x§8§8§D§D§F§F猎物通关榜",
+        return createButton(Material.ENDER_EYE, "§x§F§F§9§9§3§3猎物通关榜",
                 "§f- §a直接看猎物完成目标的排行榜",
                 "§f- §7不再和其他小游戏混在一起");
     }

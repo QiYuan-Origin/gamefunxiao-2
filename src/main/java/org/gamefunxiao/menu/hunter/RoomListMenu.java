@@ -121,7 +121,7 @@ public class RoomListMenu extends BaseMenu {
     private String getTitleText() {
         return switch (menuSection) {
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱房间";
-            case DEATH_SWAP -> "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换房间";
+            case DEATH_SWAP -> "§x§F§F§6§6§0§0⟲ §x§F§F§9§9§3§3死§x§F§F§B§B§6§6亡§x§F§F§D§D§5§5互§x§F§F§F§F§9§9换房间";
             case GENERIC, HUNTER -> "§x§5§5§F§F§F§F👁 §x§7§7§F§F§D§D猎§x§9§9§F§F§B§B人§x§B§B§F§F§9§9房§x§D§D§F§F§7§7间";
         };
     }
@@ -263,7 +263,7 @@ public class RoomListMenu extends BaseMenu {
             if (entry.mode().isLuckyPillars()) {
                 lore.add("§f- §a玩法: 每5秒随机物品，最后存活");
             } else if (entry.mode().isDeathSwap()) {
-                lore.add("§f- §b玩法: 定时互换，死亡一次淘汰");
+                lore.add("§f- §e玩法: 定时互换，死亡一次淘汰");
             } else if (!entry.preyNames().isEmpty()) {
                 lore.add("§f- §d猎物: §f" + String.join(", ", entry.preyNames()));
             }

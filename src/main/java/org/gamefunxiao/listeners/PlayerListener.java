@@ -2311,13 +2311,13 @@ public class PlayerListener implements Listener {
             if (room == null || !room.getGameMode().isDeathSwap()
                     || (state != RoomState.WAITING && state != RoomState.STARTING)) {
 
-                player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.82f, 1.12f);
+                player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.82f, 1.0f);
 
                 return true;
 
             }
 
-            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.82f, 1.45f);
+            player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.82f, 1.0f);
 
             new org.gamefunxiao.menu.DeathSwapTimeVoteMenu(plugin, player, room).open();
 
@@ -4965,7 +4965,7 @@ public class PlayerListener implements Listener {
 
                     if (room.getState() == RoomState.WAITING || room.getState() == RoomState.STARTING) {
 
-                        stagePrefix = "§b[互换大厅] ";
+                        stagePrefix = "§6[大厅] ";
 
                     } else if (room.isSpectator(player.getUniqueId()) || room.isDeathSwapEliminated(player.getUniqueId())) {
 
@@ -4973,15 +4973,13 @@ public class PlayerListener implements Listener {
 
                     } else {
 
-                        stagePrefix = "§d[求生] ";
+                        stagePrefix = "§e[求生] ";
 
                     }
 
-                    String roomPrefix = "§8[§x§8§8§D§D§F§F死§x§A§A§E§E§F§F亡§x§C§C§F§F§F§F互§x§F§F§D§D§B§B换§8] ";
-
                     message = plugin.getConfigManager().getDeathSwapPrefix()
 
-                            + roomPrefix + stagePrefix + "§f" + player.getName() + "§7: §f" + plainContent;
+                            + stagePrefix + "§f" + player.getName() + "§7: §f" + plainContent;
 
                 } else if (room.getGameMode().isLuckyPillars()) {
 

@@ -15,6 +15,8 @@ import java.util.Map;
 
 public class MessageManager {
 
+    private static final int DEATH_SWAP_THEME_MESSAGES_VERSION = 29;
+
     private final GameFunXiao plugin;
     private FileConfiguration messages;
     private final File messagesFile;
@@ -33,8 +35,13 @@ public class MessageManager {
 
         // 从 jar 包中读取新版默认值，补齐缺失键并保存，不覆盖服主已修改的内容。
         FileConfiguration defaults = loadDefaultMessages();
+        int previousVersion = messages.getInt("config_version", 0);
         messages.setDefaults(defaults);
-        if (mergeMissingKeys(messages, defaults)) {
+        boolean changed = mergeMissingKeys(messages, defaults);
+        if (migrateDeathSwapMessages(messages, defaults, previousVersion)) {
+            changed = true;
+        }
+        if (changed) {
             saveMessages();
         }
     }
@@ -53,8 +60,13 @@ public class MessageManager {
 
         // reload 时也补齐新版缺失消息，避免出现“消息未找到”。
         FileConfiguration defaults = loadDefaultMessages();
+        int previousVersion = messages.getInt("config_version", 0);
         messages.setDefaults(defaults);
-        if (mergeMissingKeys(messages, defaults)) {
+        boolean changed = mergeMissingKeys(messages, defaults);
+        if (migrateDeathSwapMessages(messages, defaults, previousVersion)) {
+            changed = true;
+        }
+        if (changed) {
             saveMessages();
         }
     }
@@ -198,6 +210,21 @@ public class MessageManager {
             changed = true;
         }
         return changed;
+    }
+
+    private boolean migrateDeathSwapMessages(FileConfiguration target, FileConfiguration defaults, int previousVersion) {
+        if (target == null || defaults == null || previousVersion >= DEATH_SWAP_THEME_MESSAGES_VERSION) {
+            return false;
+        }
+        if (defaults.isConfigurationSection("death_swap")) {
+            for (String key : defaults.getConfigurationSection("death_swap").getKeys(true)) {
+                if (!defaults.isConfigurationSection("death_swap." + key)) {
+                    target.set("death_swap." + key, defaults.get("death_swap." + key));
+                }
+            }
+        }
+        target.set("points.minigame_participate", defaults.get("points.minigame_participate"));
+        return true;
     }
 
     public void sendMessage(Player player, String path) {

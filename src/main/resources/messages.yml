@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 28
+config_version: 29
 
 # 通用消息
 general:
@@ -263,21 +263,21 @@ game:
 
 # 死亡互换消息
 death_swap:
-  vote_cursor: "§x§8§8§D§D§F§F⏱ §b当前准备投 §e{minutes}分钟 §b互换。"
-  vote_changed: "§x§5§5§F§F§A§A✔ §a你投给了 §e{minutes}分钟 §a互换。"
+  vote_cursor: "§x§F§F§9§9§3§3⏱ §e当前准备投 §f{minutes}分钟 §e互换。"
+  vote_changed: "§x§F§F§D§D§5§5✔ §a你投给了 §e{minutes}分钟 §a互换。"
   vote_removed: "§x§F§F§B§B§6§6↩ §e已取消 §f{minutes}分钟 §e互换投票。"
-  interval_selected: "§x§8§8§D§D§F§F⟲ §b本局互换间隔确定为 §e{minutes}分钟§b。"
-  world_preparing: "§x§F§F§7§7§7§7🌍 §c正在准备死亡互换世界。"
-  world_ready_village: "§x§5§5§F§F§A§A✔ §a本局出生点附近有村庄。§7村庄: §e{village} §7距离约 §b{distance} §7格。"
+  interval_selected: "§x§F§F§9§9§3§3⟲ §e本局互换间隔确定为 §f{minutes}分钟§e。"
+  world_preparing: "§x§F§F§6§6§0§0🌍 §e正在准备死亡互换世界。"
+  world_ready_village: "§x§F§F§D§D§5§5✔ §a本局出生点附近有村庄。§7村庄: §e{village} §7距离约 §6{distance} §7格。"
   world_no_village: "§x§F§F§B§B§6§6⚠ §e本局没有确认到出生点附近村庄。§7原因：§f{reason}"
   world_failed: "§x§F§F§5§5§5§5✘ §c死亡互换世界创建失败，已取消本局。"
-  start_countdown: "§x§8§8§D§D§F§F⏱ §b死亡互换将在 §e{time} §b后开始。"
-  started: "§x§5§5§F§F§A§A⟲ §a死亡互换开始！§f下一次互换: §e{time}"
+  start_countdown: "§x§F§F§9§9§3§3⏱ §e死亡互换将在 §f{time} §e后开始。"
+  started: "§x§F§F§6§6§0§0⟲ §e死亡互换开始！§f下一次互换: §e{time}"
   swap_warning: "§x§F§F§D§D§5§5⏱ §e{time}秒后互换位置！"
-  swapped: "§x§8§8§D§D§F§F⟲ §b位置已互换，下一次互换: §e{time}"
+  swapped: "§x§F§F§9§9§3§3⟲ §e位置已互换，下一次互换: §f{time}"
   pvp_enabled: "§x§F§F§5§5§5§5⚔ §c一小时已到，真实 PVP 已开启！"
   eliminated: "§x§F§F§5§5§5§5☠ §e{player} §c被淘汰了！§7剩余 §a{alive} §7人。"
-  winner: "§x§5§5§F§F§A§A🏆 §a死亡互换胜利者: §e{winner}"
+  winner: "§x§F§F§D§D§5§5🏆 §a死亡互换胜利者: §e{winner}"
   draw: "§x§F§F§D§D§5§5⌛ §e两小时到，死亡互换平局。"
   force_start: "§x§F§F§7§7§7§7⚡ §c管理员已将死亡互换倒计时跳到 §e{time}秒§c。"
 
@@ -293,7 +293,7 @@ points:
   prey_quit: "§x§F§F§5§5§5§5✘ §c主动退出，猎物表现 §6{points} §8| §7当前段位: {rank}"
   prey_kill_hunter_reward: "§x§5§5§F§F§5§5✦ §a你已累计击杀 §e{count} §a名猎人！§6猎物表现 +1"
   minigame_win: "§x§F§F§D§D§5§5🏆 §a小游戏胜利！§e你的小游戏积分 §6+{points}"
-  minigame_participate: "§x§8§8§D§D§F§F✦ §b参与结算，§e你的小游戏积分 §6+{points}"
+  minigame_participate: "§x§F§F§D§D§5§5✦ §e参与结算，§f你的小游戏积分 §6+{points}"
   minigame_kill: "§x§F§F§B§B§6§6⚔ §e淘汰 §f{player}§e！§6小游戏积分 +{points}"
 
 # 击杀消息

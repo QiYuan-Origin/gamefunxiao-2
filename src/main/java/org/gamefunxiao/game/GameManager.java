@@ -78,6 +78,7 @@ public class GameManager {
     private final Map<String, BlockPartyRuntime> blockPartyRuntimes = new HashMap<>();
     private final Set<String> thunderStormAppliedRooms = new HashSet<>();
     private final Map<UUID, PermissionAttachment> swapTimerLimitExemptions = new HashMap<>();
+    private final Set<String> deathSwapWorldPreparingRooms = new HashSet<>();
     private final Map<UUID, Integer> flashPreyStartChoicePages = new HashMap<>();
     private final Set<UUID> flashPreyStartElytraMonitorRunning = new HashSet<>();
     private boolean grimPermissionRefreshFailureLogged;
@@ -545,12 +546,12 @@ public class GameManager {
         ItemStack item = new ItemStack(Material.PAPER);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§x§8§8§D§D§F§F⏱ §x§A§A§E§E§F§F互§x§C§C§F§F§F§F换§x§E§E§F§F§D§D时§x§F§F§D§D§B§B间投票");
+            meta.setDisplayName("§x§F§F§6§6§0§0⏱ §x§F§F§9§9§3§3互§x§F§F§D§D§5§5换时间投票");
             meta.setCustomModelData(DEATH_SWAP_TIME_VOTE_MODEL);
             meta.setItemModel(org.bukkit.NamespacedKey.minecraft("clock"));
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
-            lore.add("§f- §e当前选择: §b" + cursor + "分钟");
+            lore.add("§f- §e当前选择: §6" + cursor + "分钟");
             for (int minute : intervals) {
                 String color = ownVote != null && ownVote == minute ? "§a" : "§7";
                 int votes = room == null ? 0 : room.getDeathSwapVoteCount(minute);
@@ -1226,6 +1227,29 @@ public class GameManager {
                     return;
                 }
 
+                if (room.getGameMode().isDeathSwap() && countdown <= 3 && room.getGameWorld() == null) {
+                    for (UUID uuid : room.getAllPlayerUUIDs()) {
+                        Player p = Bukkit.getPlayer(uuid);
+                        if (p != null) {
+                            Component titleComp = LegacyComponentSerializer.legacySection()
+                                    .deserialize("§x§F§F§6§6§0§0⏳ §e死亡互换世界准备中");
+                            Component subComp = LegacyComponentSerializer.legacySection()
+                                    .deserialize("§7世界准备完成后继续倒计时");
+                            p.showTitle(Title.title(titleComp, subComp,
+                                    Title.Times.times(Duration.ZERO, Duration.ofMillis(1400), Duration.ofMillis(250))));
+                        }
+                    }
+                    if (!deathSwapWorldPreparingRooms.contains(room.getRoomId())) {
+                        prepareDeathSwapWorldBeforeStart(room);
+                    }
+                    if (room.getState() != RoomState.STARTING) {
+                        cancel();
+                        countdownTasks.remove(room.getRoomId());
+                        return;
+                    }
+                    return;
+                }
+
                 if (countdown <= 0) {
                     finalizeFlashDifficulty(room);
                     if (usesPreySelection(room)) {
@@ -1267,21 +1291,6 @@ public class GameManager {
 
                 // 剩下3秒时给猎物显示标题并创建世界
                 if (countdown == 3) {
-                    if (room.getGameMode().isDeathSwap()) {
-                        for (UUID uuid : room.getAllPlayerUUIDs()) {
-                            Player p = Bukkit.getPlayer(uuid);
-                            if (p != null) {
-                                Component titleComp3 = LegacyComponentSerializer.legacySection()
-                                        .deserialize("§x§F§F§5§5§5§5⏳ §c死亡互换世界准备中");
-                                Component subComp3 = LegacyComponentSerializer.legacySection()
-                                        .deserialize("§7正在准备本局世界...");
-                                p.showTitle(Title.title(titleComp3, subComp3,
-                                        Title.Times.times(Duration.ZERO, Duration.ofMillis(3200), Duration.ofMillis(450))));
-                                p.playSound(p.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.55f, 1.45f);
-                            }
-                        }
-                        Bukkit.getScheduler().runTaskLater(plugin, () -> prepareDeathSwapWorldBeforeStart(room), 1L);
-                    }
                     if (room.getGameMode().isAutoArenaMiniGame()) {
                         for (UUID uuid : room.getAllPlayerUUIDs()) {
                             Player p = Bukkit.getPlayer(uuid);
@@ -2387,32 +2396,41 @@ public class GameManager {
         if (room == null || !room.getGameMode().isDeathSwap()) {
             return;
         }
-        World existing = room.getGameWorld();
-        if (existing != null) {
+        if (!deathSwapWorldPreparingRooms.add(room.getRoomId())) {
+            return;
+        }
+        try {
+            World existing = room.getGameWorld();
+            if (existing != null) {
+                plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
+                return;
+            }
+            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_preparing"));
+            forEachDeathSwapParticipant(room, player ->
+                    player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.55f, 1.0f));
+            World world = plugin.getWorldManager().createDeathSwapGameWorld(room.getRoomId());
+            if (world == null) {
+                room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_failed"));
+                endGameWithoutReward(room);
+                return;
+            }
+            room.setGameWorld(world);
             plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
-            return;
+            Location spawn = plugin.getWorldManager().findDeathSwapFlatSpawn(world);
+            if (spawn == null) {
+                spawn = getSafeSpawnLocation(world.getSpawnLocation());
+            }
+            if (spawn != null && spawn.getWorld() != null) {
+                world.setSpawnLocation(spawn);
+                room.setDeathSwapSpawnCenter(spawn);
+                room.setDeathSwapSpectatorSpawn(spawn.clone().add(0.0D, 10.0D, 0.0D));
+                plugin.getWorldManager().preloadChunks(world, spawn.getBlockX() >> 4, spawn.getBlockZ() >> 4,
+                        Math.max(1, plugin.getConfigManager().getHunterGamePreloadRadius()), null);
+            }
+            broadcastDeathSwapVillageStatus(room);
+        } finally {
+            deathSwapWorldPreparingRooms.remove(room.getRoomId());
         }
-        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_preparing"));
-        World world = plugin.getWorldManager().createDeathSwapGameWorld(room.getRoomId());
-        if (world == null) {
-            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_failed"));
-            endGameWithoutReward(room);
-            return;
-        }
-        room.setGameWorld(world);
-        plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
-        Location spawn = plugin.getWorldManager().findDeathSwapFlatSpawn(world);
-        if (spawn == null) {
-            spawn = getSafeSpawnLocation(world.getSpawnLocation());
-        }
-        if (spawn != null && spawn.getWorld() != null) {
-            world.setSpawnLocation(spawn);
-            room.setDeathSwapSpawnCenter(spawn);
-            room.setDeathSwapSpectatorSpawn(spawn.clone().add(0.0D, 10.0D, 0.0D));
-            plugin.getWorldManager().preloadChunks(world, spawn.getBlockX() >> 4, spawn.getBlockZ() >> 4,
-                    Math.max(4, plugin.getConfigManager().getHunterGamePreloadRadius()), null);
-        }
-        broadcastDeathSwapVillageStatus(room);
     }
 
     private World ensureDeathSwapGameWorld(GameRoom room) {
@@ -2512,7 +2530,7 @@ public class GameManager {
             player.setFlying(false);
             player.setInvulnerable(true);
             player.setNoDamageTicks(Math.max(20, plugin.getConfigManager().getDeathSwapPreStartCountdownSeconds() * 20 + 20));
-            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.1f);
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.0f);
             plugin.getRoomManager().setRoleNameTag(player, room.getRoomId(), false, "互换");
             plugin.getRoomManager().updatePlayerTabNameWithRole(player, room.getRoomId(), false, "互换");
             plugin.getScoreboardManager().createScoreboard(player);
@@ -2542,8 +2560,8 @@ public class GameManager {
                             player.resetTitle();
                             player.setInvulnerable(false);
                             player.setNoDamageTicks(20);
-                            player.playSound(player.getLocation(), Sound.UI_TOAST_IN, 0.75f, 1.4f);
-                            player.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 0.62f, 1.02f);
+                            player.playSound(player.getLocation(), Sound.UI_TOAST_IN, 0.75f, 1.0f);
+                            player.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 0.62f, 1.0f);
                         }
                     }
                     room.setGameActuallyStarted(true);
@@ -2566,7 +2584,7 @@ public class GameManager {
                     Player player = Bukkit.getPlayer(uuid);
                     if (player != null && player.isOnline()) {
                         player.showTitle(shown);
-                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.75f, 1.0f + (startSeconds - seconds) * 0.08f);
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.75f, 1.0f);
                     }
                 }
                 seconds--;
@@ -2598,7 +2616,7 @@ public class GameManager {
                     room.setDeathSwapPvpEnabled(true);
                     room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.pvp_enabled"));
                     forEachDeathSwapParticipant(room, player ->
-                            player.playSound(player.getLocation(), Sound.ENTITY_WITHER_SPAWN, 0.45f, 1.2f));
+                            player.playSound(player.getLocation(), Sound.ENTITY_WITHER_SPAWN, 0.45f, 1.0f));
                 }
 
                 if (elapsedSeconds >= plugin.getConfigManager().getDeathSwapDrawSeconds()) {
@@ -2612,7 +2630,7 @@ public class GameManager {
                     Map<String, String> ph = Map.of("time", String.valueOf(next));
                     room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.swap_warning", ph));
                     forEachDeathSwapAlivePlayer(room, player ->
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.9f, 1.85f));
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.9f, 1.0f));
                 }
                 if (next <= 1) {
                     swapDeathSwapPlayers(room);
@@ -2722,18 +2740,18 @@ public class GameManager {
             player.teleport(to);
             player.setFallDistance(0.0F);
             player.setNoDamageTicks(Math.max(player.getNoDamageTicks(), 20));
-            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 0.92f);
-            player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.86f, 0.82f);
-            player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_THUNDER, 0.42f, 1.12f);
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
+            player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.86f, 1.0f);
+            player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_THUNDER, 0.42f, 1.0f);
             if (from.getWorld() != null) {
                 from.getWorld().spawnParticle(Particle.PORTAL, from.clone().add(0.0D, 1.0D, 0.0D),
                         28, 0.45D, 0.7D, 0.45D, 0.22D);
-                from.getWorld().playSound(from, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.52f, 0.82f);
+                from.getWorld().playSound(from, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.52f, 1.0f);
             }
             if (to.getWorld() != null) {
                 to.getWorld().spawnParticle(Particle.REVERSE_PORTAL, to.clone().add(0.0D, 1.0D, 0.0D),
                         28, 0.45D, 0.7D, 0.45D, 0.12D);
-                to.getWorld().playSound(to, Sound.ENTITY_ENDERMAN_TELEPORT, 0.58f, 0.9f);
+                to.getWorld().playSound(to, Sound.ENTITY_ENDERMAN_TELEPORT, 0.58f, 1.0f);
             }
         }
         Map<String, String> ph = new HashMap<>();
@@ -2790,7 +2808,7 @@ public class GameManager {
         giveSpectatorItems(player);
         plugin.getRoomManager().setSpectatorNameTag(player, room.getRoomId());
         plugin.getRoomManager().refreshPlayerVisibility();
-        player.playSound(player.getLocation(), Sound.BLOCK_BEACON_DEACTIVATE, 0.7f, 0.85f);
+        player.playSound(player.getLocation(), Sound.BLOCK_BEACON_DEACTIVATE, 0.7f, 1.0f);
     }
 
     private Location getDeathSwapSpectatorLocation(GameRoom room, Location fallback) {
@@ -2872,7 +2890,7 @@ public class GameManager {
                 plugin.getPlayerDataManager().addMiniGamePoints(uuid, DEATH_SWAP_WIN_POINTS, room.getGameMode());
                 player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("points.minigame_win",
                         Map.of("points", String.valueOf(DEATH_SWAP_WIN_POINTS))));
-                player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.95f, 1.2f);
+                player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.95f, 1.0f);
             } else {
                 plugin.getPlayerDataManager().addMiniGamePoints(uuid, DEATH_SWAP_PARTICIPATE_POINTS, room.getGameMode());
                 player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("points.minigame_participate",
@@ -2903,7 +2921,7 @@ public class GameManager {
                 Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(6500), Duration.ofMillis(800)));
         forEachDeathSwapParticipant(room, player -> {
             player.showTitle(endTitle);
-            player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.8f, 1.25f);
+            player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.8f, 1.0f);
         });
 
         scheduleEndedRoomClosure(room, 10);

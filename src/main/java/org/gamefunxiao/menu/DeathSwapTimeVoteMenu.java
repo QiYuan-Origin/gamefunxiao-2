@@ -27,7 +27,7 @@ public class DeathSwapTimeVoteMenu extends BaseMenu {
         inventory.clear();
         fillMiFanBorder();
         inventory.setItem(4, createTitleItem(Material.CLOCK,
-                "§x§8§8§D§D§F§F⏱ §x§A§A§E§E§F§F互§x§C§C§F§F§F§F换§x§E§E§F§F§D§D时§x§F§F§D§D§B§B间",
+                "§x§F§F§6§6§0§0⏱ §x§F§F§9§9§3§3互§x§F§F§D§D§5§5换时间",
                 "§8· · · · · · · · · · · · · ·",
                 "§f左键投票 / 取消投票",
                 "§f右键切换你要投的分钟数",
@@ -44,7 +44,7 @@ public class DeathSwapTimeVoteMenu extends BaseMenu {
         ItemStack item = new ItemStack(Material.ENDER_PEARL);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("   §8[§x§8§8§D§D§F§F⟲ §x§C§C§F§F§F§F当前选择 §e" + cursor + "分钟§8]");
+            meta.setDisplayName("   §8[§x§F§F§6§6§0§0⟲ §x§F§F§D§D§5§5当前选择 §e" + cursor + "分钟§8]");
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
             for (int minute : intervals) {
@@ -53,7 +53,7 @@ public class DeathSwapTimeVoteMenu extends BaseMenu {
             }
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a左键投票 / 取消当前分钟");
-            lore.add("§f- §b右键切换投票分钟");
+            lore.add("§f- §e右键切换投票分钟");
             meta.setLore(lore);
             item.setItemMeta(meta);
         }
@@ -78,7 +78,7 @@ public class DeathSwapTimeVoteMenu extends BaseMenu {
         if (event.isRightClick()) {
             int minute = room.cycleDeathSwapVoteCursor(player.getUniqueId(), intervals);
             room.setDeathSwapVote(player.getUniqueId(), minute, intervals);
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.85f, 1.35f);
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.85f, 1.0f);
             player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.vote_changed",
                     java.util.Map.of("minutes", String.valueOf(minute))));
             setupItems();
@@ -89,7 +89,7 @@ public class DeathSwapTimeVoteMenu extends BaseMenu {
         boolean voted = room.toggleDeathSwapVote(player.getUniqueId(), intervals);
         int minute = room.getDeathSwapVoteCursor(player.getUniqueId(), intervals);
         player.playSound(player.getLocation(), voted ? Sound.BLOCK_NOTE_BLOCK_CHIME : Sound.BLOCK_NOTE_BLOCK_BASS,
-                0.85f, voted ? 1.35f : 0.8f);
+                0.85f, 1.0f);
         player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix(
                 voted ? "death_swap.vote_changed" : "death_swap.vote_removed",
                 java.util.Map.of("minutes", String.valueOf(minute))));
