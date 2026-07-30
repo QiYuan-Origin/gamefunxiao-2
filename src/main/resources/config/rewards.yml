@@ -1,60 +1,120 @@
 # 奖励配置
+
 # 配置版本（请勿手动修改）
-config_version: 1
+
+config_version: 2
+
+
 
 # 完成任务奖励
+
 win_rewards:
+
   classic:
+
     hunter: 150
+
     prey: 300
+
   random_compass:
+
     hunter: 150
+
     prey: 300
+
   swap:
+
     hunter: 300
+
     prey: 400
+
   no_item:
+
     hunter: 500
+
     prey: 600
+
   survival:
+
     hunter: 50
+
     prey: 100
+
   end_flash:
-    hunter: 220
-    prey: 420
+
+    hunter: 60
+
+    prey: 120
+
+
 
 # 对局失败保底奖励
+
 fail_reward: 25
 
+
+
 # 奖励箱内容（RewardChest修饰符）
+
 reward_chest_items:
+
   - material: DIAMOND
+
     amount: 3
+
     chance: 0.3
+
   - material: IRON_INGOT
+
     amount: 16
+
     chance: 0.8
+
   - material: GOLDEN_APPLE
+
     amount: 2
+
     chance: 0.5
+
   - material: ENDER_PEARL
+
     amount: 4
+
     chance: 0.6
+
   - material: COOKED_BEEF
+
     amount: 16
+
     chance: 1.0
+
   - material: OAK_LOG
+
     amount: 32
+
     chance: 0.7
+
   - material: IRON_PICKAXE
+
     amount: 1
+
     chance: 0.5
+
   - material: IRON_SWORD
+
     amount: 1
+
     chance: 0.4
+
   - material: BOW
+
     amount: 1
+
     chance: 0.3
+
   - material: ARROW
+
     amount: 32
+
     chance: 0.5
+

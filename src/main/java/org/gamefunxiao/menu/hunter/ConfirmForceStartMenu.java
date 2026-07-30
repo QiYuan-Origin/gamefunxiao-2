@@ -92,7 +92,9 @@ public class ConfirmForceStartMenu extends BaseMenu {
                     if (room.getState() == org.gamefunxiao.game.RoomState.WAITING) {
                         plugin.getGameManager().startCountdown(room);
                     }
-                    if ("skip_to_1min".equals(forceMode)) {
+                    if (room.getGameMode().isDeathSwap()) {
+                        plugin.getGameManager().forceStartNow(room);
+                    } else if ("skip_to_1min".equals(forceMode)) {
                         // 跳至1分钟
                         plugin.getGameManager().speedUpCountdown(room);
                     } else {

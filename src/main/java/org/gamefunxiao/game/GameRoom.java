@@ -35,6 +35,8 @@ public class GameRoom {
     private final Map<UUID, Integer> attackCount; // 攻击猎物次数
     private final Map<UUID, Double> damageDealt; // 对猎物造成的伤害
     private final Map<UUID, Double> distanceRun; // 奔跑距离
+    private final Map<UUID, Integer> miningContribution; // 挖矿贡献值
+    private final Map<UUID, Integer> sharedBackpackContribution; // 共同背包贡献物品数
     private final Map<UUID, Location> lastLocation; // 上次位置（用于计算距离）
     private final Map<UUID, Map<UUID, Integer>> hunterPerformanceKillCounts; // 猎人本局击杀猎物计数（防刷）
     private final Map<UUID, Map<UUID, Integer>> preyPerformanceKillCounts; // 猎物本局击杀猎人计数（防刷）
@@ -42,6 +44,7 @@ public class GameRoom {
     private final Map<UUID, Integer> preyPerformanceDeathCounts; // 猎物本局死亡扣分次数
     private final Map<UUID, Integer> hunterPerformanceFinalKills; // 猎人最终击杀次数
     private final Map<UUID, Long> preyPerformanceFirstDeathTime; // 猎物首次阵亡时间，用于计算存活表现
+    private final Map<UUID, String> flashPreyStartChoices; // 闪光公式猎物开局物品选择
     private final Map<UUID, Integer> randomCompassUseCounts; // 随机指南针使用次数
     private final Set<UUID> usedPreyRespawn; // 猎物复活修饰符已使用玩家
     private final Set<String> luckyPillarBlocks; // 幸运之柱模式生成的幸运方块坐标
@@ -52,6 +55,14 @@ public class GameRoom {
     private final Set<UUID> miniGameEliminatedPlayers; // 自动竞技场小游戏已淘汰玩家
     private final Map<UUID, Long> miniGameSurvivalTicks; // 自动竞技场小游戏存活时长
     private final Set<String> miniGameProtectedBlocks; // 自动竞技场核心地图方块
+    private final Map<UUID, Integer> deathSwapIntervalVotes; // 死亡互换：玩家选择的互换分钟数
+    private final Map<UUID, Integer> deathSwapVoteCursor; // 死亡互换：菜单当前游标分钟数
+    private final Set<UUID> deathSwapEliminatedPlayers; // 死亡互换：已淘汰玩家
+    private int deathSwapIntervalSeconds = 300; // 死亡互换：最终互换间隔
+    private int deathSwapNextSwapSeconds = 300; // 死亡互换：距离下一次互换
+    private boolean deathSwapPvpEnabled = false; // 死亡互换：一小时后开启真实伤害
+    private Location deathSwapSpawnCenter; // 死亡互换：主世界出生中心
+    private Location deathSwapSpectatorSpawn; // 死亡互换：观战点
     private Location luckyPillarsArenaCenter; // 幸运之柱竞技场中心
     private Location luckyPillarsSpectatorSpawn; // 幸运之柱观战点
     private int luckyPillarsEliminationY; // 幸运之柱掉落淘汰高度
@@ -155,6 +166,8 @@ public class GameRoom {
         this.attackCount = new HashMap<>();
         this.damageDealt = new HashMap<>();
         this.distanceRun = new HashMap<>();
+        this.miningContribution = new HashMap<>();
+        this.sharedBackpackContribution = new HashMap<>();
         this.lastLocation = new HashMap<>();
         this.hunterPerformanceKillCounts = new HashMap<>();
         this.preyPerformanceKillCounts = new HashMap<>();
@@ -162,6 +175,7 @@ public class GameRoom {
         this.preyPerformanceDeathCounts = new HashMap<>();
         this.hunterPerformanceFinalKills = new HashMap<>();
         this.preyPerformanceFirstDeathTime = new HashMap<>();
+        this.flashPreyStartChoices = new HashMap<>();
         this.randomCompassUseCounts = new HashMap<>();
         this.usedPreyRespawn = new HashSet<>();
         this.luckyPillarBlocks = new HashSet<>();
@@ -172,6 +186,9 @@ public class GameRoom {
         this.miniGameEliminatedPlayers = new HashSet<>();
         this.miniGameSurvivalTicks = new HashMap<>();
         this.miniGameProtectedBlocks = new HashSet<>();
+        this.deathSwapIntervalVotes = new HashMap<>();
+        this.deathSwapVoteCursor = new HashMap<>();
+        this.deathSwapEliminatedPlayers = new HashSet<>();
 
         this.createTime = System.currentTimeMillis();
         this.preyVotes = new HashMap<>();
@@ -354,6 +371,10 @@ public class GameRoom {
         luckyPillarsEliminatedPlayers.remove(uuid);
         miniGameEliminatedPlayers.remove(uuid);
         miniGameSurvivalTicks.remove(uuid);
+        deathSwapIntervalVotes.remove(uuid);
+        deathSwapVoteCursor.remove(uuid);
+        deathSwapEliminatedPlayers.remove(uuid);
+        flashPreyStartChoices.remove(uuid);
         if (uuid != null && uuid.equals(lockedFirstDualPrey)) {
             lockedFirstDualPrey = null;
         }
@@ -935,10 +956,40 @@ public class GameRoom {
         flashDifficultyFinalized = false;
     }
 
+    public void setFlashPreyStartChoice(UUID uuid, String choiceId) {
+        if (uuid == null) {
+            return;
+        }
+        if (choiceId == null || choiceId.isBlank()) {
+            flashPreyStartChoices.remove(uuid);
+            return;
+        }
+        flashPreyStartChoices.put(uuid, choiceId);
+    }
+
+    public String getFlashPreyStartChoice(UUID uuid) {
+        return uuid == null ? null : flashPreyStartChoices.get(uuid);
+    }
+
+    public boolean hasFlashPreyStartChoice(UUID uuid) {
+        return uuid != null && flashPreyStartChoices.containsKey(uuid);
+    }
+
+    public void clearFlashPreyStartChoices() {
+        flashPreyStartChoices.clear();
+    }
+
     private FlashDifficulty resolveFlashDifficultyVotes() {
         int normalVotes = getFlashDifficultyVoteCount(FlashDifficulty.NORMAL);
         int easyVotes = getFlashDifficultyVoteCount(FlashDifficulty.EASY);
-        return easyVotes > normalVotes ? FlashDifficulty.EASY : FlashDifficulty.NORMAL;
+        int flashSmpVotes = getFlashDifficultyVoteCount(FlashDifficulty.FLASH_SMP);
+        if (easyVotes > normalVotes && easyVotes > flashSmpVotes) {
+            return FlashDifficulty.EASY;
+        }
+        if (flashSmpVotes > normalVotes && flashSmpVotes > easyVotes) {
+            return FlashDifficulty.FLASH_SMP;
+        }
+        return FlashDifficulty.NORMAL;
     }
 
     // 倒计时
@@ -1131,6 +1182,18 @@ public class GameRoom {
         damageDealt.merge(uuid, damage, Double::sum);
     }
 
+    public void addMiningContribution(UUID uuid, int value) {
+        if (uuid != null && value > 0) {
+            miningContribution.merge(uuid, value, Integer::sum);
+        }
+    }
+
+    public void addSharedBackpackContribution(UUID uuid, int amount) {
+        if (uuid != null && amount > 0) {
+            sharedBackpackContribution.merge(uuid, amount, Integer::sum);
+        }
+    }
+
     public void updateDistance(UUID uuid, Location current) {
         Location last = lastLocation.get(uuid);
         if (last != null && last.getWorld() != null && current.getWorld() != null
@@ -1153,6 +1216,14 @@ public class GameRoom {
 
     public double getDistanceRun(UUID uuid) {
         return distanceRun.getOrDefault(uuid, 0.0);
+    }
+
+    public int getMiningContribution(UUID uuid) {
+        return miningContribution.getOrDefault(uuid, 0);
+    }
+
+    public int getSharedBackpackContribution(UUID uuid) {
+        return sharedBackpackContribution.getOrDefault(uuid, 0);
     }
 
     public int recordHunterPerformanceKill(UUID hunterUuid, UUID preyUuid) {
@@ -1246,7 +1317,11 @@ public class GameRoom {
 
     // 计算贡献值（用于排行榜排序）
     public double getContribution(UUID uuid) {
-        return getAttackCount(uuid) * 5.0 + getDamageDealt(uuid) * 2.0 + getDistanceRun(uuid) * 0.1;
+        return getAttackCount(uuid) * 5.0
+                + getDamageDealt(uuid) * 2.0
+                + getDistanceRun(uuid) * 0.1
+                + getMiningContribution(uuid) * 1.5
+                + getSharedBackpackContribution(uuid) * 1.2;
     }
 
     // 世界切换次数
@@ -1563,6 +1638,184 @@ public class GameRoom {
 
     public boolean isMiniGameProtectedBlock(Location location) {
         return miniGameProtectedBlocks.contains(luckyBlockKey(location));
+    }
+
+    public int getDeathSwapVoteCursor(UUID uuid, List<Integer> allowedMinutes) {
+        if (uuid == null) {
+            return normalizeDeathSwapMinute(5, allowedMinutes);
+        }
+        int fallback = normalizeDeathSwapMinute(5, allowedMinutes);
+        int current = deathSwapVoteCursor.getOrDefault(uuid, fallback);
+        current = normalizeDeathSwapMinute(current, allowedMinutes);
+        deathSwapVoteCursor.put(uuid, current);
+        return current;
+    }
+
+    public int cycleDeathSwapVoteCursor(UUID uuid, List<Integer> allowedMinutes) {
+        if (uuid == null) {
+            return normalizeDeathSwapMinute(5, allowedMinutes);
+        }
+        List<Integer> minutes = sanitizeDeathSwapMinutes(allowedMinutes);
+        int current = getDeathSwapVoteCursor(uuid, minutes);
+        int index = minutes.indexOf(current);
+        int next = minutes.get((index < 0 ? 0 : index + 1) % minutes.size());
+        deathSwapVoteCursor.put(uuid, next);
+        return next;
+    }
+
+    public boolean toggleDeathSwapVote(UUID uuid, List<Integer> allowedMinutes) {
+        if (uuid == null || !players.contains(uuid)) {
+            return false;
+        }
+        int minute = getDeathSwapVoteCursor(uuid, allowedMinutes);
+        Integer old = deathSwapIntervalVotes.get(uuid);
+        if (old != null && old == minute) {
+            deathSwapIntervalVotes.remove(uuid);
+            return false;
+        }
+        deathSwapIntervalVotes.put(uuid, minute);
+        return true;
+    }
+
+    public boolean setDeathSwapVote(UUID uuid, int minute, List<Integer> allowedMinutes) {
+        if (uuid == null || !players.contains(uuid)) {
+            return false;
+        }
+        int normalized = normalizeDeathSwapMinute(minute, allowedMinutes);
+        deathSwapVoteCursor.put(uuid, normalized);
+        deathSwapIntervalVotes.put(uuid, normalized);
+        return true;
+    }
+
+    public Integer getDeathSwapVote(UUID uuid) {
+        return uuid == null ? null : deathSwapIntervalVotes.get(uuid);
+    }
+
+    public int getDeathSwapVoteCount(int minutes) {
+        int count = 0;
+        for (Integer voted : deathSwapIntervalVotes.values()) {
+            if (voted != null && voted == minutes) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public int resolveDeathSwapIntervalSeconds(List<Integer> allowedMinutes) {
+        List<Integer> minutes = sanitizeDeathSwapMinutes(allowedMinutes);
+        int selected = minutes.get(0);
+        int bestVotes = -1;
+        for (int minute : minutes) {
+            int votes = getDeathSwapVoteCount(minute);
+            if (votes > bestVotes) {
+                selected = minute;
+                bestVotes = votes;
+            }
+        }
+        deathSwapIntervalSeconds = Math.max(60, selected * 60);
+        deathSwapNextSwapSeconds = deathSwapIntervalSeconds;
+        return deathSwapIntervalSeconds;
+    }
+
+    private int normalizeDeathSwapMinute(int minute, List<Integer> allowedMinutes) {
+        List<Integer> minutes = sanitizeDeathSwapMinutes(allowedMinutes);
+        return minutes.contains(minute) ? minute : minutes.get(0);
+    }
+
+    private List<Integer> sanitizeDeathSwapMinutes(List<Integer> allowedMinutes) {
+        List<Integer> result = new ArrayList<>();
+        if (allowedMinutes != null) {
+            for (Integer minute : allowedMinutes) {
+                if (minute != null && minute > 0 && !result.contains(minute)) {
+                    result.add(minute);
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            result.add(5);
+            result.add(10);
+        }
+        Collections.sort(result);
+        return result;
+    }
+
+    public int getDeathSwapIntervalSeconds() {
+        return deathSwapIntervalSeconds;
+    }
+
+    public void setDeathSwapIntervalSeconds(int seconds) {
+        this.deathSwapIntervalSeconds = Math.max(60, seconds);
+    }
+
+    public int getDeathSwapNextSwapSeconds() {
+        return deathSwapNextSwapSeconds;
+    }
+
+    public void setDeathSwapNextSwapSeconds(int seconds) {
+        this.deathSwapNextSwapSeconds = Math.max(0, seconds);
+    }
+
+    public boolean isDeathSwapPvpEnabled() {
+        return deathSwapPvpEnabled;
+    }
+
+    public void setDeathSwapPvpEnabled(boolean enabled) {
+        this.deathSwapPvpEnabled = enabled;
+    }
+
+    public void markDeathSwapEliminated(UUID uuid) {
+        if (uuid != null && players.contains(uuid)) {
+            deathSwapEliminatedPlayers.add(uuid);
+        }
+    }
+
+    public boolean isDeathSwapEliminated(UUID uuid) {
+        return uuid != null && deathSwapEliminatedPlayers.contains(uuid);
+    }
+
+    public Set<UUID> getDeathSwapEliminatedPlayers() {
+        return Collections.unmodifiableSet(deathSwapEliminatedPlayers);
+    }
+
+    public List<UUID> getDeathSwapAlivePlayers() {
+        List<UUID> alive = new ArrayList<>();
+        for (UUID uuid : players) {
+            if (deathSwapEliminatedPlayers.contains(uuid) || spectators.contains(uuid)) {
+                continue;
+            }
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
+                alive.add(uuid);
+            }
+        }
+        return alive;
+    }
+
+    public void setDeathSwapSpawnCenter(Location location) {
+        this.deathSwapSpawnCenter = location == null ? null : location.clone();
+    }
+
+    public Location getDeathSwapSpawnCenter() {
+        return deathSwapSpawnCenter == null ? null : deathSwapSpawnCenter.clone();
+    }
+
+    public void setDeathSwapSpectatorSpawn(Location location) {
+        this.deathSwapSpectatorSpawn = location == null ? null : location.clone();
+    }
+
+    public Location getDeathSwapSpectatorSpawn() {
+        return deathSwapSpectatorSpawn == null ? null : deathSwapSpectatorSpawn.clone();
+    }
+
+    public void clearDeathSwapState() {
+        deathSwapIntervalVotes.clear();
+        deathSwapVoteCursor.clear();
+        deathSwapEliminatedPlayers.clear();
+        deathSwapIntervalSeconds = 300;
+        deathSwapNextSwapSeconds = 300;
+        deathSwapPvpEnabled = false;
+        deathSwapSpawnCenter = null;
+        deathSwapSpectatorSpawn = null;
     }
 
     public void clearMiniGameState() {

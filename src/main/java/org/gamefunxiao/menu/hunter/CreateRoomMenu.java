@@ -40,6 +40,7 @@ public class CreateRoomMenu extends BaseMenu {
     private static String resolveTitle(MenuSection menuSection) {
         return switch (menuSection) {
             case LUCKY_PILLARS -> "§0§l🍀 幸运之柱 - 创建房间 🍀";
+            case DEATH_SWAP -> "§0§l⟲ 死亡互换 - 创建房间 ⟲";
             case GENERIC, HUNTER -> "§0§l⚔ 猎人游戏 - 创建房间 ⚔";
         };
     }
@@ -47,6 +48,7 @@ public class CreateRoomMenu extends BaseMenu {
     private static List<GameMode> resolveModes(MenuSection menuSection) {
         return switch (menuSection) {
             case LUCKY_PILLARS -> new ArrayList<>(GameMode.getLuckyPillarsSectionModes());
+            case DEATH_SWAP -> new ArrayList<>(GameMode.getDeathSwapSectionModes());
             case GENERIC, HUNTER -> GameMode.getHunterCreateMenuModes();
         };
     }
@@ -67,7 +69,11 @@ public class CreateRoomMenu extends BaseMenu {
         inventory.setItem(4, createTitleItem(getSectionTitleMaterial(),
                 getSectionTitleText(),
                 "§8· · · · · · · · · · · · · ·",
-                menuSection == MenuSection.LUCKY_PILLARS ? "§f先选你要开的幸运之柱玩法" : "§f先选你要开的猎人玩法",
+                switch (menuSection) {
+                    case LUCKY_PILLARS -> "§f先选你要开的幸运之柱玩法";
+                    case DEATH_SWAP -> "§f死亡互换最多 8 人，开局围圈出生";
+                    case GENERIC, HUNTER -> "§f先选你要开的猎人玩法";
+                },
                 "§f这个界面里的模式都只属于当前玩法分区",
                 "§8· · · · · · · · · · · · · ·"));
 
@@ -113,12 +119,18 @@ public class CreateRoomMenu extends BaseMenu {
     }
 
     private Material getSectionTitleMaterial() {
-        return menuSection == MenuSection.LUCKY_PILLARS ? Material.GOLD_BLOCK : Material.IRON_SWORD;
+        return switch (menuSection) {
+            case LUCKY_PILLARS -> Material.GOLD_BLOCK;
+            case DEATH_SWAP -> Material.ENDER_PEARL;
+            case GENERIC, HUNTER -> Material.IRON_SWORD;
+        };
     }
 
     private String getSectionTitleText() {
         return menuSection == MenuSection.LUCKY_PILLARS
                 ? "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱房间"
+                : menuSection == MenuSection.DEATH_SWAP
+                ? "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换房间"
                 : "§x§F§F§6§6§0§0⚔ §x§F§F§9§9§3§3猎§x§F§F§C§C§6§6人§x§F§F§F§F§9§9房§x§C§C§F§F§9§9间";
     }
 
@@ -151,6 +163,7 @@ public class CreateRoomMenu extends BaseMenu {
             case END_FLASH -> Material.END_CRYSTAL;
             case CUSTOM -> Material.COMMAND_BLOCK;
             case LUCKY_PILLARS -> Material.GOLD_BLOCK;
+            case DEATH_SWAP -> Material.ENDER_PEARL;
             default -> Material.PAPER;
         };
     }
@@ -166,6 +179,7 @@ public class CreateRoomMenu extends BaseMenu {
             case END_FLASH -> "§x§B§B§8§8§F§F终§x§D§D§A§A§F§F章 §x§F§F§D§D§A§A· §x§D§D§F§F§C§C闪§x§B§B§F§F§E§E光";
             case CUSTOM -> "§x§F§F§D§7§0§0自§x§F§F§B§B§3§3定§x§F§F§9§9§6§6义§x§F§F§7§7§9§9模§x§F§F§5§5§C§C式";
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5幸§x§F§F§C§C§6§6运§x§F§F§B§B§7§7之§x§F§F§A§A§8§8柱";
+            case DEATH_SWAP -> "§x§8§8§D§D§F§F死§x§A§A§E§E§F§F亡§x§C§C§F§F§F§F互§x§F§F§D§D§B§B换";
             default -> mode.getDisplayName();
         };
     }
@@ -209,6 +223,11 @@ public class CreateRoomMenu extends BaseMenu {
                 lore.add("§f- §a高空柱台出生");
                 lore.add("§f- §e按配置间隔随机发原版物品");
                 lore.add("§f- §b最后存活者获胜");
+            }
+            case DEATH_SWAP -> {
+                lore.add("§f- §b每隔投票时间互换所有存活者位置");
+                lore.add("§f- §a出生点附近必筛非沙漠村庄");
+                lore.add("§f- §c死亡一次后直接旁观");
             }
             default -> lore.add("§f- §7暂无说明");
         }
@@ -324,6 +343,8 @@ public class CreateRoomMenu extends BaseMenu {
             maxPlayers = 64;
         } else if (mode == GameMode.LUCKY_PILLARS) {
             maxPlayers = 16;
+        } else if (mode == GameMode.DEATH_SWAP) {
+            maxPlayers = 8;
         } else {
             maxPlayers = 16;
         }
@@ -392,6 +413,8 @@ public class CreateRoomMenu extends BaseMenu {
         int hardMax;
         if (selectedMode != null && selectedMode.isFlashTournament()) {
             hardMax = 67;
+        } else if (selectedMode != null && selectedMode.isDeathSwap()) {
+            hardMax = 8;
         } else if (selectedMode != null && selectedMode.isLuckyPillars()) {
             hardMax = 32;
         } else {
@@ -414,6 +437,7 @@ public class CreateRoomMenu extends BaseMenu {
     private void openSectionRoot() {
         switch (menuSection) {
             case LUCKY_PILLARS -> plugin.getMenuManager().openLuckyPillarsMenu(player);
+            case DEATH_SWAP -> plugin.getMenuManager().openDeathSwapMenu(player);
             case GENERIC, HUNTER -> plugin.getMenuManager().openHunterGameMenu(player);
         }
     }

@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class ConfigManager {
@@ -169,8 +171,63 @@ public class ConfigManager {
         return config.getString("lucky_pillars_prefix", "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱 §x§F§F§D§D§5§5» §f");
     }
 
+    public String getDeathSwapPrefix() {
+        return config.getString("death_swap_prefix", "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换 §x§8§8§D§D§F§F» §f");
+    }
+
     public String getMiniGameCurrencyName() {
         return config.getString("minigame_currency.name", "小游戏币");
+    }
+
+    public int getDeathSwapCountdownSeconds() {
+        return Math.max(30, config.getInt("death_swap.countdown_seconds", 180));
+    }
+
+    public int getDeathSwapForceStartSeconds() {
+        return Math.max(10, config.getInt("death_swap.force_start_seconds", 30));
+    }
+
+    public int getDeathSwapPreStartCountdownSeconds() {
+        return Math.max(1, config.getInt("death_swap.pre_start_countdown_seconds", 10));
+    }
+
+    public int getDeathSwapNoPvpSeconds() {
+        return Math.max(60, config.getInt("death_swap.no_pvp_seconds", 3600));
+    }
+
+    public int getDeathSwapDrawSeconds() {
+        return Math.max(getDeathSwapNoPvpSeconds() + 60, config.getInt("death_swap.draw_seconds", 7200));
+    }
+
+    public double getDeathSwapSpawnRingRadius() {
+        return Math.max(2.5D, config.getDouble("death_swap.spawn_ring_radius", 8.0D));
+    }
+
+    public int getDeathSwapVillageRadiusBlocks() {
+        return Math.max(64, config.getInt("death_swap.village_seed.radius_blocks", 256));
+    }
+
+    public int getDeathSwapVillageMaxAttempts() {
+        return Math.max(1_000_000, config.getInt("death_swap.village_seed.max_attempts", 1_000_000));
+    }
+
+    public int getDeathSwapVillageVerifyRadiusChunks() {
+        return Math.max(4, config.getInt("death_swap.village_seed.verify_radius_chunks", 24));
+    }
+
+    public List<Integer> getDeathSwapVoteIntervalMinutes() {
+        List<Integer> result = new ArrayList<>();
+        for (Integer value : config.getIntegerList("death_swap.vote_intervals_minutes")) {
+            if (value != null && value > 0 && !result.contains(value)) {
+                result.add(value);
+            }
+        }
+        if (result.isEmpty()) {
+            result.add(5);
+            result.add(10);
+        }
+        result.sort(Integer::compareTo);
+        return result;
     }
 
     public int getNetherHunterVoteTime() {

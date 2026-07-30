@@ -8,6 +8,7 @@ import org.gamefunxiao.commands.GameFunCommand;
 import org.gamefunxiao.config.ConfigManager;
 import org.gamefunxiao.config.MessageManager;
 import org.gamefunxiao.data.PlayerDataManager;
+import org.gamefunxiao.flash.FlashAdvancementManager;
 import org.gamefunxiao.flash.FlashModeManager;
 import org.gamefunxiao.game.EndFlashKitManager;
 import org.gamefunxiao.game.GameManager;
@@ -46,6 +47,7 @@ public final class GameFunXiao extends JavaPlugin {
     private PlayerListener playerListener;
     private ChildServerManager childServerManager;
     private TabHeaderFooterManager tabHeaderFooterManager;
+    private FlashAdvancementManager flashAdvancementManager;
     private FlashModeManager flashModeManager;
     private EndFlashKitManager endFlashKitManager;
     private MiniGameMapManager miniGameMapManager;
@@ -67,6 +69,8 @@ public final class GameFunXiao extends JavaPlugin {
         worldManager = new WorldManager(this);
         playerDataManager = new PlayerDataManager(this);
         leaderboardManager = new LeaderboardManager(this);
+        flashAdvancementManager = new FlashAdvancementManager(this);
+        flashAdvancementManager.loadAdvancements();
         flashModeManager = new FlashModeManager(this);
         flashModeManager.installBundledFlashNoteSongs();
         endFlashKitManager = new EndFlashKitManager(this);
@@ -137,6 +141,9 @@ public final class GameFunXiao extends JavaPlugin {
             flashModeManager.stopAllFlashNoteMusic();
             flashModeManager.clearTurtleShellSpeedModifiers();
         }
+        if (flashAdvancementManager != null) {
+            flashAdvancementManager.unloadAdvancements();
+        }
 
         // 结束所有游戏
         if (gameManager != null) {
@@ -203,7 +210,7 @@ public final class GameFunXiao extends JavaPlugin {
             registerPaperCommand(registerMethod, basicCommandClass, "enderchest",
                     "终章末影箱完整命令", List.of("endflashender"), "gamefunxiao.use", executor);
             registerPaperCommand(registerMethod, basicCommandClass, "flashwiki",
-                    "获取闪光模式局内书 Wiki", List.of("bookwiki", "gamefunwiki", "闪光手册", "书wiki"),
+                    "获取闪光公式局内书 Wiki", List.of("bookwiki", "gamefunwiki", "闪光手册", "书wiki"),
                     "gamefunxiao.use", executor);
             getLogger().info("§x§5§5§F§F§A§A✓ 已使用 Paper 指令注册。");
             return true;
@@ -361,6 +368,10 @@ public final class GameFunXiao extends JavaPlugin {
 
     public FlashModeManager getFlashModeManager() {
         return flashModeManager;
+    }
+
+    public FlashAdvancementManager getFlashAdvancementManager() {
+        return flashAdvancementManager;
     }
 
     public EndFlashKitManager getEndFlashKitManager() {

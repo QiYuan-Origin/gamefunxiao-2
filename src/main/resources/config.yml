@@ -1,6 +1,6 @@
 # GameFunXiao 主配置文件
 # 配置版本（请勿手动修改）
-config_version: 9
+config_version: 13
 
 # GameFun消息前缀
 prefix: "§x§5§5§F§F§A§A⚔ §x§6§6§F§F§B§BGameFun §x§7§7§F§F§C§C>> §f"
@@ -10,6 +10,8 @@ hunter_game_prefix: "§x§F§F§6§6§0§0⚔ §x§F§F§9§9§3§3猎§x§F§F�
 minigame_prefix: "§x§7§D§F§F§C§8✦ §x§9§3§F§F§D§6小§x§A§9§F§F§E§4游§x§B§F§F§F§F§2戏 §x§7§D§F§F§C§8» §f"
 # 幸运之柱消息前缀
 lucky_pillars_prefix: "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱 §x§F§F§D§D§5§5» §f"
+# 死亡互换消息前缀
+death_swap_prefix: "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换 §x§8§8§D§D§F§F» §f"
 
 header-footer:
   enabled: true
@@ -106,32 +108,59 @@ hunter_game:
   # 猎人游戏表现值设置（底层继续兼容旧 hunter_points/prey_points 数据）
   performance_value:
     enabled: true
+    mode_multipliers:
+      # 终章 · 闪光节奏更快，正收益单独压低，死亡/退出扣分不打折
+      end_flash: 0.35
     anti_farm:
       # 游戏开始后少于这个分钟数就结束，本局获得表现值减半
-      short_game_minutes: 5
+      short_game_minutes: 8
     hunter:
-      win: 5
-      kill_prey: 6
-      final_kill_bonus: 4
-      damage_unit: 30
+      win: 2
+      kill_prey: 3
+      final_kill_bonus: 2
+      damage_unit: 70
       damage_points: 1
-      max_per_game: 25
+      attack_unit: 5
+      attack_points: 1
+      attack_max_points: 3
+      mining_value_unit: 8
+      mining_points: 1
+      mining_max_points: 4
+      shared_backpack_item_unit: 12
+      shared_backpack_points: 1
+      shared_backpack_max_points: 3
+      max_per_game: 12
+      max_loss_per_game: 10
       kill_same_prey_limit: 1
-      death_penalty: 1
-      death_penalty_max_times: 5
-      quit_penalty: 8
-    prey:
-      win: 8
-      survival_unit_minutes: 6
-      survival_points: 2
-      kill_hunter: 3
-      kill_same_hunter_limit: 2
-      distance_unit: 800
-      distance_points: 1
-      max_per_game: 30
-      win_min_distance: 200
-      death_penalty: 4
+      death_penalty: 3
+      death_result_penalty: 3
+      death_penalty_max_times: 999
       quit_penalty: 10
+    prey:
+      win: 5
+      survival_unit_minutes: 8
+      survival_points: 1
+      kill_hunter: 2
+      kill_same_hunter_limit: 2
+      damage_unit: 60
+      damage_points: 1
+      attack_unit: 5
+      attack_points: 1
+      attack_max_points: 3
+      mining_value_unit: 10
+      mining_points: 1
+      mining_max_points: 4
+      shared_backpack_item_unit: 16
+      shared_backpack_points: 1
+      shared_backpack_max_points: 2
+      distance_unit: 1400
+      distance_points: 1
+      max_per_game: 14
+      max_loss_per_game: 12
+      win_min_distance: 900
+      death_penalty: 4
+      death_result_penalty: 2
+      quit_penalty: 16
 
   # 聊天设置
   chat:
@@ -172,6 +201,19 @@ disabled_commands:
   blocked_message: "§x§F§F§8§8§5§5⚠ §c游戏进行中无法使用此命令！"
 
 # 小游戏货币设置（由 GameFun 插件存储，gamefun/gameing 通过共享玩家数据互通）
+death_swap:
+  countdown_seconds: 180
+  force_start_seconds: 30
+  pre_start_countdown_seconds: 10
+  vote_intervals_minutes: [5, 10]
+  no_pvp_seconds: 3600
+  draw_seconds: 7200
+  spawn_ring_radius: 8.0
+  village_seed:
+    radius_blocks: 256
+    max_attempts: 1000000
+    verify_radius_chunks: 24
+
 minigame_currency:
   name: "小游戏币"
 

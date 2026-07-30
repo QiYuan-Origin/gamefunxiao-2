@@ -24,7 +24,7 @@ commands:
     aliases:
       - endflashender
   flashwiki:
-    description: 获取闪光模式局内书 Wiki
+    description: 获取闪光公式局内书 Wiki
     usage: /flashwiki
     aliases:
       - bookwiki
@@ -48,6 +48,7 @@ permissions:
       gamefunxiao.use.wiki: true
       gamefunxiao.use.wiki.open: true
       gamefunxiao.use.enderchest: true
+      gamefunxiao.use.deathswap: true
       gamefunxiao.use.command: true
       gamefunxiao.use.command.menu: true
       gamefunxiao.use.command.rooms: true
@@ -93,6 +94,9 @@ permissions:
     default: true
   gamefunxiao.use.enderchest:
     description: 使用终章末影箱命令
+    default: true
+  gamefunxiao.use.deathswap:
+    description: 使用死亡互换玩法
     default: true
   gamefunxiao.use.command:
     description: 使用 GameFun command 命令入口
@@ -274,7 +278,7 @@ permissions:
     description: 请求进入固定终章调试世界
     default: op
   gamefunxiao.flashuse:
-    description: 离开房间后试用闪光模式物品
+    description: 离开房间后试用闪光公式物品
     default: true
   gamefunxiao.flashmusic:
     description: 播放闪光音符盒音乐

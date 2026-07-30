@@ -76,7 +76,7 @@ public class CommandGatewayMenu extends BaseMenu {
         inventory.setItem(22, createQuickButton(GameMode.SWAP, Material.ENDER_PEARL,
                 "§x§D§D§8§8§F§F互换模式", "模拟猎人菜单互换模式按钮"));
         inventory.setItem(23, createQuickButton(GameMode.FLASH, Material.BLAZE_POWDER,
-                "§x§F§F§E§E§6§6闪光模式", "模拟猎人菜单闪光模式按钮"));
+                "§x§F§F§E§E§6§6闪光公式", "模拟猎人菜单闪光公式按钮"));
         inventory.setItem(24, createQuickButton(GameMode.END_FLASH, Material.END_CRYSTAL,
                 "§x§D§D§A§A§F§F终章 · 闪光", "模拟猎人菜单终章闪光按钮"));
         inventory.setItem(25, createQuickButton(GameMode.FLASH_TOURNAMENT, Material.RED_BANNER,

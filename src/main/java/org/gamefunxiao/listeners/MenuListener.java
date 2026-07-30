@@ -186,7 +186,7 @@ public class MenuListener implements Listener {
             var room = plugin.getRoomManager().getPlayerRoom(player.getUniqueId());
             if (room != null) {
                 org.bukkit.Bukkit.getScheduler().runTask(plugin,
-                    () -> new org.gamefunxiao.menu.hunter.TeleportTeammateMenu(plugin, player, room, true).open());
+                    () -> plugin.getPlayerListener().openHunterTeleportMenu(player, room, true));
             }
         }
     }

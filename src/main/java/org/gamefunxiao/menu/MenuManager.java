@@ -30,9 +30,11 @@ public class MenuManager {
     private static final List<String> COMMAND_MENU_IDS = List.of(
             "main", "home", "hunter", "huntergame", "hg",
             "lucky", "luckypillars", "lp",
+            "deathswap", "death_swap", "ds",
             "rooms", "roomlist", "luckyrooms", "lprooms",
-            "create", "createroom", "luckycreate", "lpcreate",
-            "leaderboard", "lb", "luckyleaderboard", "lplb",
+            "deathswaprooms", "dsrooms",
+            "create", "createroom", "luckycreate", "lpcreate", "deathswapcreate", "dscreate",
+            "leaderboard", "lb", "luckyleaderboard", "lplb", "deathswapleaderboard", "dslb",
             "rank", "ranks", "points", "performance", "performancevalue",
             "shop", "settings", "victoryshop", "victorysettings",
             "endflashkit", "endflashkitadmin", "personalkit", "endflashpersonalkit",
@@ -94,13 +96,17 @@ public class MenuManager {
             case "main", "home", "menu", "主菜单", "主页" -> new MainNavigationMenu(plugin, player);
             case "hunter", "huntergame", "hg", "猎人", "猎人游戏" -> new HunterGameNavigationMenu(plugin, player);
             case "lucky", "luckypillars", "lp", "幸运之柱" -> new LuckyPillarsNavigationMenu(plugin, player);
+            case "deathswap", "death_swap", "deathswapgame", "ds", "死亡互换" -> new DeathSwapNavigationMenu(plugin, player);
             case "rooms", "roomlist", "房间", "查看房间" -> new RoomListMenu(plugin, player);
             case "luckyrooms", "lprooms", "幸运房间" -> RoomListMenu.luckyPillarsOnly(plugin, player);
+            case "deathswaprooms", "dsrooms", "死亡互换房间" -> RoomListMenu.deathSwapOnly(plugin, player);
             case "create", "createroom", "创建", "创建房间" -> new CreateRoomMenu(plugin, player);
             case "luckycreate", "lpcreate", "幸运创建" -> new CreateRoomMenu(plugin, player, MenuSection.LUCKY_PILLARS);
+            case "deathswapcreate", "dscreate", "死亡互换创建" -> new CreateRoomMenu(plugin, player, MenuSection.DEATH_SWAP);
             case "leaderboard", "lb", "排行", "排行榜" -> new LeaderboardMenu(plugin, player);
             case "rank", "ranks", "points", "performance", "performancevalue", "段位", "表现", "表现值" -> new HunterPerformanceMenu(plugin, player);
             case "luckyleaderboard", "lplb", "幸运排行" -> new LeaderboardMenu(plugin, player, MenuSection.LUCKY_PILLARS, RoomListMenu.defaultLuckyFilter());
+            case "deathswapleaderboard", "dslb", "死亡互换排行" -> new LeaderboardMenu(plugin, player, MenuSection.DEATH_SWAP, RoomListMenu.defaultDeathSwapFilter());
             case "passcount", "pass_count", "通关次数" -> new LeaderboardDetailMenu(plugin, player, "pass_count");
             case "fastesttime", "fastest_time", "最快通关" -> new LeaderboardDetailMenu(plugin, player, "fastest_time");
             case "playcount", "play_count", "游玩次数" -> new LeaderboardDetailMenu(plugin, player, "play_count");
@@ -235,6 +241,20 @@ public class MenuManager {
         openMenu(player, RoomListMenu.luckyPillarsOnly(plugin, player));
     }
 
+    public void openDeathSwapMenu(Player player) {
+        if (!canOpenGameFunMenu(player)) {
+            return;
+        }
+        openMenu(player, new DeathSwapNavigationMenu(plugin, player));
+    }
+
+    public void openDeathSwapRoomListMenu(Player player) {
+        if (!canOpenGameFunMenu(player)) {
+            return;
+        }
+        openMenu(player, RoomListMenu.deathSwapOnly(plugin, player));
+    }
+
 
 
     public void openRoomListMenu(Player player) {
@@ -266,6 +286,13 @@ public class MenuManager {
             return;
         }
         openMenu(player, new LeaderboardMenu(plugin, player, MenuSection.LUCKY_PILLARS, RoomListMenu.defaultLuckyFilter()));
+    }
+
+    public void openDeathSwapLeaderboardMenu(Player player) {
+        if (!canOpenGameFunMenu(player)) {
+            return;
+        }
+        openMenu(player, new LeaderboardMenu(plugin, player, MenuSection.DEATH_SWAP, RoomListMenu.defaultDeathSwapFilter()));
     }
 
     public void openHunterPerformanceMenu(Player player) {

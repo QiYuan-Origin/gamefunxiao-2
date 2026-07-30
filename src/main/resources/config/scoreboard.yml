@@ -19,6 +19,7 @@ lines:
     - "§7"
     - "§f当前人数: §a{current_players}§7/§e{max_players}"
     - "§f游戏模式: §b{mode}"
+    - "{flash_difficulty_line}"
     - "§f房间号: §d{room_id}"
     - "§7"
     - "§f房间状态: §x§5§5§F§F§A§A{state}"
@@ -28,6 +29,7 @@ lines:
   selecting:
     - "§7"
     - "§f游戏模式: §b{mode}"
+    - "{flash_difficulty_line}"
     - "§f猎物: §a{prey_names}"
     - "§f阶段: §d选择世界"
     - "§f剩余时间: §e{countdown}"
@@ -36,6 +38,7 @@ lines:
   playing:
     - "§7"
     - "§f游戏模式: §b{mode}"
+    - "{flash_difficulty_line}"
     - "§f猎物: §a{prey_names}"
     - "§f猎人: §c{hunter_count}人"
     - "§f已进行: §e{elapsed_time}"
@@ -58,6 +61,7 @@ lines:
   ended:
     - "§7"
     - "§f游戏模式: §b{mode}"
+    - "{flash_difficulty_line}"
     - "§f游戏结果: {winner}"
     - "§f游戏时长: §e{elapsed_time}"
     - "§7"

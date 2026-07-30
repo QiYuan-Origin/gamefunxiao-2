@@ -236,13 +236,13 @@ public class HunterGameNavigationMenu extends BaseMenu {
         ItemStack item = new ItemStack(Material.BLAZE_POWDER);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("   §8[§x§F§F§F§F§9§9⚡ §x§F§F§E§E§6§6闪§x§F§F§D§D§3§3光§x§F§F§C§C§0§0模§x§F§F§B§B§0§0式§8]");
+            meta.setDisplayName("   §8[§x§F§F§F§F§9§9⚡ §x§F§F§E§E§6§6闪§x§F§F§D§D§3§3光§x§F§F§C§C§0§0公§x§F§F§B§B§0§0式§8]");
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §e通关目标: §a直接开局厮杀并完成通关");
             lore.add("§f- §6不会进入世界选择，倒计时结束直接开始");
-            lore.add("§f- §b同一时间全服只会存在一个闪光模式房间");
-            lore.add("§f- §d若已有闪光模式进行中，点击会直接加入旁观");
+            lore.add("§f- §b同一时间全服只会存在一个闪光公式房间");
+            lore.add("§f- §d若已有闪光公式进行中，点击会直接加入旁观");
             lore.add("§f- §c满人可达 64 人，猎人会分成三圈包围猎物");
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a点击快速进入");
@@ -259,7 +259,7 @@ public class HunterGameNavigationMenu extends BaseMenu {
             meta.setDisplayName("   §8[§x§B§B§8§8§F§F✦ §x§C§8§9§2§F§F终§x§D§4§9§C§F§F章 §x§E§1§A§6§F§F· §x§E§D§B§0§F§F闪§x§F§A§B§A§F§F光§8]");
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
-            lore.add("§f- §d继承闪光模式全部特殊机制");
+            lore.add("§f- §d继承闪光公式全部特殊机制");
             lore.add("§f- §5只创建末地游戏世界，不创建主世界和下界");
             lore.add("§f- §b猎物在末地主岛或黑曜石平台附近开局");
             lore.add("§f- §c猎人依旧围三圈包围猎物");

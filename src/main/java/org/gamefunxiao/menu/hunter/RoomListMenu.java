@@ -46,6 +46,9 @@ public class RoomListMenu extends BaseMenu {
         return new RoomListMenu(plugin, player, MenuSection.LUCKY_PILLARS, getDefaultModes(MenuSection.LUCKY_PILLARS));
     }
 
+    public static RoomListMenu deathSwapOnly(GameFunXiao plugin, Player player) {
+        return new RoomListMenu(plugin, player, MenuSection.DEATH_SWAP, getDefaultModes(MenuSection.DEATH_SWAP));
+    }
 
     public static Set<GameMode> defaultHunterFilter() {
         return EnumSet.copyOf(getDefaultModes(MenuSection.HUNTER));
@@ -55,10 +58,14 @@ public class RoomListMenu extends BaseMenu {
         return EnumSet.copyOf(getDefaultModes(MenuSection.LUCKY_PILLARS));
     }
 
+    public static Set<GameMode> defaultDeathSwapFilter() {
+        return EnumSet.copyOf(getDefaultModes(MenuSection.DEATH_SWAP));
+    }
 
     private static String resolveTitle(MenuSection section) {
         return switch (section) {
             case LUCKY_PILLARS -> "§0§l🍀 幸运之柱房间 🍀";
+            case DEATH_SWAP -> "§0§l⟲ 死亡互换房间 ⟲";
             case GENERIC, HUNTER -> "§0§l⚔ 猎人房间列表 ⚔";
         };
     }
@@ -66,6 +73,7 @@ public class RoomListMenu extends BaseMenu {
     private static Set<GameMode> getDefaultModes(MenuSection section) {
         return switch (section) {
             case LUCKY_PILLARS -> GameMode.getLuckyPillarsSectionModes();
+            case DEATH_SWAP -> GameMode.getDeathSwapSectionModes();
             case GENERIC, HUNTER -> GameMode.getHunterSectionModes();
         };
     }
@@ -83,6 +91,7 @@ public class RoomListMenu extends BaseMenu {
                         : "§f当前使用 §b本服建世界后端",
                 switch (menuSection) {
                     case LUCKY_PILLARS -> "§f这里只看幸运之柱经典模式房间";
+                    case DEATH_SWAP -> "§f这里只看死亡互换房间";
                     case GENERIC, HUNTER -> "§f这里只看猎人玩法相关房间";
                 },
                 "§8· · · · · · · · · · · · · ·"));
@@ -102,12 +111,17 @@ public class RoomListMenu extends BaseMenu {
     }
 
     private Material getTitleMaterial() {
-        return menuSection == MenuSection.LUCKY_PILLARS ? Material.GOLD_BLOCK : Material.ENDER_EYE;
+        return switch (menuSection) {
+            case LUCKY_PILLARS -> Material.GOLD_BLOCK;
+            case DEATH_SWAP -> Material.ENDER_PEARL;
+            case GENERIC, HUNTER -> Material.ENDER_EYE;
+        };
     }
 
     private String getTitleText() {
         return switch (menuSection) {
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱房间";
+            case DEATH_SWAP -> "§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换房间";
             case GENERIC, HUNTER -> "§x§5§5§F§F§F§F👁 §x§7§7§F§F§D§D猎§x§9§9§F§F§B§B人§x§B§B§F§F§9§9房§x§D§D§F§F§7§7间";
         };
     }
@@ -124,10 +138,12 @@ public class RoomListMenu extends BaseMenu {
         if (entries.isEmpty()) {
             Material emptyMaterial = switch (menuSection) {
                 case LUCKY_PILLARS -> Material.GOLD_NUGGET;
+                case DEATH_SWAP -> Material.ENDER_PEARL;
                 case GENERIC, HUNTER -> Material.STRUCTURE_VOID;
             };
             String emptyText = switch (menuSection) {
                 case LUCKY_PILLARS -> "§f- §c当前没有幸运之柱房间";
+                case DEATH_SWAP -> "§f- §c当前没有死亡互换房间";
                 case GENERIC, HUNTER -> "§f- §c当前没有猎人玩法房间";
             };
             inventory.setItem(22, createItem(emptyMaterial,
@@ -246,6 +262,8 @@ public class RoomListMenu extends BaseMenu {
             lore.add("§f- §c游戏时长: §e" + formatTime(entry.gameDuration()));
             if (entry.mode().isLuckyPillars()) {
                 lore.add("§f- §a玩法: 每5秒随机物品，最后存活");
+            } else if (entry.mode().isDeathSwap()) {
+                lore.add("§f- §b玩法: 定时互换，死亡一次淘汰");
             } else if (!entry.preyNames().isEmpty()) {
                 lore.add("§f- §d猎物: §f" + String.join(", ", entry.preyNames()));
             }
@@ -262,10 +280,12 @@ public class RoomListMenu extends BaseMenu {
         lore.add("§8· · · · · · · · · · · · · ·");
         if (entry.state() == RoomState.WAITING || entry.state() == RoomState.STARTING) {
             lore.add("§f- §a左键加入房间");
-        } else if (entry.childManaged() && (entry.mode().isLuckyPillars() || entry.mode().isFlashLike())
+        } else if (entry.childManaged() && (entry.mode().isLuckyPillars() || entry.mode().isDeathSwap() || entry.mode().isFlashLike())
                 && (entry.state() == RoomState.PLAYING || entry.state() == RoomState.SELECTING)) {
             lore.add(entry.mode().isLuckyPillars()
                     ? "§f- §a左键进入幸运之柱旁观"
+                    : entry.mode().isDeathSwap()
+                    ? "§f- §a左键进入死亡互换旁观"
                     : "§f- §a左键进入当前猎人局旁观");
         } else if (entry.state() == RoomState.PLAYING && !entry.childManaged()) {
             lore.add("§f- §a左键旁观游戏");
@@ -379,7 +399,7 @@ public class RoomListMenu extends BaseMenu {
         }
 
         if (entry.childManaged()
-                && (entry.mode().isLuckyPillars() || entry.mode().isFlashLike())
+                && (entry.mode().isLuckyPillars() || entry.mode().isDeathSwap() || entry.mode().isFlashLike())
                 && (entry.state() == RoomState.PLAYING || entry.state() == RoomState.SELECTING)) {
             playClickSound();
             if (!plugin.getRoomManager().joinRoomById(player, entry.roomId())) {
@@ -396,6 +416,7 @@ public class RoomListMenu extends BaseMenu {
     private void openSectionRoot() {
         switch (menuSection) {
             case LUCKY_PILLARS -> plugin.getMenuManager().openLuckyPillarsMenu(player);
+            case DEATH_SWAP -> plugin.getMenuManager().openDeathSwapMenu(player);
             case GENERIC, HUNTER -> plugin.getMenuManager().openHunterGameMenu(player);
         }
     }

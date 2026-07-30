@@ -779,7 +779,7 @@ public class PlayerDataManager {
     }
 
     /**
-     * 增加猎人积分（可为负数扣分，但最低为0）
+     * 增加猎人表现值（可为负数扣分，但最低为0）
      */
     public void addHunterPoints(UUID uuid, int amount) {
         addHunterPoints(uuid, amount, null);
@@ -800,7 +800,7 @@ public class PlayerDataManager {
     }
 
     /**
-     * 增加猎物积分（可为负数扣分，但最低为0）
+     * 增加猎物表现值（可为负数扣分，但最低为0）
      */
     public void addPreyPoints(UUID uuid, int amount) {
         addPreyPoints(uuid, amount, null);

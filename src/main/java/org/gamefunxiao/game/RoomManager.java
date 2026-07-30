@@ -81,6 +81,9 @@ public class RoomManager {
     }
 
     private String getModeMessageWithPrefix(GameMode mode, String path) {
+        if (mode != null && mode.isDeathSwap()) {
+            return plugin.getMessageManager().getDeathSwapMessageWithPrefix(path);
+        }
         return mode != null && mode.isLuckyPillars()
                 ? plugin.getMessageManager().getLuckyPillarsMessageWithPrefix(path)
                 : mode != null && (mode.isStandaloneMiniGame() || mode.isIndependentMode())
@@ -89,6 +92,9 @@ public class RoomManager {
     }
 
     private String getModeMessageWithPrefix(GameMode mode, String path, Map<String, String> placeholders) {
+        if (mode != null && mode.isDeathSwap()) {
+            return plugin.getMessageManager().getDeathSwapMessageWithPrefix(path, placeholders);
+        }
         return mode != null && mode.isLuckyPillars()
                 ? plugin.getMessageManager().getLuckyPillarsMessageWithPrefix(path, placeholders)
                 : mode != null && (mode.isStandaloneMiniGame() || mode.isIndependentMode())
@@ -135,6 +141,8 @@ public class RoomManager {
             maxPlayers = mode.isFlashTournament() ? 67 : 64;
             isPublic = true;
             modifiers = new HashSet<>();
+        } else if (mode.isDeathSwap()) {
+            maxPlayers = maxPlayers == -1 ? 8 : Math.min(8, Math.max(2, maxPlayers));
         }
         String roomId = forcedRoomId != null ? forcedRoomId : generateRoomId();
         boolean isCustom = mode == GameMode.CUSTOM || !modifiers.isEmpty();
@@ -267,7 +275,7 @@ public class RoomManager {
         }
 
         // 没有找到合适的房间，创建新房间
-        createRoom(player, mode, 16, true, new HashSet<>());
+        createRoom(player, mode, mode.isDeathSwap() ? 8 : 16, true, new HashSet<>());
     }
 
     private void quickMatchChildServer(Player player, String modeId) {
@@ -307,9 +315,9 @@ public class RoomManager {
         }
 
         if (shouldUseCrossServerBackend()) {
-            plugin.getChildServerManager().createCrossServerRoom(player, mode, 16, true, new HashSet<>());
+            plugin.getChildServerManager().createCrossServerRoom(player, mode, mode.isDeathSwap() ? 8 : 16, true, new HashSet<>());
         } else {
-            plugin.getChildServerManager().createLobbyRoom(player, mode, 16, true, new HashSet<>());
+            plugin.getChildServerManager().createLobbyRoom(player, mode, mode.isDeathSwap() ? 8 : 16, true, new HashSet<>());
         }
     }
 
@@ -321,7 +329,8 @@ public class RoomManager {
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.85f, 1.0f);
                 return false;
             }
-            if ((room.getGameMode().isFlashLike() || room.getGameMode().isLuckyPillars() || room.getGameMode().isStandaloneMiniGame())
+            if ((room.getGameMode().isFlashLike() || room.getGameMode().isLuckyPillars()
+                    || room.getGameMode().isStandaloneMiniGame() || room.getGameMode().isDeathSwap())
                     && (room.getState() == RoomState.PLAYING || room.getState() == RoomState.SELECTING)) {
                 spectateRoom(player, room);
             } else {
@@ -594,13 +603,7 @@ public class RoomManager {
             room.broadcast(getRoomMessageWithPrefix(room, "room.player_left", placeholders));
 
             if (!hasOnlineActiveHunter(room, playerUUID)) {
-                boolean isOneVsOne = room.getPlayerCount() == 2 && room.getPreyUUIDs().size() == 1;
-                boolean oneVsOnePenalty = plugin.getConfigManager().getConfig().getBoolean("hunter_game.one_vs_one_quit_penalty", true);
-                if (isOneVsOne && oneVsOnePenalty) {
-                    plugin.getGameManager().endGameWithoutReward(room);
-                } else {
-                    plugin.getGameManager().endGame(room, true);
-                }
+                endHunterGameBecauseNoHunters(room, true);
             }
             return;
         }
@@ -622,6 +625,48 @@ public class RoomManager {
             }
         }
         return false;
+    }
+
+    private boolean hasRemainingHunter(GameRoom room) {
+        if (room == null) {
+            return false;
+        }
+        for (UUID uuid : room.getAllPlayerUUIDs()) {
+            if (uuid != null && !room.isPrey(uuid)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void endHunterGameBecauseNoHunters(GameRoom room, boolean playBell) {
+        if (room == null || room.getState() == RoomState.ENDED) {
+            return;
+        }
+        if (playBell) {
+            playNoHunterBell(room);
+        }
+        plugin.getGameManager().endGameWithoutReward(room, false);
+    }
+
+    private void playNoHunterBell(GameRoom room) {
+        for (UUID uuid : room.getAllPlayerUUIDs()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p == null) {
+                continue;
+            }
+            p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BELL_USE, 1.0f, 1.0f);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (p.isOnline()) {
+                    p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BELL_USE, 1.0f, 1.0f);
+                }
+            }, 10L);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (p.isOnline()) {
+                    p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BELL_USE, 1.0f, 1.0f);
+                }
+            }, 20L);
+        }
     }
 
     public void leaveRoom(Player player) {
@@ -690,6 +735,12 @@ public class RoomManager {
                 }
                 return;
             }
+            if (room.getGameMode().isDeathSwap()) {
+                if (!wasSpectator) {
+                    plugin.getGameManager().checkDeathSwapWin(room);
+                }
+                return;
+            }
             if (room.getGameMode().isIndependentMode()) {
                 if (!wasSpectator && room.getPlayerCount() <= 1) {
                     plugin.getGameManager().endGameWithoutReward(room);
@@ -700,8 +751,8 @@ public class RoomManager {
             if (wasPrey) {
                 // 猎物主动退出，标记为猎物退出
                 room.setPreyQuit(true);
-                // 猎人胜利
-                plugin.getGameManager().endGame(room, false);
+                // 猎物主动退出只结束本局，不判定猎人胜利，也不发小游戏币/胜利表现值
+                plugin.getGameManager().endGameWithoutReward(room, false);
             } else if (!wasSpectator) {
                 // 猎人主动退出，记录到 disconnectedHunters 以便 rejoin
                 handleHunterDisconnect(playerUUID, roomId);
@@ -715,34 +766,7 @@ public class RoomManager {
                     }
                 }
                 if (!hasHunter) {
-                    // 播放连续3次钟声音效（猎人全部退出）
-                    for (UUID uuid : room.getAllPlayerUUIDs()) {
-                        Player p = Bukkit.getPlayer(uuid);
-                        if (p != null) {
-                            // 第一声
-                            p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BELL_USE, 1.0f, 1.0f);
-                            // 第二声（延迟10 ticks）
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                if (p.isOnline()) {
-                                    p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BELL_USE, 1.0f, 1.0f);
-                                }
-                            }, 10L);
-                            // 第三声（延迟20 ticks）
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                if (p.isOnline()) {
-                                    p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BELL_USE, 1.0f, 1.0f);
-                                }
-                            }, 20L);
-                        }
-                    }
-
-                    boolean isOneVsOne = room.getPlayerCount() + 1 == 2 && room.getPreyUUIDs().size() == 1;
-                    boolean oneVsOnePenalty = plugin.getConfigManager().getConfig().getBoolean("hunter_game.one_vs_one_quit_penalty", true);
-                    if (isOneVsOne && oneVsOnePenalty) {
-                        plugin.getGameManager().endGameWithoutReward(room);
-                    } else {
-                        plugin.getGameManager().endGame(room, true);
-                    }
+                    endHunterGameBecauseNoHunters(room, true);
                 }
             }
         } else if (currentState == RoomState.SELECTING) {
@@ -796,13 +820,17 @@ public class RoomManager {
                 if (!wasSpectator) {
                     plugin.getGameManager().checkStandaloneMiniGameWin(room);
                 }
+            } else if (room.getGameMode().isDeathSwap()) {
+                if (!wasSpectator) {
+                    plugin.getGameManager().checkDeathSwapWin(room);
+                }
             } else if (room.getGameMode().isIndependentMode()) {
                 if (!wasSpectator && room.getPlayerCount() <= 1) {
                     plugin.getGameManager().endGameWithoutReward(room);
                 }
             } else if (wasPrey) {
                 room.setPreyQuit(true);
-                plugin.getGameManager().endGame(room, false);
+                plugin.getGameManager().endGameWithoutReward(room, false);
             } else if (!wasSpectator) {
                 handleHunterDisconnect(playerUUID, room.getRoomId());
                 boolean hasHunter = false;
@@ -813,7 +841,7 @@ public class RoomManager {
                     }
                 }
                 if (!hasHunter) {
-                    plugin.getGameManager().endGameWithoutReward(room);
+                    endHunterGameBecauseNoHunters(room, true);
                 }
             }
         } else if (currentState == RoomState.STARTING) {
@@ -862,15 +890,22 @@ public class RoomManager {
                 if (!wasSpectator) {
                     plugin.getGameManager().checkStandaloneMiniGameWin(room);
                 }
+            } else if (room.getGameMode().isDeathSwap()) {
+                if (!wasSpectator) {
+                    plugin.getGameManager().checkDeathSwapWin(room);
+                }
             } else if (room.getGameMode().isIndependentMode()) {
                 if (!wasSpectator && room.getPlayerCount() <= 1) {
                     plugin.getGameManager().endGameWithoutReward(room);
                 }
             } else if (wasPrey) {
                 room.setPreyQuit(true);
-                plugin.getGameManager().endGame(room, false);
+                plugin.getGameManager().endGameWithoutReward(room, false);
             } else if (!wasSpectator) {
                 handleHunterDisconnect(playerUUID, room.getRoomId());
+                if (!hasRemainingHunter(room)) {
+                    endHunterGameBecauseNoHunters(room, true);
+                }
             }
         } else if (currentState == RoomState.STARTING) {
             if (room.getPlayerCount() < getMinimumPlayersForMode(room.getGameMode())) {
@@ -1041,10 +1076,22 @@ public class RoomManager {
 
     private void checkStartCondition(GameRoom room) {
         int minPlayers = getMinimumPlayersForMode(room.getGameMode());
-        int waitCountdown = plugin.getConfigManager().getConfig().getInt("hunter_game.wait_countdown", 300);
+        int waitCountdown = room.getGameMode().isDeathSwap()
+                ? plugin.getConfigManager().getDeathSwapCountdownSeconds()
+                : plugin.getConfigManager().getConfig().getInt("hunter_game.wait_countdown", 300);
+        int fullCountdown = room.getGameMode().isDeathSwap()
+                ? plugin.getConfigManager().getDeathSwapForceStartSeconds()
+                : 30;
+        boolean full = room.getMaxPlayers() > 0 && room.getPlayerCount() >= room.getMaxPlayers();
         if (room.getPlayerCount() >= minPlayers && room.getState() == RoomState.WAITING) {
-            room.setCountdown(waitCountdown);
+            room.setCountdown(full ? Math.min(waitCountdown, fullCountdown) : waitCountdown);
             plugin.getGameManager().startCountdown(room);
+            return;
+        }
+        if (room.getState() == RoomState.STARTING && full && room.getCountdown() > fullCountdown) {
+            room.setCountdown(fullCountdown);
+            plugin.getGameManager().refreshLobbyItems(room);
+            plugin.getChildServerManager().syncRoom(room);
         }
     }
 
@@ -1669,6 +1716,9 @@ public class RoomManager {
     }
 
     public int getMinimumPlayersForMode(GameMode mode) {
+        if (mode != null && mode.isDeathSwap()) {
+            return 2;
+        }
         if (mode == GameMode.SWAP) {
             return 3;
         }

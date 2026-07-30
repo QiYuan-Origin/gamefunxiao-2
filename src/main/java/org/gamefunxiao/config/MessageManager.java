@@ -103,7 +103,18 @@ public class MessageManager {
         return withPrefixIfPresent(plugin.getConfigManager().getLuckyPillarsPrefix(), path, placeholders);
     }
 
+    public String getDeathSwapMessageWithPrefix(String path) {
+        return withPrefixIfPresent(plugin.getConfigManager().getDeathSwapPrefix(), path, null);
+    }
+
+    public String getDeathSwapMessageWithPrefix(String path, Map<String, String> placeholders) {
+        return withPrefixIfPresent(plugin.getConfigManager().getDeathSwapPrefix(), path, placeholders);
+    }
+
     public String getModeMessageWithPrefix(GameMode mode, String path) {
+        if (mode != null && mode.isDeathSwap()) {
+            return getDeathSwapMessageWithPrefix(path);
+        }
         if (mode != null && mode.isLuckyPillars()) {
             return getLuckyPillarsMessageWithPrefix(path);
         }
@@ -114,6 +125,9 @@ public class MessageManager {
     }
 
     public String getModeMessageWithPrefix(GameMode mode, String path, Map<String, String> placeholders) {
+        if (mode != null && mode.isDeathSwap()) {
+            return getDeathSwapMessageWithPrefix(path, placeholders);
+        }
         if (mode != null && mode.isLuckyPillars()) {
             return getLuckyPillarsMessageWithPrefix(path, placeholders);
         }

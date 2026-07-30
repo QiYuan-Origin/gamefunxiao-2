@@ -95,6 +95,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "flashmusic", "fmusic", "flashnote", "闪光音乐", "音符盒" -> handleFlashMusic(sender, args);
             case "lobbyinteract", "lobbyregion", "等待大厅交互", "大厅交互" -> handleLobbyInteractionRegion(sender, args);
             case "command", "cmd", "命令", "指令" -> handleCommandBranch(sender, args);
+            case "deathswap", "death_swap", "ds", "死亡互换" -> handleDeathSwap(sender);
             case "huntergame", "hg" -> handleHunterGame(sender, args);
             case "rank", "ranks", "points", "performance", "表现值", "段位" -> handleHunterPerformance(sender);
             case "leave", "quit" -> handleLeave(sender);
@@ -131,6 +132,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         entries.add("§e/gamefunxiao menu §7- §f打开主菜单");
         entries.add("§e/gamefunxiao help [页码] §7- §f查看分页帮助");
         entries.add("§e/gamefunxiao huntergame §7- §f打开猎人游戏菜单");
+        entries.add("§e/gamefunxiao deathswap §7- §f打开死亡互换菜单");
         entries.add("§e/gamefunxiao rank §7- §f查看猎人/猎物表现值和段位规则");
         entries.add("§e/gamefunxiao leave §7- §f离开当前房间");
         entries.add("§e/gamefunxiao rejoin §7- §f重新加入游戏（猎人断线后使用）");
@@ -172,6 +174,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             entries.add("§e/gamefunxiao endflashkit create <hunter|prey> <0-50小数> <名字...> §7- §f保存当前背包为终章 Kit");
             entries.add("§e/gamefunxiao endflashkit createender <hunter|prey> <0-50小数> <名字...> §7- §f保存背包+末影箱为终章 Kit");
             entries.add("§e/gamefunxiao endflashkit hand <hunter|prey> <0-50小数> <名字...> §7- §f保存手中物品为终章 Kit");
+            entries.add("§e/gamefunxiao endflashkit load <hunter|prey> <kitId> [玩家] §7- §f加载指定终章 Kit");
             entries.add("§e/gamefunxiao endflashkit appendhand <kitId> §7- §f把手中物品追加到 Kit");
             entries.add("§e/gamefunxiao endflashkit appendenderhand <kitId> §7- §f把手中物品追加到 Kit 末影箱");
             entries.add("§e/gamefunxiao endflashkit chance <kitId> <0-50小数> §7- §f修改 Kit 权重");
@@ -846,12 +849,13 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "appendhand", "addhand" -> handleEndFlashKitAppendHand(sender, args);
             case "appendenderhand", "addenderhand" -> handleEndFlashKitAppendEnderHand(sender, args);
             case "chance", "setchance" -> handleEndFlashKitChance(sender, args);
+            case "load", "apply", "give", "加载" -> handleEndFlashKitLoad(sender, args);
             case "remove", "delete" -> handleEndFlashKitRemove(sender, args);
             case "reload" -> {
                 manager.load();
                 sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §a已重载终章闪光 Kit 数据。");
             }
-            default -> sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §e用法: /gamefunxiao endflashkit menu|list|create|createender|hand|appendhand|appendenderhand|chance|remove");
+            default -> sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §e用法: /gamefunxiao endflashkit menu|list|load|create|createender|hand|appendhand|appendenderhand|chance|remove");
         }
     }
 
@@ -1053,6 +1057,48 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             return;
         }
         sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §a已删除终章闪光 Kit：§d" + args[2]);
+    }
+
+    private void handleEndFlashKitLoad(CommandSender sender, String[] args) {
+        if (args.length < 4) {
+            sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §e用法: /gamefunxiao endflashkit load <hunter|prey> <kitId> [玩家]");
+            return;
+        }
+        EndFlashKitManager.Role role = EndFlashKitManager.Role.fromId(args[2]);
+        if (role == null) {
+            sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §c角色只能是 hunter/prey。");
+            return;
+        }
+        Player target;
+        if (args.length >= 5) {
+            target = Bukkit.getPlayerExact(args[4]);
+            if (target == null) {
+                target = Bukkit.getPlayer(args[4]);
+            }
+        } else if (sender instanceof Player player) {
+            target = player;
+        } else {
+            sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_only"));
+            return;
+        }
+        if (target == null) {
+            sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_not_found",
+                    Map.of("player", args.length >= 5 ? args[4] : "")));
+            return;
+        }
+        EndFlashKitManager.Kit kit = plugin.getEndFlashKitManager().applyKit(target, role, args[3]);
+        if (kit == null) {
+            sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §c没有找到匹配这个身份的 Kit：§e" + args[3]);
+            return;
+        }
+        target.playSound(target.getLocation(), org.bukkit.Sound.BLOCK_ENDER_CHEST_OPEN, 0.72F, 1.28F);
+        target.playSound(target.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.48F, 1.62F);
+        target.sendMessage("§x§B§B§8§8§F§FGameFun §8» §a已加载终章 §e" + role.displayName()
+                + " §aKit：§d" + kit.displayName() + "§a。");
+        if (!sender.equals(target)) {
+            sender.sendMessage("§x§B§B§8§8§F§FGameFun §8» §a已给 §e" + target.getName()
+                    + " §a加载终章 §d" + kit.displayName() + "§a。");
+        }
     }
 
     private void sendEndFlashKitList(CommandSender sender, EndFlashKitManager manager) {
@@ -1289,16 +1335,24 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
     }
 
     private void playFlashMusicToTargets(CommandSender sender, Collection<Player> targets, String query, boolean fullMode) {
-        var result = plugin.getFlashModeManager().playFlashNoteMusic(targets, query, 3, 0.82f, fullMode);
-        if (!result.success()) {
-            sender.sendMessage(flashMusicPrefix() + "§c没有找到这首曲子：§e" + query + " §7（用 §f/gamefunxiao flashmusic list §7查看）");
-            return;
-        }
-        sender.sendMessage(flashMusicPrefix() + "§a开始播放 §d" + result.songName() + " §7("
-                + result.noteCount() + "音，" + result.listenerCount() + "人收听§7)");
-        if (fullMode) {
-            sender.sendMessage(flashMusicPrefix() + "§x§8§8§D§D§F§F已启用 Mall 完整播放：§f整首谱子里的全部音都会播放。");
-        }
+        List<UUID> targetIds = targets == null ? List.of() : targets.stream()
+                .filter(player -> player != null && player.isOnline())
+                .map(Player::getUniqueId)
+                .distinct()
+                .toList();
+        sender.sendMessage(flashMusicPrefix() + "§b正在异步加载曲谱 §e" + query + " §7，加载完成后会自动播放。");
+        plugin.getFlashModeManager().playFlashNoteMusicAsync(targetIds, query, 3, 0.82f, fullMode, result -> {
+            if (!result.success()) {
+                sender.sendMessage(flashMusicPrefix() + "§c没有找到这首曲子或收听玩家已离线：§e" + query
+                        + " §7（用 §f/gamefunxiao flashmusic list §7查看）");
+                return;
+            }
+            sender.sendMessage(flashMusicPrefix() + "§a开始播放 §d" + result.songName() + " §7("
+                    + result.noteCount() + "音，" + result.listenerCount() + "人收听§7)");
+            if (fullMode) {
+                sender.sendMessage(flashMusicPrefix() + "§x§8§8§D§D§F§F已启用 Mall 完整播放：§f整首谱子里的全部音都会播放。");
+            }
+        });
         if (sender instanceof Player player) {
             player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.75f, 1.55f);
             player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_NOTE_BLOCK_CHIME, 0.55f, 1.25f);
@@ -1430,8 +1484,22 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 }
                 openCommandMenuTarget(player, args[2], backCommand);
             }
-            case "rooms", "roomlist", "房间", "查看房间" -> openCommandMenuTarget(player, "rooms", backCommand);
+            case "rooms", "roomlist", "房间", "查看房间" -> {
+                if (args.length >= 3) {
+                    String filter = args[2].toLowerCase(Locale.ROOT).replace("-", "_");
+                    if (filter.equals("lucky") || filter.equals("luckypillars") || filter.equals("lucky_pillars")) {
+                        openCommandMenuTarget(player, "luckyrooms", backCommand);
+                    } else if (filter.equals("deathswap") || filter.equals("death_swap") || filter.equals("ds")) {
+                        openCommandMenuTarget(player, "deathswaprooms", backCommand);
+                    } else {
+                        openCommandMenuTarget(player, "rooms", backCommand);
+                    }
+                } else {
+                    openCommandMenuTarget(player, "rooms", backCommand);
+                }
+            }
             case "main", "home", "hunter", "huntergame", "hg",
+                    "deathswap", "death_swap", "ds",
                     "leaderboard", "lb", "rank", "ranks", "points", "performance", "shop", "settings",
                     "victoryshop", "victorysettings", "endflashkit", "endflashkitadmin", "personalkit",
                     "endflashpersonalkit", "pass_count", "fastest_time", "play_count", "hunter_points",
@@ -1563,6 +1631,9 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         }
 
         int defaultMaxPlayers = mode.isFlashTournament() ? 67 : (mode.isDirectFlashStart() ? 64 : 16);
+        if (mode.isDeathSwap()) {
+            defaultMaxPlayers = 8;
+        }
         int maxPlayers = args.length >= 4 ? parseCommandMaxPlayers(args[3], defaultMaxPlayers) : defaultMaxPlayers;
         boolean isPublic = true;
         Set<String> modifiers = new HashSet<>();
@@ -1632,11 +1703,12 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "swap", "互换", "互换模式" -> GameMode.SWAP;
             case "noitem", "no_item", "无有", "无有模式" -> GameMode.NO_ITEM;
             case "survival", "存活", "存活模式" -> GameMode.SURVIVAL;
-            case "flash", "闪光", "闪光模式" -> GameMode.FLASH;
+            case "flash", "闪光", "闪光模式", "闪光公式" -> GameMode.FLASH;
             case "flashtournament", "flash_tournament", "tournamentflash", "tournament_flash",
                     "赛事", "赛事闪光", "闪光赛事", "闪光_赛事", "普通闪光赛事" -> GameMode.FLASH_TOURNAMENT;
             case "endflash", "end_flash", "终章", "终章闪光", "终章_闪光" -> GameMode.END_FLASH;
             case "lucky", "luckypillars", "lucky_pillars", "幸运之柱", "幸运柱", "经典幸运之柱" -> GameMode.LUCKY_PILLARS;
+            case "deathswap", "death_swap", "ds", "死亡互换", "死亡互换模式" -> GameMode.DEATH_SWAP;
             case "custom", "自定义" -> GameMode.CUSTOM;
             default -> null;
         };
@@ -1662,14 +1734,26 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e/gamefunxiao command menu <菜单> §7- §f打开指定菜单，返回会回命令入口");
         player.sendMessage("§e/gamefunxiao command menu <菜单> --backcommand <命令> §7- §f返回按钮执行指定命令");
         player.sendMessage("§e/gamefunxiao command quick <模式> §7- §f模拟点击模式按钮并进入等待房间");
-        player.sendMessage("§8· §7示例: §a/gamefunxiao command quick classic §8/ §d/gamefunxiao command quick end_flash");
+        player.sendMessage("§8· §7示例: §a/gamefunxiao command quick classic §8/ §d/gamefunxiao command quick death_swap");
         player.sendMessage("§e/gamefunxiao command create <模式> [人数] [public|private] [修饰符] §7- §f直接创建房间");
-        player.sendMessage("§e/gamefunxiao command rooms [all|lucky] §7- §f打开房间列表");
+        player.sendMessage("§e/gamefunxiao command rooms [all|lucky|deathswap] §7- §f打开房间列表");
         player.sendMessage("§e/gamefunxiao command join <房间ID> §7- §f加入指定房间");
         player.sendMessage("§8· §7菜单ID: §b" + String.join("§8, §b", plugin.getMenuManager().getCommandMenuIds()));
         player.sendMessage("§8· §7模式ID: §d" + String.join("§8, §d", getCommandModeIds()));
         player.sendMessage("§8· · · · · · · · · · · · · · · · · · · ·");
         player.sendMessage("");
+    }
+
+    private void handleDeathSwap(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_only"));
+            return;
+        }
+        if (!player.hasPermission("gamefunxiao.use.deathswap")) {
+            player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
+            return;
+        }
+        plugin.getMenuManager().openDeathSwapMenu(player);
     }
 
     private void handleHunterGame(CommandSender sender, String[] args) {
@@ -2146,7 +2230,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
 
         if (args.length == 1) {
-            completions.addAll(Arrays.asList("menu", "help", "command", "cmd", "huntergame", "hg", "rank", "points", "performance", "leave", "rejoin", "wiki", "guidebook", "bookwiki", "flashwiki"));
+            completions.addAll(Arrays.asList("menu", "help", "command", "cmd", "huntergame", "hg", "deathswap", "death_swap", "ds", "rank", "points", "performance", "leave", "rejoin", "wiki", "guidebook", "bookwiki", "flashwiki"));
                 completions.add("endflashkit");
                 completions.add("flashkit");
                 completions.add("endflashender");
@@ -2213,7 +2297,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if (isEndFlashKitCommand(args[0])) {
                 completions.add("list");
                 if (sender.hasPermission("gamefunxiao.admin")) {
-                    completions.addAll(Arrays.asList("menu", "gui", "create", "createender", "hand", "appendhand", "appendenderhand", "chance", "remove", "reload"));
+                    completions.addAll(Arrays.asList("menu", "gui", "create", "createender", "hand", "load", "appendhand", "appendenderhand", "chance", "remove", "reload"));
                 }
             } else if ((args[0].equalsIgnoreCase("flashuse") || args[0].equalsIgnoreCase("flashtest") || args[0].equalsIgnoreCase("flashitems"))
                     && (sender.hasPermission("gamefunxiao.flashuse") || sender.hasPermission("gamefunxiao.admin"))) {
@@ -2250,7 +2334,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                             .sorted()
                             .forEach(completions::add);
                 } else if (action.equals("rooms") || action.equals("roomlist")) {
-                    completions.addAll(Arrays.asList("all", "lucky", "hunter"));
+                    completions.addAll(Arrays.asList("all", "lucky", "hunter", "deathswap", "death_swap", "ds"));
                 }
             } else if (args[0].equalsIgnoreCase("huntergame") || args[0].equalsIgnoreCase("hg")) {
                 if (args[1].equalsIgnoreCase("create")) {
@@ -2274,6 +2358,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 }
             } else if (isEndFlashKitCommand(args[0])) {
                 if (args[1].equalsIgnoreCase("create") || args[1].equalsIgnoreCase("createender") || args[1].equalsIgnoreCase("hand")) {
+                    completions.addAll(Arrays.asList("hunter", "prey"));
+                } else if (sender.hasPermission("gamefunxiao.admin")
+                        && (args[1].equalsIgnoreCase("load") || args[1].equalsIgnoreCase("apply") || args[1].equalsIgnoreCase("give")
+                        || args[1].equalsIgnoreCase("加载"))) {
                     completions.addAll(Arrays.asList("hunter", "prey"));
                 } else if (args[1].equalsIgnoreCase("appendhand") || args[1].equalsIgnoreCase("appendenderhand") || args[1].equalsIgnoreCase("chance") || args[1].equalsIgnoreCase("remove")) {
                     addEndFlashKitIds(completions);
@@ -2316,12 +2404,28 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if (isEndFlashKitCommand(args[0])) {
                 if (args[1].equalsIgnoreCase("create") || args[1].equalsIgnoreCase("createender") || args[1].equalsIgnoreCase("hand") || args[1].equalsIgnoreCase("chance")) {
                     completions.addAll(Arrays.asList("0", "0.5", "1", "2.5", "5", "10", "25", "50"));
+                } else if (sender.hasPermission("gamefunxiao.admin")
+                        && (args[1].equalsIgnoreCase("load") || args[1].equalsIgnoreCase("apply") || args[1].equalsIgnoreCase("give")
+                        || args[1].equalsIgnoreCase("加载"))) {
+                    EndFlashKitManager.Role role = EndFlashKitManager.Role.fromId(args[2]);
+                    if (role != null) {
+                        plugin.getEndFlashKitManager().getKits(role).stream()
+                                .map(EndFlashKitManager.Kit::id)
+                                .forEach(completions::add);
+                    } else {
+                        addEndFlashKitIds(completions);
+                    }
                 }
             } else if ((args[0].equalsIgnoreCase("coins") || args[0].equalsIgnoreCase("coin") || args[0].equalsIgnoreCase("money"))
                     && sender.hasPermission("gamefunxiao.admin")
                     && (args[1].equalsIgnoreCase("set") || args[1].equalsIgnoreCase("add"))) {
                 Bukkit.getOnlinePlayers().stream().map(Player::getName).sorted(String.CASE_INSENSITIVE_ORDER).forEach(completions::add);
             }
+        } else if (args.length == 5 && isEndFlashKitCommand(args[0])
+                && (args[1].equalsIgnoreCase("load") || args[1].equalsIgnoreCase("apply") || args[1].equalsIgnoreCase("give")
+                || args[1].equalsIgnoreCase("加载"))
+                && sender.hasPermission("gamefunxiao.admin")) {
+            Bukkit.getOnlinePlayers().stream().map(Player::getName).sorted(String.CASE_INSENSITIVE_ORDER).forEach(completions::add);
         } else if (args.length >= 5) {
             if (isFlashMusicCommand(args[0])) {
                 return tabCompleteFlashMusic(sender, args);

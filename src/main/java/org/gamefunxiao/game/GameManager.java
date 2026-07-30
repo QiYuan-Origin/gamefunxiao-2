@@ -6,6 +6,8 @@ import io.papermc.paper.datacomponent.item.FoodProperties;
 import io.papermc.paper.datacomponent.item.consumable.ItemUseAnimation;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.title.Title;
 import java.time.Duration;
@@ -55,6 +57,9 @@ public class GameManager {
     private final GameFunXiao plugin;
     private final NamespacedKey countdownSpeedVoteKey;
     private final NamespacedKey flashDifficultyVoteKey;
+    private final NamespacedKey flashPreyStartElytraKey;
+    private final NamespacedKey flashPreyStartFireworkKey;
+    private final NamespacedKey flashPreyStartNoAdvancementKey;
     private final Map<String, BukkitTask> countdownTasks = new HashMap<>();
     private final Map<String, BukkitTask> gameTasks = new HashMap<>();
     private final Map<String, BukkitTask> preGameCountdownTasks = new HashMap<>();
@@ -64,6 +69,7 @@ public class GameManager {
     private final Map<String, BossBar> randomCompassBossBars = new HashMap<>();
     private final Map<String, Integer> randomCompassCountdowns = new HashMap<>();
     private final Map<String, BossBar> survivalBossBars = new HashMap<>();
+    private final Map<String, BossBar> deathSwapBossBars = new HashMap<>();
     private final Map<UUID, UUID> luckyPillarsSummonOwners = new HashMap<>();
     private final Map<String, Map<String, BlockData>> tntRunOriginalBlocks = new HashMap<>();
     private final Map<String, Map<String, BlockData>> blockPartyOriginalBlocks = new HashMap<>();
@@ -72,6 +78,8 @@ public class GameManager {
     private final Map<String, BlockPartyRuntime> blockPartyRuntimes = new HashMap<>();
     private final Set<String> thunderStormAppliedRooms = new HashSet<>();
     private final Map<UUID, PermissionAttachment> swapTimerLimitExemptions = new HashMap<>();
+    private final Map<UUID, Integer> flashPreyStartChoicePages = new HashMap<>();
+    private final Set<UUID> flashPreyStartElytraMonitorRunning = new HashSet<>();
     private boolean grimPermissionRefreshFailureLogged;
     private static final int RANDOM_COMPASS_INTERVAL_SECONDS = 5 * 60;
     private static final int RANDOM_COMPASS_GLOW_TICKS = 15 * 20;
@@ -81,7 +89,9 @@ public class GameManager {
     private static final String GRIM_TIMER_LIMIT_EXEMPT_PERMISSION = "grim.exempt.timerlimit";
     private static final int COUNTDOWN_SPEED_VOTE_SECONDS = 30;
     private static final int COUNTDOWN_SPEED_VOTE_MIN_PLAYERS = 4;
-    private static final int COUNTDOWN_SPEED_VOTE_PERFORMANCE = 40;
+    private static final int COUNTDOWN_SPEED_VOTE_PREY_PERFORMANCE = 40;
+    private static final int COUNTDOWN_SPEED_VOTE_HUNTER_PERFORMANCE = 80;
+    private static final int COUNTDOWN_SPEED_VOTE_HUNTER_ONLY_PERFORMANCE = 200;
     private static final int NETHER_SCENARIO_VOTE_COMPASS_MODEL = 10011;
     private static final int NETHER_SCENARIO_VOTE_BONUS = 30;
     private static final int DOUBLE_PREY_VOTE_MODEL = 10012;
@@ -99,6 +109,13 @@ public class GameManager {
     private static final int END_DIMENSION_BRIGHTNESS_TICKS = 20 * 60 * 30;
     private static final int FLASH_STORM_DURATION_TICKS = 20 * 60 * 60;
     private static final long FLASH_STORM_DELAY_MILLIS = 10L * 60L * 1000L;
+    private static final long FLASH_SMP_STORM_DELAY_MILLIS = 3L * 60L * 1000L;
+    private static final int FLASH_PREY_START_CHOICES_PER_PAGE = 8;
+    private static final int FLASH_PREY_START_CHOICE_NAV_SLOT = 8;
+    private static final int FLASH_PREY_START_CHOICE_PREV_MODEL = 10028;
+    private static final int FLASH_PREY_START_CHOICE_NEXT_MODEL = 10029;
+    private static final int FLASH_PREY_START_CHOICE_MODEL_BASE = 10030;
+    private static final long FLASH_PREY_START_BOAT_DELAY_TICKS = 20L * 60L * 2L;
     private static final int LUCKY_PILLARS_COUNTDOWN_SECONDS = 10;
     private static final int LUCKY_PILLARS_RANDOM_ITEM_INTERVAL_SECONDS = 5;
     private static final int LUCKY_PILLARS_RANDOM_EVENT_INTERVAL_SECONDS = 30;
@@ -126,6 +143,9 @@ public class GameManager {
     private static final int STANDALONE_MINIGAME_COUNTDOWN_SECONDS = 5;
     private static final int STANDALONE_MINIGAME_WIN_POINTS = 20;
     private static final int STANDALONE_MINIGAME_PARTICIPATE_POINTS = 2;
+    private static final int DEATH_SWAP_TIME_VOTE_MODEL = 10101;
+    private static final int DEATH_SWAP_WIN_POINTS = 20;
+    private static final int DEATH_SWAP_PARTICIPATE_POINTS = 2;
     private static final Set<String> LUCKY_PILLARS_BLOCKED_RANDOM_MATERIALS = Set.of(
             "AIR", "CAVE_AIR", "VOID_AIR"
     );
@@ -163,6 +183,103 @@ public class GameManager {
             "SHIELD"
     };
 
+    private enum FlashPreyStartChoice {
+        NONE("none", 0, Material.BARRIER, "barrier", 1,
+                "§x§C§C§C§C§C§C✦ §f无开局物品", "§a表现倍率：+15%",
+                "§7什么都不拿，纯靠开局路线和操作。", 15),
+        CONDENSED_PEARL("condensed_pearl", 1, Material.ENDER_PEARL, "ender_pearl", 1,
+                "§x§9§8§D§D§F§F✦ §d浓缩末影珍珠", "§7表现倍率：±0%",
+                "§7获得1枚浓缩末影珍珠，用于远距离跃迁。", 0),
+        THREE_PEARLS("three_pearls", 2, Material.ENDER_PEARL, "ender_pearl", 3,
+                "§x§8§8§D§D§F§F✦ §b3个末影珍珠", "§c表现倍率：-10%",
+                "§7获得3枚普通末影珍珠，前期容错更高。", -10),
+        SHIELD_WIND("shield_wind", 3, Material.SHIELD, "shield", 1,
+                "§x§B§B§F§F§F§F✦ §b破损盾牌与风弹", "§c表现倍率：-15%",
+                "§7获得随猎人人数决定耐久的盾牌和3个风弹。", -15),
+        CROSSBOW("crossbow", 4, Material.CROSSBOW, "crossbow", 1,
+                "§x§F§F§D§D§8§8✦ §e一把弩", "§c表现倍率：-10%",
+                "§7获得一把弩，适合抢节奏。", -10),
+        LILY_PAD("lily_pad", 5, Material.LILY_PAD, "lily_pad", 1,
+                "§x§5§5§F§F§A§A✦ §a1个荷叶", "§a表现倍率：+10%",
+                "§7获得1个荷叶，给水面路线多一点变化。", 10),
+        STONE_HOE("stone_hoe", 6, Material.STONE_HOE, "stone_hoe", 1,
+                "§x§A§A§D§D§7§7✦ §a一把石锄头", "§a表现倍率：+5%",
+                "§7获得一把石锄头，适合开局布置与反制。", 5),
+        COAL("coal", 7, Material.COAL, "coal", 16,
+                "§x§5§5§5§5§5§5✦ §716个煤炭", "§a表现倍率：+5%",
+                "§7获得16个煤炭，偏资源路线。", 5),
+        MACE("mace", 8, Material.MACE, "mace", 1,
+                "§x§F§F§8§8§5§5✦ §c重锤", "§c表现倍率：-30%",
+                "§7获得一把随猎人人数决定耐久的重锤。", -30),
+        OMINOUS_KEYS("ominous_keys", 9, Material.OMINOUS_TRIAL_KEY, "ominous_trial_key", 4,
+                "§x§7§7§5§5§F§F✦ §d4个不祥钥匙", "§a表现倍率：+3%",
+                "§7获得4个不祥钥匙，偏冒险收益路线。", 3),
+        MAGIC_BRUSH("magic_brush", 10, Material.PAPER, "brush", 1,
+                "§x§B§B§8§8§F§F✦ §d魔法画笔", "§a表现倍率：+5%",
+                "§7获得一支可绘制图案的魔法画笔。", 5),
+        ELYTRA_ROCKETS("elytra_rockets", 11, Material.ELYTRA, "elytra", 1,
+                "§x§8§8§D§D§F§F✦ §b破损鞘翅与烟花", "§c表现倍率：-3%",
+                "§7盔甲位获得10点耐久绑定鞘翅和3个1级烟花。", -3),
+        SHEARS("shears", 12, Material.SHEARS, "shears", 1,
+                "§x§D§D§D§D§D§D✦ §f剪刀", "§a表现倍率：+5%",
+                "§7获得一把剪刀，适合路线操作。", 5),
+        DELAYED_BOAT("delayed_boat", 13, Material.OAK_BOAT, "oak_boat", 1,
+                "§x§B§B§8§8§5§5✦ §6延迟木船", "§a表现倍率：+5%",
+                "§7正式开局2分钟后获得一艘木船。", 5),
+        APPLE_BOOTS("apple_boots", 14, Material.LEATHER_BOOTS, "leather_boots", 1,
+                "§x§F§F§D§D§7§7✦ §e深海苹果皮革鞋", "§c表现倍率：-1%",
+                "§7获得深海探索者II和两层金苹果强化的皮革鞋。", -1);
+
+        private final String id;
+        private final int slot;
+        private final Material material;
+        private final String itemModel;
+        private final int amount;
+        private final String displayName;
+        private final String performanceHint;
+        private final String description;
+        private final int performancePercent;
+
+        FlashPreyStartChoice(String id, int slot, Material material, String itemModel, int amount,
+                             String displayName, String performanceHint, String description, int performancePercent) {
+            this.id = id;
+            this.slot = slot;
+            this.material = material;
+            this.itemModel = itemModel;
+            this.amount = amount;
+            this.displayName = displayName;
+            this.performanceHint = performanceHint;
+            this.description = description;
+            this.performancePercent = performancePercent;
+        }
+
+        private int modelData() {
+            return FLASH_PREY_START_CHOICE_MODEL_BASE + slot;
+        }
+
+        private static FlashPreyStartChoice fromModelData(int modelData) {
+            int index = modelData - FLASH_PREY_START_CHOICE_MODEL_BASE;
+            for (FlashPreyStartChoice choice : values()) {
+                if (choice.slot == index) {
+                    return choice;
+                }
+            }
+            return null;
+        }
+
+        private static FlashPreyStartChoice fromId(String id) {
+            if (id == null) {
+                return null;
+            }
+            for (FlashPreyStartChoice choice : values()) {
+                if (choice.id.equals(id)) {
+                    return choice;
+                }
+            }
+            return null;
+        }
+    }
+
     private record TntRunMapConfig(String id, String displayName, int minPlayers, int maxPlayers,
                                    String shape, int radius, int width, int length, int layers,
                                    int layerSpacing, int disappearDelayTicks, int eliminationY,
@@ -185,6 +302,9 @@ public class GameManager {
         this.plugin = plugin;
         this.countdownSpeedVoteKey = new NamespacedKey(plugin, "countdown_speed_vote");
         this.flashDifficultyVoteKey = new NamespacedKey(plugin, "flash_difficulty_vote");
+        this.flashPreyStartElytraKey = new NamespacedKey(plugin, "flash_prey_start_elytra");
+        this.flashPreyStartFireworkKey = new NamespacedKey(plugin, "flash_prey_start_firework");
+        this.flashPreyStartNoAdvancementKey = new NamespacedKey(plugin, "flash_prey_start_no_advancement");
     }
 
     private boolean isTournamentSilent(GameRoom room) {
@@ -280,7 +400,12 @@ public class GameManager {
     public void giveLobbyItems(Player player, GameRoom room) {
         player.getInventory().clear();
 
-        // 设置经验条为0（人数不够时）
+        if (room != null && room.getGameMode().isDeathSwap()) {
+            giveDeathSwapLobbyItems(player, room);
+            return;
+        }
+
+        // 设置经验条为0（人数不够时）。死亡互换不占用经验条，互换倒计时走 BossBar。
         player.setLevel(0);
         player.setExp(0);
 
@@ -370,9 +495,85 @@ public class GameManager {
         plugin.getFlashModeManager().ensureFlashRoomGuideBook(player, room);
     }
 
+    private void giveDeathSwapLobbyItems(Player player, GameRoom room) {
+        player.getInventory().clear();
+
+        player.getInventory().setItem(0, createDeathSwapTimeVoteItem(room, player));
+
+        int forceStartSeconds = plugin.getConfigManager().getDeathSwapForceStartSeconds();
+        if (player.hasPermission("gamefunxiao.admin") && !room.isAdminForceStartUsed()
+                && (room.getState() == RoomState.WAITING || room.getCountdown() > forceStartSeconds)) {
+            ItemStack forceStart = new ItemStack(Material.PAPER);
+            ItemMeta forceMeta = forceStart.getItemMeta();
+            if (forceMeta != null) {
+                forceMeta.setDisplayName("§x§F§F§7§7§7§7⚡ §x§F§F§A§A§A§A强§x§F§F§D§D§D§D制§x§F§F§F§F§F§F开始");
+                forceMeta.setCustomModelData(10002);
+                forceMeta.setItemModel(org.bukkit.NamespacedKey.minecraft("redstone_torch"));
+                List<String> lore = new ArrayList<>();
+                lore.add("§8· · · · · · · · · · · · · ·");
+                lore.add("§f- §c管理员专用");
+                lore.add("§f- §e右键把倒计时跳到 §c" + forceStartSeconds + "秒");
+                lore.add("§8· · · · · · · · · · · · · ·");
+                forceMeta.setLore(lore);
+                forceStart.setItemMeta(forceMeta);
+            }
+            player.getInventory().setItem(4, forceStart);
+        }
+
+        player.getInventory().setItem(7, createAdvertiseRoomItem("§f- §e右键发送宣传消息", "§f- §7冷却时间: 30秒"));
+
+        ItemStack quit = new ItemStack(Material.PAPER);
+        ItemMeta quitMeta = quit.getItemMeta();
+        if (quitMeta != null) {
+            quitMeta.setDisplayName("§x§F§F§5§5§5§5✗ §x§F§F§8§8§8§8退出房间");
+            quitMeta.setCustomModelData(10004);
+            quitMeta.setItemModel(org.bukkit.NamespacedKey.minecraft("barrier"));
+            List<String> lore = new ArrayList<>();
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §c右键退出死亡互换房间");
+            lore.add("§8· · · · · · · · · · · · · ·");
+            quitMeta.setLore(lore);
+            quit.setItemMeta(quitMeta);
+        }
+        player.getInventory().setItem(8, quit);
+    }
+
+    public ItemStack createDeathSwapTimeVoteItem(GameRoom room, Player viewer) {
+        List<Integer> intervals = plugin.getConfigManager().getDeathSwapVoteIntervalMinutes();
+        int cursor = room == null ? intervals.get(0) : room.getDeathSwapVoteCursor(viewer.getUniqueId(), intervals);
+        Integer ownVote = room == null ? null : room.getDeathSwapVote(viewer.getUniqueId());
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName("§x§8§8§D§D§F§F⏱ §x§A§A§E§E§F§F互§x§C§C§F§F§F§F换§x§E§E§F§F§D§D时§x§F§F§D§D§B§B间投票");
+            meta.setCustomModelData(DEATH_SWAP_TIME_VOTE_MODEL);
+            meta.setItemModel(org.bukkit.NamespacedKey.minecraft("clock"));
+            List<String> lore = new ArrayList<>();
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §e当前选择: §b" + cursor + "分钟");
+            for (int minute : intervals) {
+                String color = ownVote != null && ownVote == minute ? "§a" : "§7";
+                int votes = room == null ? 0 : room.getDeathSwapVoteCount(minute);
+                lore.add(color + "- " + minute + "分钟 （" + votes + "票）");
+            }
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §a右键打开投票菜单");
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    public boolean isDeathSwapTimeVoteItem(ItemStack item) {
+        return item != null && item.hasItemMeta()
+                && item.getItemMeta().hasCustomModelData()
+                && item.getItemMeta().getCustomModelData() == DEATH_SWAP_TIME_VOTE_MODEL;
+    }
+
     private ItemStack createFlashDifficultyVoteItem(GameRoom room, Player viewer) {
         int normalVotes = room.getFlashDifficultyVoteCount(FlashDifficulty.NORMAL);
         int easyVotes = room.getFlashDifficultyVoteCount(FlashDifficulty.EASY);
+        int flashSmpVotes = room.getFlashDifficultyVoteCount(FlashDifficulty.FLASH_SMP);
         FlashDifficulty ownVote = viewer == null ? null : room.getFlashDifficultyVote(viewer.getUniqueId());
 
         ItemStack item = new ItemStack(Material.PAPER);
@@ -388,10 +589,11 @@ public class GameManager {
                 nonItalicItemText("§8· · · · · · · · · · · · · ·"),
                 nonItalicItemText("§f- §b正常难度: §e" + normalVotes + " §7票"),
                 nonItalicItemText("§f- §a简单难度: §e" + easyVotes + " §7票"),
+                nonItalicItemText("§f- §dFlashSMP难度: §e" + flashSmpVotes + " §7票"),
                 nonItalicItemText(ownVote == null
                         ? "§f- §d右键打开本局闪光难度投票"
                         : "§f- §6你当前选择: §f" + ownVote.getDisplayName()),
-                nonItalicItemText("§f- §7票数相同时按正常难度开始"),
+                nonItalicItemText("§f- §7票数相同或没人投票时按正常难度开始"),
                 nonItalicItemText("§8· · · · · · · · · · · · · ·")
         ));
         item.setItemMeta(meta);
@@ -434,9 +636,13 @@ public class GameManager {
         placeholders.put("difficulty", difficulty.getDisplayName());
         placeholders.put("normal", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.NORMAL)));
         placeholders.put("easy", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.EASY)));
+        placeholders.put("flashsmp", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.FLASH_SMP)));
         room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_difficulty_voted", placeholders));
         voter.playSound(voter.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.72f,
-                difficulty == FlashDifficulty.EASY ? 1.5f : 1.12f);
+                difficulty == FlashDifficulty.EASY ? 1.5f : difficulty == FlashDifficulty.FLASH_SMP ? 1.82f : 1.12f);
+        if (difficulty == FlashDifficulty.FLASH_SMP) {
+            voter.playSound(voter.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.38f, 1.48f);
+        }
         refreshLobbyItems(room);
     }
 
@@ -450,6 +656,7 @@ public class GameManager {
         placeholders.put("difficulty", selected.getDisplayName());
         placeholders.put("normal", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.NORMAL)));
         placeholders.put("easy", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.EASY)));
+        placeholders.put("flashsmp", String.valueOf(room.getFlashDifficultyVoteCount(FlashDifficulty.FLASH_SMP)));
         room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_difficulty_selected", placeholders));
     }
 
@@ -477,7 +684,8 @@ public class GameManager {
         lore.add(nonItalicItemText("§f- §e右键投票将等待时间跳至 §c30秒"));
         lore.add(nonItalicItemText("§f- §b常规通过需要 §f" + requiredVotes + " §b票"));
         if (highPerformancePlayers >= 2) {
-            lore.add(nonItalicItemText("§f- §d40+表现玩家同意 §f" + highPerformanceVotes + "§7/§f2 §d也可通过"));
+            lore.add(nonItalicItemText("§f- §d老玩家特权 §f" + highPerformanceVotes + "§7/§f2 §d也可通过"));
+            lore.add(nonItalicItemText("§f- §7需要猎物40+且猎人80+，或猎人200+"));
         }
         lore.add(nonItalicItemText(viewer != null && room.hasVotedSpeedUp(viewer.getUniqueId())
                 ? "§f- §6你已经投过这一票了"
@@ -594,8 +802,14 @@ public class GameManager {
 
     private boolean hasCountdownVotePerformance(UUID uuid) {
         var data = plugin.getPlayerDataManager().getPlayerData(uuid);
-        return data != null && Math.max(data.getHunterPointsTotal(), data.getPreyPointsTotal())
-                >= COUNTDOWN_SPEED_VOTE_PERFORMANCE;
+        if (data == null) {
+            return false;
+        }
+        int hunterPoints = data.getHunterPointsTotal();
+        int preyPoints = data.getPreyPointsTotal();
+        return hunterPoints >= COUNTDOWN_SPEED_VOTE_HUNTER_ONLY_PERFORMANCE
+                || (preyPoints >= COUNTDOWN_SPEED_VOTE_PREY_PERFORMANCE
+                && hunterPoints >= COUNTDOWN_SPEED_VOTE_HUNTER_PERFORMANCE);
     }
 
     private int getOrdinaryCountdownSpeedVotes(GameRoom room) {
@@ -875,7 +1089,7 @@ public class GameManager {
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §e当前同意: §6" + currentVotes + " §7/ §e需要: §6" + requiredVotes);
-            lore.add("§f- §a闪光模式人数超过32人后可开启第三位猎物");
+            lore.add("§f- §a闪光公式人数超过32人后可开启第三位猎物");
             lore.add("§f- §d通过后会在第二轮投票中额外选出一位猎物");
             lore.add(viewer != null && room.hasVotedFlashTriplePrey(viewer.getUniqueId())
                     ? "§f- §6你已经投过同意票了"
@@ -985,7 +1199,11 @@ public class GameManager {
             oldTask.cancel();
         }
         if (room.getCountdown() <= 0) {
-            room.setCountdown(room.getGameMode().isLuckyPillars() ? LUCKY_PILLARS_COUNTDOWN_SECONDS : 10);
+            room.setCountdown(room.getGameMode().isLuckyPillars()
+                    ? LUCKY_PILLARS_COUNTDOWN_SECONDS
+                    : room.getGameMode().isDeathSwap()
+                    ? plugin.getConfigManager().getDeathSwapCountdownSeconds()
+                    : 10);
         }
         room.setState(RoomState.STARTING);
 
@@ -1014,17 +1232,21 @@ public class GameManager {
                         ensurePreysSelected(room);
                     }
 
-                    // 清空经验条
-                    for (UUID uuid : room.getAllPlayerUUIDs()) {
-                        Player p = Bukkit.getPlayer(uuid);
-                        if (p != null) {
-                            p.setLevel(0);
-                            p.setExp(0);
+                    // 清空经验条。死亡互换不占用经验条，互换倒计时走 BossBar。
+                    if (!room.getGameMode().isDeathSwap()) {
+                        for (UUID uuid : room.getAllPlayerUUIDs()) {
+                            Player p = Bukkit.getPlayer(uuid);
+                            if (p != null) {
+                                p.setLevel(0);
+                                p.setExp(0);
+                            }
                         }
                     }
 
                     if (room.getGameMode().isLuckyPillars()) {
                         startLuckyPillars(room);
+                    } else if (room.getGameMode().isDeathSwap()) {
+                        startDeathSwap(room);
                     } else if (room.getGameMode() == GameMode.TNT_RUN) {
                         startTntRun(room);
                     } else if (room.getGameMode() == GameMode.BLOCK_PARTY) {
@@ -1045,6 +1267,21 @@ public class GameManager {
 
                 // 剩下3秒时给猎物显示标题并创建世界
                 if (countdown == 3) {
+                    if (room.getGameMode().isDeathSwap()) {
+                        for (UUID uuid : room.getAllPlayerUUIDs()) {
+                            Player p = Bukkit.getPlayer(uuid);
+                            if (p != null) {
+                                Component titleComp3 = LegacyComponentSerializer.legacySection()
+                                        .deserialize("§x§F§F§5§5§5§5⏳ §c死亡互换世界准备中");
+                                Component subComp3 = LegacyComponentSerializer.legacySection()
+                                        .deserialize("§7正在准备本局世界...");
+                                p.showTitle(Title.title(titleComp3, subComp3,
+                                        Title.Times.times(Duration.ZERO, Duration.ofMillis(3200), Duration.ofMillis(450))));
+                                p.playSound(p.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.55f, 1.45f);
+                            }
+                        }
+                        Bukkit.getScheduler().runTaskLater(plugin, () -> prepareDeathSwapWorldBeforeStart(room), 1L);
+                    }
                     if (room.getGameMode().isAutoArenaMiniGame()) {
                         for (UUID uuid : room.getAllPlayerUUIDs()) {
                             Player p = Bukkit.getPlayer(uuid);
@@ -1098,27 +1335,35 @@ public class GameManager {
                     }
                     // 下一tick创建世界，让当前tick先完成渲染，减少卡顿感知
                     Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (room.getGameMode().isDeathSwap()) {
+                            return;
+                        }
                         if (room.getGameMode().isAutoArenaMiniGame()) {
                             return;
                         }
                         if (room.getGameWorld() == null) {
                             World gameWorld = room.getGameMode() == GameMode.END_FLASH
                                     ? plugin.getWorldManager().createEndFlashWorld(room.getRoomId())
-                                    : plugin.getWorldManager().createGameWorld(room.getRoomId());
+                                    : plugin.getWorldManager().createGameWorld(room.getRoomId(), room.getGameMode());
                             room.setGameWorld(gameWorld);
                         }
                     }, 1L);
                 }
 
-                // 更新所有玩家的经验条
+                // 更新所有玩家的经验条。死亡互换不占用经验条，互换倒计时走 BossBar。
                 for (UUID uuid : room.getAllPlayerUUIDs()) {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p != null) {
-                        p.setLevel(countdown);
-                        p.setExp(0);
+                        if (!room.getGameMode().isDeathSwap()) {
+                            p.setLevel(countdown);
+                            p.setExp(0);
+                        }
 
-                        // 如果倒计时到60秒，清除管理员的强制开始按钮
-                        if (countdown == 60 && p.hasPermission("gamefunxiao.admin")) {
+                        // 如果倒计时到60秒/配置秒数，清除管理员的强制开始按钮
+                        int forceStartRemoveAt = room.getGameMode().isDeathSwap()
+                                ? plugin.getConfigManager().getDeathSwapForceStartSeconds()
+                                : 60;
+                        if (countdown == forceStartRemoveAt && p.hasPermission("gamefunxiao.admin")) {
                             // 清除强制开始按钮（CustomModelData = 10002）
                             for (int i = 0; i < p.getInventory().getSize(); i++) {
                                 ItemStack item = p.getInventory().getItem(i);
@@ -1143,6 +1388,8 @@ public class GameManager {
                             ? (room.getGameMode() == GameMode.END_FLASH ? "game.countdown_end_flash_direct" : "game.countdown_flash_direct")
                             : room.getGameMode().isLuckyPillars()
                             ? "game.lucky_pillars_countdown"
+                            : room.getGameMode().isDeathSwap()
+                            ? "death_swap.start_countdown"
                             : room.getGameMode() == GameMode.TNT_RUN
                             ? "game.tnt_run_countdown"
                             : room.getGameMode() == GameMode.BLOCK_PARTY
@@ -1151,7 +1398,9 @@ public class GameManager {
                             ? "game.mode_countdown"
                             : "game.countdown";
                     if (!isTournamentSilent(room)) {
-                        if (room.getGameMode().isLuckyPillars()) {
+                        if (room.getGameMode().isDeathSwap()) {
+                            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix(countdownKey, placeholders));
+                        } else if (room.getGameMode().isLuckyPillars()) {
                             room.broadcast(plugin.getMessageManager().getLuckyPillarsMessageWithPrefix(countdownKey, placeholders));
                         } else if (room.getGameMode().isStandaloneMiniGame() || room.getGameMode().isIndependentMode()) {
                             room.broadcast(plugin.getMessageManager().getMiniGameMessageWithPrefix(countdownKey, placeholders));
@@ -1180,7 +1429,7 @@ public class GameManager {
                             }
                             Component titleComp = LegacyComponentSerializer.legacySection().deserialize("§e" + countdown + " §6秒");
                             String subtitle = flashMode
-                                    ? (room.getGameMode() == GameMode.END_FLASH ? "§7后终章末地直接开局" : "§7后闪光模式直接开局")
+                                    ? (room.getGameMode() == GameMode.END_FLASH ? "§7后终章末地直接开局" : "§7后闪光公式直接开局")
                                     : usesWorldSelection(room)
                                     ? "§7后猎物将开始选择游戏世界"
                                     : "§7后开始 " + room.getModeName();
@@ -1204,7 +1453,7 @@ public class GameManager {
                                 if (hunter != null) {
                                     Component htComp = LegacyComponentSerializer.legacySection().deserialize("");
                                     String hunterSubtitle = flashMode
-                                            ? (room.getGameMode() == GameMode.END_FLASH ? "§7终章末地准备中..." : "§7闪光模式准备中...")
+                                            ? (room.getGameMode() == GameMode.END_FLASH ? "§7终章末地准备中..." : "§7闪光公式准备中...")
                                             : "§7猎物选择世界中...";
                                     Component hsubComp = LegacyComponentSerializer.legacySection().deserialize(hunterSubtitle);
                                     Title htitle = Title.title(htComp, hsubComp,
@@ -1251,6 +1500,17 @@ public class GameManager {
         if (usesPreySelection(room)) {
             ensurePreysSelected(room);
         }
+        // 死亡互换等待倒计时默认较长，管理员提前开始只跳到配置的短倒计时。
+        if (room.getGameMode().isDeathSwap()) {
+            int seconds = plugin.getConfigManager().getDeathSwapForceStartSeconds();
+            room.setCountdown(seconds);
+            if (room.getState() == RoomState.WAITING) {
+                startCountdown(room);
+            }
+            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.force_start",
+                    Map.of("time", String.valueOf(seconds))));
+            return;
+        }
         // 跳至10秒
         room.setCountdown(10);
         if (room.getState() == RoomState.WAITING) {
@@ -1294,12 +1554,14 @@ public class GameManager {
             countdownTask.cancel();
         }
 
-        // 清空所有玩家的经验条
-        for (UUID uuid : room.getAllPlayerUUIDs()) {
-            Player p = Bukkit.getPlayer(uuid);
-            if (p != null) {
-                p.setLevel(0);
-                p.setExp(0);
+        // 死亡互换不占用经验条，避免把玩家经验条当成互换时间。
+        if (!room.getGameMode().isDeathSwap()) {
+            for (UUID uuid : room.getAllPlayerUUIDs()) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    p.setLevel(0);
+                    p.setExp(0);
+                }
             }
         }
     }
@@ -1582,7 +1844,7 @@ public class GameManager {
         if (gameWorld == null) {
             gameWorld = room.getGameMode() == GameMode.END_FLASH
                     ? plugin.getWorldManager().createEndFlashWorld(room.getRoomId())
-                    : plugin.getWorldManager().createGameWorld(room.getRoomId());
+                    : plugin.getWorldManager().createGameWorld(room.getRoomId(), room.getGameMode());
             if (gameWorld == null) {
                 room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("lobby.lobby_creation_failed"));
                 return;
@@ -2119,6 +2381,576 @@ public class GameManager {
         room.setGameWorld(world);
         plugin.getWorldManager().preloadChunks(world, 0, 0,
                 Math.max(3, plugin.getConfigManager().getHunterGamePreloadRadius()), null);
+    }
+
+    private void prepareDeathSwapWorldBeforeStart(GameRoom room) {
+        if (room == null || !room.getGameMode().isDeathSwap()) {
+            return;
+        }
+        World existing = room.getGameWorld();
+        if (existing != null) {
+            plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
+            return;
+        }
+        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_preparing"));
+        World world = plugin.getWorldManager().createDeathSwapGameWorld(room.getRoomId());
+        if (world == null) {
+            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_failed"));
+            endGameWithoutReward(room);
+            return;
+        }
+        room.setGameWorld(world);
+        plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
+        Location spawn = plugin.getWorldManager().findDeathSwapFlatSpawn(world);
+        if (spawn == null) {
+            spawn = getSafeSpawnLocation(world.getSpawnLocation());
+        }
+        if (spawn != null && spawn.getWorld() != null) {
+            world.setSpawnLocation(spawn);
+            room.setDeathSwapSpawnCenter(spawn);
+            room.setDeathSwapSpectatorSpawn(spawn.clone().add(0.0D, 10.0D, 0.0D));
+            plugin.getWorldManager().preloadChunks(world, spawn.getBlockX() >> 4, spawn.getBlockZ() >> 4,
+                    Math.max(4, plugin.getConfigManager().getHunterGamePreloadRadius()), null);
+        }
+        broadcastDeathSwapVillageStatus(room);
+    }
+
+    private World ensureDeathSwapGameWorld(GameRoom room) {
+        World world = room == null ? null : room.getGameWorld();
+        if (world != null) {
+            plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
+            return world;
+        }
+        prepareDeathSwapWorldBeforeStart(room);
+        return room == null ? null : room.getGameWorld();
+    }
+
+    public void startDeathSwap(GameRoom room) {
+        if (room == null || !room.getGameMode().isDeathSwap()) {
+            return;
+        }
+        cancelCountdown(room);
+        cancelDivisionTask(room);
+        room.clearDualPreyProposal();
+        room.clearDualPreyStack();
+
+        List<UUID> participants = onlineRoomParticipants(room);
+        if (participants.size() < plugin.getRoomManager().getMinimumPlayersForMode(GameMode.DEATH_SWAP)) {
+            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("game.countdown_cancelled"));
+            endGameWithoutReward(room);
+            return;
+        }
+
+        int intervalSeconds = room.resolveDeathSwapIntervalSeconds(plugin.getConfigManager().getDeathSwapVoteIntervalMinutes());
+        Map<String, String> intervalPh = new HashMap<>();
+        intervalPh.put("minutes", String.valueOf(intervalSeconds / 60));
+        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.interval_selected", intervalPh));
+
+        World world = ensureDeathSwapGameWorld(room);
+        if (world == null) {
+            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_failed"));
+            endGameWithoutReward(room);
+            return;
+        }
+        plugin.getWorldManager().enableGameWorldRules(room.getRoomId());
+        world.setDifficulty(Difficulty.HARD);
+
+        Location center = room.getDeathSwapSpawnCenter();
+        if (center == null || center.getWorld() == null || !center.getWorld().equals(world)) {
+            center = plugin.getWorldManager().findDeathSwapFlatSpawn(world);
+            if (center == null) {
+                center = getSafeSpawnLocation(world.getSpawnLocation());
+            }
+            room.setDeathSwapSpawnCenter(center);
+        }
+        room.setDeathSwapSpectatorSpawn(center.clone().add(0.0D, 10.0D, 0.0D));
+        world.setSpawnLocation(center);
+
+        room.setState(RoomState.PLAYING);
+        room.setGameActuallyStarted(false);
+        room.setPreyStarted(true);
+        room.setGameStartTime(0L);
+        room.setDeathSwapPvpEnabled(false);
+        room.setDeathSwapNextSwapSeconds(intervalSeconds);
+        plugin.getRoomManager().clearAllRoleNameTags(room);
+
+        List<Player> onlinePlayers = new ArrayList<>();
+        for (UUID uuid : participants) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
+                onlinePlayers.add(player);
+            }
+        }
+        teleportDeathSwapPlayersToRing(room, world, center, onlinePlayers);
+        startDeathSwapRoundCountdown(room, participants);
+        plugin.getChildServerManager().syncRoom(room);
+    }
+
+    private void teleportDeathSwapPlayersToRing(GameRoom room, World world, Location center, List<Player> players) {
+        if (room == null || world == null || center == null || players == null || players.isEmpty()) {
+            return;
+        }
+        double radius = plugin.getConfigManager().getDeathSwapSpawnRingRadius();
+        double angleStep = 360.0D / Math.max(1, players.size());
+        for (int i = 0; i < players.size(); i++) {
+            Player player = players.get(i);
+            double angle = Math.toRadians(angleStep * i);
+            double x = center.getX() + Math.cos(angle) * radius;
+            double z = center.getZ() + Math.sin(angle) * radius;
+            Location raw = new Location(world, x, center.getY(), z);
+            Location spawn = getSafeSpawnLocation(raw);
+            double outX = spawn.getX() - center.getX();
+            double outZ = spawn.getZ() - center.getZ();
+            spawn.setYaw((float) Math.toDegrees(Math.atan2(-outX, outZ)));
+            spawn.setPitch(0.0F);
+
+            plugin.getRoomManager().resetPlayerForGameStart(room, player);
+            player.getInventory().clear();
+            player.teleport(spawn);
+            player.setGameMode(org.bukkit.GameMode.SURVIVAL);
+            player.setAllowFlight(false);
+            player.setFlying(false);
+            player.setInvulnerable(true);
+            player.setNoDamageTicks(Math.max(20, plugin.getConfigManager().getDeathSwapPreStartCountdownSeconds() * 20 + 20));
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.1f);
+            plugin.getRoomManager().setRoleNameTag(player, room.getRoomId(), false, "互换");
+            plugin.getRoomManager().updatePlayerTabNameWithRole(player, room.getRoomId(), false, "互换");
+            plugin.getScoreboardManager().createScoreboard(player);
+        }
+    }
+
+    private void startDeathSwapRoundCountdown(GameRoom room, List<UUID> participants) {
+        int startSeconds = plugin.getConfigManager().getDeathSwapPreStartCountdownSeconds();
+        BukkitTask oldTask = preGameCountdownTasks.remove(room.getRoomId());
+        if (oldTask != null) {
+            oldTask.cancel();
+        }
+        BukkitTask task = new BukkitRunnable() {
+            int seconds = startSeconds;
+
+            @Override
+            public void run() {
+                if (room.getState() != RoomState.PLAYING || !room.getGameMode().isDeathSwap()) {
+                    cancel();
+                    preGameCountdownTasks.remove(room.getRoomId());
+                    return;
+                }
+                if (seconds <= 0) {
+                    for (UUID uuid : participants) {
+                        Player player = Bukkit.getPlayer(uuid);
+                        if (player != null && player.isOnline() && !room.isDeathSwapEliminated(uuid)) {
+                            player.resetTitle();
+                            player.setInvulnerable(false);
+                            player.setNoDamageTicks(20);
+                            player.playSound(player.getLocation(), Sound.UI_TOAST_IN, 0.75f, 1.4f);
+                            player.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 0.62f, 1.02f);
+                        }
+                    }
+                    room.setGameActuallyStarted(true);
+                    room.setGameStartTime(System.currentTimeMillis());
+                    Map<String, String> ph = new HashMap<>();
+                    ph.put("time", formatChineseDuration(room.getDeathSwapNextSwapSeconds()));
+                    room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.started", ph));
+                    startDeathSwapBossBar(room);
+                    startDeathSwapGameTask(room);
+                    preGameCountdownTasks.remove(room.getRoomId());
+                    cancel();
+                    return;
+                }
+
+                Component title = LegacyComponentSerializer.legacySection().deserialize("§x§F§F§5§5§5§5" + seconds + " §c秒");
+                Component subtitle = LegacyComponentSerializer.legacySection().deserialize("§f倒计时结束后开始死亡互换");
+                Title shown = Title.title(title, subtitle,
+                        Title.Times.times(Duration.ZERO, Duration.ofMillis(900), Duration.ofMillis(120)));
+                for (UUID uuid : participants) {
+                    Player player = Bukkit.getPlayer(uuid);
+                    if (player != null && player.isOnline()) {
+                        player.showTitle(shown);
+                        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.75f, 1.0f + (startSeconds - seconds) * 0.08f);
+                    }
+                }
+                seconds--;
+            }
+        }.runTaskTimer(plugin, 0L, 20L);
+        preGameCountdownTasks.put(room.getRoomId(), task);
+    }
+
+    private void startDeathSwapGameTask(GameRoom room) {
+        BukkitTask existing = gameTasks.remove(room.getRoomId());
+        if (existing != null) {
+            existing.cancel();
+        }
+        BukkitTask task = new BukkitRunnable() {
+            int elapsedSeconds = 0;
+
+            @Override
+            public void run() {
+                if (room.getState() != RoomState.PLAYING || !room.getGameMode().isDeathSwap()) {
+                    cleanupDeathSwapBossBar(room.getRoomId());
+                    cancel();
+                    return;
+                }
+                elapsedSeconds++;
+                updateDeathSwapBossBar(room);
+
+                if (!room.isDeathSwapPvpEnabled()
+                        && elapsedSeconds >= plugin.getConfigManager().getDeathSwapNoPvpSeconds()) {
+                    room.setDeathSwapPvpEnabled(true);
+                    room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.pvp_enabled"));
+                    forEachDeathSwapParticipant(room, player ->
+                            player.playSound(player.getLocation(), Sound.ENTITY_WITHER_SPAWN, 0.45f, 1.2f));
+                }
+
+                if (elapsedSeconds >= plugin.getConfigManager().getDeathSwapDrawSeconds()) {
+                    endDeathSwap(room, null, true);
+                    cancel();
+                    return;
+                }
+
+                int next = room.getDeathSwapNextSwapSeconds();
+                if (next <= 10 && next > 0) {
+                    Map<String, String> ph = Map.of("time", String.valueOf(next));
+                    room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.swap_warning", ph));
+                    forEachDeathSwapAlivePlayer(room, player ->
+                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.9f, 1.85f));
+                }
+                if (next <= 1) {
+                    swapDeathSwapPlayers(room);
+                    room.setDeathSwapNextSwapSeconds(room.getDeathSwapIntervalSeconds());
+                } else {
+                    room.setDeathSwapNextSwapSeconds(next - 1);
+                }
+
+                updateDeathSwapBossBar(room);
+                checkDeathSwapWin(room);
+            }
+        }.runTaskTimer(plugin, 20L, 20L);
+        gameTasks.put(room.getRoomId(), task);
+    }
+
+    private void startDeathSwapBossBar(GameRoom room) {
+        if (room == null || !room.getGameMode().isDeathSwap()) {
+            return;
+        }
+        cleanupDeathSwapBossBar(room.getRoomId());
+        BossBar bossBar = Bukkit.createBossBar(
+                buildDeathSwapBossBarTitle(room.getDeathSwapNextSwapSeconds()),
+                BarColor.RED,
+                BarStyle.SEGMENTED_10
+        );
+        bossBar.setVisible(true);
+        deathSwapBossBars.put(room.getRoomId(), bossBar);
+        updateDeathSwapBossBar(room);
+    }
+
+    private void updateDeathSwapBossBar(GameRoom room) {
+        if (room == null || !room.getGameMode().isDeathSwap()) {
+            return;
+        }
+        BossBar bossBar = deathSwapBossBars.get(room.getRoomId());
+        if (bossBar == null) {
+            return;
+        }
+        int next = Math.max(0, room.getDeathSwapNextSwapSeconds());
+        int interval = Math.max(1, room.getDeathSwapIntervalSeconds());
+        bossBar.setTitle(buildDeathSwapBossBarTitle(next));
+        bossBar.setProgress(Math.max(0.0D, Math.min(1.0D, next / (double) interval)));
+        refreshDeathSwapBossBarPlayers(room);
+    }
+
+    private String buildDeathSwapBossBarTitle(int seconds) {
+        return "§x§F§F§5§5§5§5死亡互换 §7| §f下次互换: §e" + formatBossBarTime(seconds);
+    }
+
+    private void refreshDeathSwapBossBarPlayers(GameRoom room) {
+        BossBar bossBar = room == null ? null : deathSwapBossBars.get(room.getRoomId());
+        if (bossBar == null) {
+            return;
+        }
+        Set<Player> viewers = new HashSet<>();
+        for (UUID uuid : room.getDeathSwapAlivePlayers()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
+                viewers.add(player);
+            }
+        }
+        for (Player existing : new ArrayList<>(bossBar.getPlayers())) {
+            if (!viewers.contains(existing)) {
+                bossBar.removePlayer(existing);
+            }
+        }
+        for (Player viewer : viewers) {
+            if (!bossBar.getPlayers().contains(viewer)) {
+                bossBar.addPlayer(viewer);
+            }
+        }
+    }
+
+    private void cleanupDeathSwapBossBar(String roomId) {
+        if (roomId == null) {
+            return;
+        }
+        BossBar bossBar = deathSwapBossBars.remove(roomId);
+        if (bossBar != null) {
+            bossBar.removeAll();
+            bossBar.setVisible(false);
+        }
+    }
+
+    private void swapDeathSwapPlayers(GameRoom room) {
+        List<Player> alivePlayers = new ArrayList<>();
+        for (UUID uuid : room.getDeathSwapAlivePlayers()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
+                alivePlayers.add(player);
+            }
+        }
+        if (alivePlayers.size() < 2) {
+            checkDeathSwapWin(room);
+            return;
+        }
+        Collections.shuffle(alivePlayers);
+        List<Location> locations = alivePlayers.stream()
+                .map(player -> player.getLocation().clone())
+                .toList();
+        int shift = ThreadLocalRandom.current().nextInt(1, alivePlayers.size());
+        for (int i = 0; i < alivePlayers.size(); i++) {
+            Player player = alivePlayers.get(i);
+            Location from = player.getLocation().clone();
+            Location to = locations.get((i + shift) % locations.size()).clone();
+            player.resetTitle();
+            player.teleport(to);
+            player.setFallDistance(0.0F);
+            player.setNoDamageTicks(Math.max(player.getNoDamageTicks(), 20));
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 0.92f);
+            player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.86f, 0.82f);
+            player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_THUNDER, 0.42f, 1.12f);
+            if (from.getWorld() != null) {
+                from.getWorld().spawnParticle(Particle.PORTAL, from.clone().add(0.0D, 1.0D, 0.0D),
+                        28, 0.45D, 0.7D, 0.45D, 0.22D);
+                from.getWorld().playSound(from, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.52f, 0.82f);
+            }
+            if (to.getWorld() != null) {
+                to.getWorld().spawnParticle(Particle.REVERSE_PORTAL, to.clone().add(0.0D, 1.0D, 0.0D),
+                        28, 0.45D, 0.7D, 0.45D, 0.12D);
+                to.getWorld().playSound(to, Sound.ENTITY_ENDERMAN_TELEPORT, 0.58f, 0.9f);
+            }
+        }
+        Map<String, String> ph = new HashMap<>();
+        ph.put("time", formatChineseDuration(room.getDeathSwapIntervalSeconds()));
+        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.swapped", ph));
+    }
+
+    public boolean handleDeathSwapDeath(PlayerDeathEvent event, Player player, GameRoom room) {
+        if (event == null || player == null || room == null
+                || !room.getGameMode().isDeathSwap()
+                || room.getState() != RoomState.PLAYING) {
+            return false;
+        }
+        if (room.isDeathSwapEliminated(player.getUniqueId())) {
+            event.setKeepInventory(true);
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            return true;
+        }
+        room.markDeathSwapEliminated(player.getUniqueId());
+        Location deathLoc = player.getLocation().clone();
+        room.setPendingRespawnLocation(player.getUniqueId(), getDeathSwapSpectatorLocation(room, deathLoc));
+
+        Map<String, String> ph = new HashMap<>();
+        ph.put("player", player.getName());
+        ph.put("alive", String.valueOf(room.getDeathSwapAlivePlayers().size()));
+        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.eliminated", ph));
+        updateDeathSwapBossBar(room);
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            try {
+                player.spigot().respawn();
+            } catch (Exception ignored) {
+            }
+        }, 1L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> convertDeathSwapEliminatedToSpectator(player, room, deathLoc), 4L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> checkDeathSwapWin(room), 6L);
+        return true;
+    }
+
+    private void convertDeathSwapEliminatedToSpectator(Player player, GameRoom room, Location deathLoc) {
+        if (player == null || !player.isOnline() || room == null || room.getState() != RoomState.PLAYING) {
+            return;
+        }
+        room.addSpectator(player.getUniqueId());
+        player.teleport(getDeathSwapSpectatorLocation(room, deathLoc));
+        player.getInventory().clear();
+        player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+        player.setAllowFlight(true);
+        player.setFlying(true);
+        player.setCollidable(false);
+        player.setFireTicks(0);
+        player.setFallDistance(0.0F);
+        giveSpectatorItems(player);
+        plugin.getRoomManager().setSpectatorNameTag(player, room.getRoomId());
+        plugin.getRoomManager().refreshPlayerVisibility();
+        player.playSound(player.getLocation(), Sound.BLOCK_BEACON_DEACTIVATE, 0.7f, 0.85f);
+    }
+
+    private Location getDeathSwapSpectatorLocation(GameRoom room, Location fallback) {
+        Location configured = room == null ? null : room.getDeathSwapSpectatorSpawn();
+        if (configured != null && configured.getWorld() != null) {
+            return configured.clone();
+        }
+        World world = room == null ? null : room.getGameWorld();
+        if (world == null) {
+            return fallback == null ? Bukkit.getWorlds().get(0).getSpawnLocation() : fallback.clone().add(0.0D, 8.0D, 0.0D);
+        }
+        Location base = fallback != null && fallback.getWorld() != null && fallback.getWorld().equals(world)
+                ? fallback.clone()
+                : world.getSpawnLocation().clone();
+        base.add(0.0D, 8.0D, 0.0D);
+        base.setYaw(0.0F);
+        base.setPitch(35.0F);
+        return base;
+    }
+
+    public void handleDeathSwapDamage(EntityDamageByEntityEvent event, Player attacker, Player victim, GameRoom room) {
+        if (event == null || attacker == null || victim == null || room == null
+                || !room.getGameMode().isDeathSwap()) {
+            return;
+        }
+        if (room.getState() != RoomState.PLAYING || !room.isGameActuallyStarted()
+                || room.isSpectator(attacker.getUniqueId()) || room.isSpectator(victim.getUniqueId())
+                || room.isDeathSwapEliminated(attacker.getUniqueId()) || room.isDeathSwapEliminated(victim.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (!room.isDeathSwapPvpEnabled()) {
+            event.setDamage(0.0D);
+        }
+    }
+
+    public void checkDeathSwapWin(GameRoom room) {
+        if (room == null || !room.getGameMode().isDeathSwap() || room.getState() != RoomState.PLAYING) {
+            return;
+        }
+        List<UUID> alive = room.getDeathSwapAlivePlayers();
+        if (alive.size() <= 1) {
+            endDeathSwap(room, alive.isEmpty() ? null : alive.get(0), false);
+        }
+    }
+
+    private void endDeathSwap(GameRoom room, UUID winnerUuid, boolean draw) {
+        if (room == null || room.getState() == RoomState.ENDED) {
+            return;
+        }
+        room.setState(RoomState.ENDED);
+        room.setPreyWon(false);
+        BukkitTask gameTask = gameTasks.remove(room.getRoomId());
+        if (gameTask != null) {
+            gameTask.cancel();
+        }
+        BukkitTask preTask = preGameCountdownTasks.remove(room.getRoomId());
+        if (preTask != null) {
+            preTask.cancel();
+        }
+        cleanupDeathSwapBossBar(room.getRoomId());
+
+        String winnerName = "无人";
+        if (winnerUuid != null) {
+            Player winner = Bukkit.getPlayer(winnerUuid);
+            winnerName = winner == null ? Optional.ofNullable(Bukkit.getOfflinePlayer(winnerUuid).getName()).orElse("未知玩家") : winner.getName();
+        }
+        Map<String, String> ph = new HashMap<>();
+        ph.put("winner", winnerName);
+        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix(draw ? "death_swap.draw" : "death_swap.winner", ph));
+
+        Set<UUID> rewardTargets = new LinkedHashSet<>(room.getAllPlayerUUIDs());
+        for (UUID uuid : rewardTargets) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) {
+                continue;
+            }
+            if (!draw && uuid.equals(winnerUuid)) {
+                plugin.getPlayerDataManager().addMiniGamePoints(uuid, DEATH_SWAP_WIN_POINTS, room.getGameMode());
+                player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("points.minigame_win",
+                        Map.of("points", String.valueOf(DEATH_SWAP_WIN_POINTS))));
+                player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.95f, 1.2f);
+            } else {
+                plugin.getPlayerDataManager().addMiniGamePoints(uuid, DEATH_SWAP_PARTICIPATE_POINTS, room.getGameMode());
+                player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("points.minigame_participate",
+                        Map.of("points", String.valueOf(DEATH_SWAP_PARTICIPATE_POINTS))));
+            }
+            plugin.getPlayerDataManager().incrementPlayCount(uuid, room.getGameMode());
+            boolean eliminated = room.isDeathSwapEliminated(uuid) || room.isSpectator(uuid);
+            if (eliminated) {
+                player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                player.setAllowFlight(true);
+                player.setFlying(true);
+            } else {
+                player.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                player.setAllowFlight(false);
+                player.setFlying(false);
+                player.setInvulnerable(true);
+                player.setNoDamageTicks(Math.max(player.getNoDamageTicks(), 20 * 12));
+                player.setFireTicks(0);
+                player.setFallDistance(0.0F);
+            }
+        }
+
+        Component title = LegacyComponentSerializer.legacySection()
+                .deserialize(draw ? "§x§F§F§D§D§5§5⌛ §e死亡互换平局" : "§x§5§5§F§F§A§A🏆 §a死亡互换结束");
+        Component subtitle = LegacyComponentSerializer.legacySection()
+                .deserialize(draw ? "§7两小时到，没人活到最后" : "§f胜者: §e" + winnerName);
+        Title endTitle = Title.title(title, subtitle,
+                Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(6500), Duration.ofMillis(800)));
+        forEachDeathSwapParticipant(room, player -> {
+            player.showTitle(endTitle);
+            player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.8f, 1.25f);
+        });
+
+        scheduleEndedRoomClosure(room, 10);
+    }
+
+    private void broadcastDeathSwapVillageStatus(GameRoom room) {
+        if (room == null || !room.getGameMode().isDeathSwap()) {
+            return;
+        }
+        org.gamefunxiao.world.WorldManager.DeathSwapVillageSeedStatus status =
+                plugin.getWorldManager().getDeathSwapVillageSeedStatus(room.getRoomId());
+        if (status != null && status.confirmed()) {
+            Map<String, String> ph = new HashMap<>();
+            ph.put("village", status.villageLocation() == null || status.villageLocation().isBlank() ? "未知" : status.villageLocation());
+            ph.put("distance", status.distance() >= 0 ? String.valueOf(status.distance()) : "未知");
+            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_ready_village", ph));
+            return;
+        }
+        Map<String, String> ph = new HashMap<>();
+        ph.put("reason", status == null ? "没有村庄筛种记录" : status.reason());
+        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_no_village", ph));
+    }
+
+    private void forEachDeathSwapAlivePlayer(GameRoom room, java.util.function.Consumer<Player> consumer) {
+        if (room == null || consumer == null) {
+            return;
+        }
+        for (UUID uuid : room.getDeathSwapAlivePlayers()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
+                consumer.accept(player);
+            }
+        }
+    }
+
+    private void forEachDeathSwapParticipant(GameRoom room, java.util.function.Consumer<Player> consumer) {
+        if (room == null || consumer == null) {
+            return;
+        }
+        Set<UUID> targets = new LinkedHashSet<>(room.getAllPlayerUUIDs());
+        targets.addAll(room.getSpectators());
+        for (UUID uuid : targets) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
+                consumer.accept(player);
+            }
+        }
     }
 
     public void startTntRun(GameRoom room) {
@@ -4217,6 +5049,7 @@ public class GameManager {
         room.clearLuckyPillarBlocks();
         cleanupRandomCompassMode(room.getRoomId());
         cleanupSurvivalMode(room.getRoomId());
+        cleanupDeathSwapBossBar(room.getRoomId());
         cleanupThunderStormWeather(room);
         plugin.getPlayerListener().resetCompassTpState(room);
         plugin.getFlashModeManager().cleanupFlashRoomBackpacks(room);
@@ -4455,7 +5288,7 @@ public class GameManager {
         World gameWorld = room.getGameWorld();
         if (gameWorld == null) {
             // 如果世界还没创建（极端情况），在主线程创建
-            gameWorld = plugin.getWorldManager().createGameWorld(room.getRoomId());
+            gameWorld = plugin.getWorldManager().createGameWorld(room.getRoomId(), room.getGameMode());
             if (gameWorld == null) {
                 room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("lobby.lobby_creation_failed"));
                 return;
@@ -5203,9 +6036,10 @@ public class GameManager {
         }
 
         String newRoomId = room.getRoomId() + "_" + System.currentTimeMillis();
-        World newWorld = plugin.getWorldManager().createGameWorld(newRoomId);
+        World newWorld = plugin.getWorldManager().createGameWorld(newRoomId, room.getGameMode());
         if (newWorld != null) {
             plugin.getWorldManager().remapGameWorld(room.getRoomId(), newWorld);
+            plugin.getWorldManager().remapFlashOutpostSeedStatus(newRoomId, room.getRoomId());
             Location sp = newWorld.getSpawnLocation();
             plugin.getWorldManager().preloadChunks(
                     newWorld,
@@ -5304,6 +6138,7 @@ public class GameManager {
         room.setWorldSelectionConfirmed(false);
         room.setState(RoomState.PLAYING);
         removeFlashWaitingRoomGuideBooks(room);
+        room.clearFlashPreyStartChoices();
         if (room.getGameMode().isFlashLike()) {
             room.setEndFlashDragonDefeated(false);
         }
@@ -5330,6 +6165,7 @@ public class GameManager {
         if (!isTournamentSilent(room)) {
             room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix(startedKey));
         }
+        broadcastFlashOutpostSeedStatus(room);
 
         // 给所有人显示屏幕标题：猎物→游戏即将开始，猎人→正在传送中（不是等待猎物按开始）
         for (UUID uuid : room.getAllPlayerUUIDs()) {
@@ -5445,7 +6281,9 @@ public class GameManager {
                 for (UUID uuid : getSelectionPreys(room)) {
                     Player prey = Bukkit.getPlayer(uuid);
                     if (prey != null) {
-                        if (isPreyManualStartAllowed(room)) {
+                        if (usesFlashPreyStartChoices(room)) {
+                            giveFlashPreyStartChoiceItems(prey, room);
+                        } else if (isPreyManualStartAllowed(room)) {
                             giveStartButton(prey);
                         }
                         prey.playSound(prey.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.2f);
@@ -5479,6 +6317,22 @@ public class GameManager {
             }, 40L);
 
         }, 60L); // 3秒后
+    }
+
+    private void broadcastFlashOutpostSeedStatus(GameRoom room) {
+        if (room == null || (room.getGameMode() != GameMode.FLASH && room.getGameMode() != GameMode.FLASH_TOURNAMENT)) {
+            return;
+        }
+        org.gamefunxiao.world.WorldManager.FlashOutpostSeedStatus status =
+                plugin.getWorldManager().getFlashOutpostSeedStatus(room.getRoomId());
+        Map<String, String> ph = new HashMap<>();
+        if (status != null && status.confirmed()) {
+            ph.put("distance", status.distance() >= 0 ? String.valueOf(status.distance()) : "未知");
+            room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_outpost_confirmed", ph));
+            return;
+        }
+        ph.put("reason", status == null ? "没有哨塔筛种记录" : status.reason());
+        room.broadcast(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_outpost_unconfirmed", ph));
     }
 
     private void faceHuntersToNearestPrey(GameRoom room) {
@@ -9282,6 +10136,245 @@ public class GameManager {
         return foot;
     }
 
+    private boolean usesFlashPreyStartChoices(GameRoom room) {
+        return room != null
+                && room.getGameMode() == GameMode.FLASH
+                && (room.getFlashDifficulty() == FlashDifficulty.NORMAL
+                || room.getFlashDifficulty() == FlashDifficulty.FLASH_SMP);
+    }
+
+    private ItemStack createFlashPreyStartChoiceItem(FlashPreyStartChoice choice, GameRoom room) {
+        ItemStack item = new ItemStack(choice.material, Math.max(1, choice.amount));
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(choice.displayName + formatFlashPreyStartChoicePercentSuffix(choice.performancePercent));
+            meta.setCustomModelData(choice.modelData());
+            meta.setItemModel(NamespacedKey.minecraft(choice.itemModel));
+            meta.getPersistentDataContainer().set(flashPreyStartNoAdvancementKey,
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            List<String> lore = new ArrayList<>();
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §e右键选择这个开局物品");
+            lore.add("§f- " + choice.performanceHint);
+            lore.add("§f- " + choice.description);
+            if (choice == FlashPreyStartChoice.SHIELD_WIND) {
+                lore.add("§f- §b本局盾牌剩余耐久: §a" + getFlashPreyStartShieldRemainingDurability(room));
+            } else if (choice == FlashPreyStartChoice.MACE) {
+                lore.add("§f- §c本局重锤剩余耐久: §a" + getFlashPreyStartMaceRemainingDurability(room));
+            }
+            lore.add("§8· · · · · · · · · · · · · ·");
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private String formatFlashPreyStartChoicePercentSuffix(int percent) {
+        if (percent > 0) {
+            return " §8(+" + percent + "%)";
+        }
+        if (percent < 0) {
+            return " §8(" + percent + "%)";
+        }
+        return " §8(±0%)";
+    }
+
+    private ItemStack createFlashPreyStartChoicePageButton(boolean next, int targetPage, int maxPage) {
+        ItemStack item = new ItemStack(next ? Material.ARROW : Material.SPECTRAL_ARROW);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(next
+                    ? "§x§8§8§D§D§F§F➜ §b下一页"
+                    : "§x§F§F§D§D§8§8⬅ §e上一页");
+            meta.setCustomModelData(next ? FLASH_PREY_START_CHOICE_NEXT_MODEL : FLASH_PREY_START_CHOICE_PREV_MODEL);
+            meta.setItemModel(NamespacedKey.minecraft(next ? "arrow" : "spectral_arrow"));
+            meta.setLore(List.of(
+                    "§8· · · · · · · · · · · · · ·",
+                    "§f- §a右键切换到第 §e" + (targetPage + 1) + "§7/§e" + (maxPage + 1) + " §a页",
+                    "§8· · · · · · · · · · · · · ·"
+            ));
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private int getFlashPreyStartChoiceMaxPage() {
+        int index = 0;
+        int page = 0;
+        FlashPreyStartChoice[] choices = FlashPreyStartChoice.values();
+        while (index < choices.length) {
+            int remaining = choices.length - index;
+            boolean hasPrev = page > 0;
+            int capacity = hasPrev
+                    ? (remaining > 8 ? 7 : 8)
+                    : (remaining > FLASH_PREY_START_CHOICES_PER_PAGE ? FLASH_PREY_START_CHOICES_PER_PAGE : 9);
+            index += Math.max(1, capacity);
+            if (index >= choices.length) {
+                return page;
+            }
+            page++;
+        }
+        return 0;
+    }
+
+    private List<FlashPreyStartChoice> getFlashPreyStartChoicePageChoices(int targetPage) {
+        int index = 0;
+        int page = 0;
+        FlashPreyStartChoice[] choices = FlashPreyStartChoice.values();
+        while (index < choices.length) {
+            int remaining = choices.length - index;
+            boolean hasPrev = page > 0;
+            int capacity = hasPrev
+                    ? (remaining > 8 ? 7 : 8)
+                    : (remaining > FLASH_PREY_START_CHOICES_PER_PAGE ? FLASH_PREY_START_CHOICES_PER_PAGE : 9);
+            int end = Math.min(choices.length, index + Math.max(1, capacity));
+            if (page == targetPage) {
+                return Arrays.asList(Arrays.copyOfRange(choices, index, end));
+            }
+            index = end;
+            page++;
+        }
+        return List.of();
+    }
+
+    private int getFlashPreyStartChoicePage(Player prey) {
+        if (prey == null) {
+            return 0;
+        }
+        int maxPage = getFlashPreyStartChoiceMaxPage();
+        int page = flashPreyStartChoicePages.getOrDefault(prey.getUniqueId(), 0);
+        page = Math.max(0, Math.min(maxPage, page));
+        flashPreyStartChoicePages.put(prey.getUniqueId(), page);
+        return page;
+    }
+
+    private void setFlashPreyStartChoicePage(Player prey, int page) {
+        if (prey == null) {
+            return;
+        }
+        flashPreyStartChoicePages.put(prey.getUniqueId(),
+                Math.max(0, Math.min(getFlashPreyStartChoiceMaxPage(), page)));
+    }
+
+    private void giveFlashPreyStartChoiceItems(Player prey, GameRoom room) {
+        giveFlashPreyStartChoiceItems(prey, room, true);
+    }
+
+    private void giveFlashPreyStartChoiceItems(Player prey, GameRoom room, boolean announce) {
+        if (prey == null || room == null || !usesFlashPreyStartChoices(room) || !room.isPrey(prey.getUniqueId())) {
+            return;
+        }
+        prey.getInventory().clear();
+        prey.getInventory().setArmorContents(new ItemStack[4]);
+        prey.getInventory().setItemInOffHand(null);
+        int page = getFlashPreyStartChoicePage(prey);
+        int maxPage = getFlashPreyStartChoiceMaxPage();
+        boolean hasPrev = page > 0;
+        boolean hasNext = page < maxPage;
+        List<Integer> slots = new ArrayList<>();
+        int firstChoiceSlot = hasPrev ? 1 : 0;
+        int lastChoiceSlot = hasNext ? FLASH_PREY_START_CHOICE_NAV_SLOT - 1 : FLASH_PREY_START_CHOICE_NAV_SLOT;
+        for (int slot = firstChoiceSlot; slot <= lastChoiceSlot; slot++) {
+            slots.add(slot);
+        }
+        int slotIndex = 0;
+        for (FlashPreyStartChoice choice : getFlashPreyStartChoicePageChoices(page)) {
+            if (slotIndex >= slots.size()) {
+                break;
+            }
+            prey.getInventory().setItem(slots.get(slotIndex++), createFlashPreyStartChoiceItem(choice, room));
+        }
+        if (hasPrev) {
+            prey.getInventory().setItem(0,
+                    createFlashPreyStartChoicePageButton(false, page - 1, maxPage));
+        }
+        if (hasNext) {
+            prey.getInventory().setItem(FLASH_PREY_START_CHOICE_NAV_SLOT,
+                    createFlashPreyStartChoicePageButton(true, page + 1, maxPage));
+        }
+        if (announce) {
+            Map<String, String> ph = new HashMap<>();
+            ph.put("time", "30");
+            prey.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_start_item_select", ph));
+            Component titleComp = LegacyComponentSerializer.legacySection().deserialize("§x§F§F§D§7§0§0⚡ §e选择开局物品");
+            Component subComp = LegacyComponentSerializer.legacySection().deserialize("§f右键选择物品，右侧箭矢可翻页");
+            prey.showTitle(Title.title(titleComp, subComp,
+                    Title.Times.times(Duration.ZERO, Duration.ofMillis(3200), Duration.ofMillis(500))));
+        } else {
+            prey.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(
+                    "§x§8§8§D§D§F§F➜ §b开局物品第 §e" + (page + 1) + "§7/§e" + (maxPage + 1) + " §b页"));
+        }
+        prey.playSound(prey.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.62f, 1.72f);
+        prey.playSound(prey.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.42f, 1.28f);
+        Bukkit.getScheduler().runTask(plugin, prey::updateInventory);
+    }
+
+    private void clearFlashPreyStartSelectionInventory(Player prey) {
+        if (prey == null) {
+            return;
+        }
+        prey.getInventory().clear();
+        prey.getInventory().setArmorContents(new ItemStack[4]);
+        prey.getInventory().setItemInOffHand(null);
+        flashPreyStartChoicePages.remove(prey.getUniqueId());
+        Bukkit.getScheduler().runTask(plugin, prey::updateInventory);
+    }
+
+    private FlashPreyStartChoice getFlashPreyStartChoice(GameRoom room, UUID uuid) {
+        FlashPreyStartChoice choice = room == null ? null : FlashPreyStartChoice.fromId(room.getFlashPreyStartChoice(uuid));
+        return choice == null ? FlashPreyStartChoice.NONE : choice;
+    }
+
+    private void ensureDefaultFlashPreyStartChoices(GameRoom room) {
+        if (!usesFlashPreyStartChoices(room)) {
+            return;
+        }
+        for (UUID uuid : room.getPreyUUIDs()) {
+            if (!room.hasFlashPreyStartChoice(uuid)) {
+                room.setFlashPreyStartChoice(uuid, FlashPreyStartChoice.NONE.id);
+            }
+            Player prey = Bukkit.getPlayer(uuid);
+            if (prey != null && !room.isGameActuallyStarted()) {
+                clearFlashPreyStartSelectionInventory(prey);
+            }
+        }
+    }
+
+    public boolean handleFlashPreyStartChoiceUse(Player player, GameRoom room, int modelData) {
+        if (player == null || room == null
+                || !usesFlashPreyStartChoices(room)
+                || room.getState() != RoomState.PLAYING
+                || room.isGameActuallyStarted()
+                || room.isPreyStarted()
+                || !room.isPrey(player.getUniqueId())) {
+            return false;
+        }
+        if (modelData == FLASH_PREY_START_CHOICE_NEXT_MODEL || modelData == FLASH_PREY_START_CHOICE_PREV_MODEL) {
+            int page = getFlashPreyStartChoicePage(player);
+            setFlashPreyStartChoicePage(player, modelData == FLASH_PREY_START_CHOICE_NEXT_MODEL ? page + 1 : page - 1);
+            giveFlashPreyStartChoiceItems(player, room, false);
+            player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.62f,
+                    modelData == FLASH_PREY_START_CHOICE_NEXT_MODEL ? 1.55f : 1.18f);
+            return true;
+        }
+        FlashPreyStartChoice choice = FlashPreyStartChoice.fromModelData(modelData);
+        if (choice == null) {
+            return false;
+        }
+        room.setFlashPreyStartChoice(player.getUniqueId(), choice.id);
+        clearFlashPreyStartSelectionInventory(player);
+        giveStartButton(player);
+
+        Component titleComp = LegacyComponentSerializer.legacySection().deserialize("§x§5§5§F§F§A§A✔ §a选择完成");
+        Component subComp = LegacyComponentSerializer.legacySection().deserialize("§f右键中间按钮可提前开始");
+        player.showTitle(Title.title(titleComp, subComp,
+                Title.Times.times(Duration.ZERO, Duration.ofMillis(1800), Duration.ofMillis(300))));
+        player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§x§5§5§F§F§A§A✔ §a开局选择已保存"));
+        player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.72f, 1.45f);
+        player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.36f, 1.86f);
+        return true;
+    }
+
     private void giveStartButton(Player player) {
         ItemStack startBtn = new ItemStack(Material.PAPER);
         ItemMeta meta = startBtn.getItemMeta();
@@ -9304,13 +10397,25 @@ public class GameManager {
         if (!isPreyManualStartAllowed(room)) {
             return;
         }
+        if (usesFlashPreyStartChoices(room) && (prey == null || !room.hasFlashPreyStartChoice(prey.getUniqueId()))) {
+            if (prey != null) {
+                prey.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("game.flash_start_item_invalid"));
+                prey.playSound(prey.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.55f, 0.72f);
+            }
+            return;
+        }
 
         for (UUID uuid : getSelectionPreys(room)) {
             Player selectionPrey = Bukkit.getPlayer(uuid);
             if (selectionPrey != null) {
-                selectionPrey.getInventory().remove(Material.PAPER);
+                if (usesFlashPreyStartChoices(room)) {
+                    clearFlashPreyStartSelectionInventory(selectionPrey);
+                } else {
+                    selectionPrey.getInventory().remove(Material.PAPER);
+                }
             }
         }
+        ensureDefaultFlashPreyStartChoices(room);
 
         // 标记猎物已按下开始，冻结所有玩家移动
         room.setGameStartCountdown(true);
@@ -9503,7 +10608,11 @@ public class GameManager {
                         for (UUID uuid : getSelectionPreys(room)) {
                             Player prey = Bukkit.getPlayer(uuid);
                             if (prey != null) {
-                                prey.getInventory().remove(Material.PAPER);
+                                if (usesFlashPreyStartChoices(room)) {
+                                    clearFlashPreyStartSelectionInventory(prey);
+                                } else {
+                                    prey.getInventory().remove(Material.PAPER);
+                                }
                             }
                         }
                         preGameCountdownTasks.remove(room.getRoomId());
@@ -9538,8 +10647,10 @@ public class GameManager {
                         } else {
                             // 猎物
                             Component titleComp = LegacyComponentSerializer.legacySection().deserialize("§e" + timeLeft + " §6秒后开始游戏");
+                            boolean waitingStartChoice = usesFlashPreyStartChoices(room) && !room.hasFlashPreyStartChoice(uuid);
                             Component subComp = LegacyComponentSerializer.legacySection().deserialize(
-                                    manualStartAllowed ? "§a右键手中按钮可提前开始！" : getNoManualStartCountdownSubtitle(room, true));
+                                    waitingStartChoice ? "§a右键选择开局物品，选完可提前开始！"
+                                            : manualStartAllowed ? "§a右键手中按钮可提前开始！" : getNoManualStartCountdownSubtitle(room, true));
                             Title title = Title.title(titleComp, subComp,
                                     Title.Times.times(Duration.ZERO, Duration.ofMillis(1200), Duration.ofMillis(200)));
                             if (!silentTournament) {
@@ -9594,6 +10705,7 @@ public class GameManager {
 
     /** 30秒自动到期时触发（等价于猎物按下开始，但无人按） */
     private void triggerGameStartAuto(GameRoom room) {
+        ensureDefaultFlashPreyStartChoices(room);
         room.setGameStartCountdown(true);
         room.setPreyStarted(true);
 
@@ -9704,6 +10816,9 @@ public class GameManager {
             Player p = Bukkit.getPlayer(uuid);
             if (p != null) {
                 if (flashMode) {
+                    if (plugin.getFlashAdvancementManager() != null) {
+                        plugin.getFlashAdvancementManager().reset(p);
+                    }
                     plugin.getFlashModeManager().removeFlashRoomGuideBooks(p);
                 }
                 if (room.isSpectator(uuid)) {
@@ -9732,7 +10847,7 @@ public class GameManager {
                     p.setGameMode(org.bukkit.GameMode.SURVIVAL);
                     p.resetCooldown();
                     if (flashMode) {
-                        giveFlashPreyStartCondensedEnderPearl(p, room);
+                        giveFlashPreyStartItems(p, room);
                         if (room.getPreyUUIDs().size() >= 2 && !isTournamentSilent(room)) {
                             giveFlashPreyItems(p, room);
                         }
@@ -9873,7 +10988,7 @@ public class GameManager {
             }
             return;
         }
-        if (System.currentTimeMillis() - room.getGameStartTime() < FLASH_STORM_DELAY_MILLIS) {
+        if (System.currentTimeMillis() - room.getGameStartTime() < getFlashStormDelayMillis(room)) {
             clearFlashModeStormUntilDelay(room);
             return;
         }
@@ -9905,6 +11020,14 @@ public class GameManager {
         return room != null
                 && room.getGameMode().supportsFlashDifficultyVote()
                 && room.getFlashDifficulty() == FlashDifficulty.EASY;
+    }
+
+    private long getFlashStormDelayMillis(GameRoom room) {
+        return room != null
+                && room.getGameMode().supportsFlashDifficultyVote()
+                && room.getFlashDifficulty() == FlashDifficulty.FLASH_SMP
+                ? FLASH_SMP_STORM_DELAY_MILLIS
+                : FLASH_STORM_DELAY_MILLIS;
     }
 
     public void giveHunterItems(Player hunter, GameRoom room) {
@@ -9987,11 +11110,11 @@ public class GameManager {
                 || room.isHunter(prey.getUniqueId())) {
             return;
         }
-        ItemStack pearl = plugin.getFlashModeManager().createCondensedEnderPearl();
+        ItemStack pearl = markFlashPreyStartNoAdvancement(plugin.getFlashModeManager().createCondensedEnderPearl());
         StartItemGiveResult giveResult = giveOrEnderChestOrDrop(prey, pearl);
         if (!isTournamentSilent(room)) {
             prey.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
-                    + "§x§9§8§D§D§F§F✦ §d开局获得浓缩末影珍珠§7，§f右键§7可随机跃迁 §f50~200格§7。"
+                    + "§x§9§8§D§D§F§F✦ §d开局获得浓缩末影珍珠§7，§f右键§7可随机跃迁 §f80~300格§7。"
                     + (giveResult.storedInEnderChest() ? "§8（§e背包已满，已放入末影箱§8）" : "")
                     + (giveResult.dropped() ? "§8（§c末影箱也满了，已掉落在脚下§8）" : ""));
         }
@@ -10014,7 +11137,7 @@ public class GameManager {
         if (hasCondensedEnderPearl(prey.getInventory()) || hasCondensedEnderPearl(prey.getEnderChest())) {
             return;
         }
-        ItemStack pearl = plugin.getFlashModeManager().createCondensedEnderPearl();
+        ItemStack pearl = markFlashPreyStartNoAdvancement(plugin.getFlashModeManager().createCondensedEnderPearl());
         HashMap<Integer, ItemStack> leftover = prey.getInventory().addItem(pearl);
         if (!leftover.isEmpty()) {
             leftover.values().forEach(item -> prey.getWorld().dropItemNaturally(prey.getLocation(), item));
@@ -10031,6 +11154,498 @@ public class GameManager {
             }
         }
         return false;
+    }
+
+    private void giveFlashPreyStartItems(Player prey, GameRoom room) {
+        if (prey == null || room == null || !plugin.getFlashModeManager().isFlashMode(room)) {
+            return;
+        }
+        if (!usesFlashPreyStartChoices(room)) {
+            giveFlashPreyStartCondensedEnderPearl(prey, room);
+            return;
+        }
+        FlashPreyStartChoice choice = getFlashPreyStartChoice(room, prey.getUniqueId());
+        room.setFlashPreyStartChoice(prey.getUniqueId(), choice.id);
+        List<ItemStack> items = createFlashPreyActualStartItems(choice, room);
+        if (choice == FlashPreyStartChoice.ELYTRA_ROCKETS) {
+            equipFlashPreyStartElytra(prey);
+        } else if (choice == FlashPreyStartChoice.DELAYED_BOAT) {
+            scheduleFlashPreyStartBoat(prey.getUniqueId(), room.getRoomId());
+        }
+        for (ItemStack item : items) {
+            giveOrEnderChestOrDrop(prey, markFlashPreyStartNoAdvancement(item));
+        }
+        if (choice == FlashPreyStartChoice.NONE) {
+            prey.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§x§F§F§D§7§0§0⚡ §e开局已就绪"));
+            prey.playSound(prey.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.52f, 1.62f);
+            return;
+        }
+        prey.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§x§8§8§D§D§F§F✦ §b开局物品已发放"));
+        prey.playSound(prey.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.62f, 1.42f);
+        prey.playSound(prey.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.34f, 1.86f);
+    }
+
+    private List<ItemStack> createFlashPreyActualStartItems(FlashPreyStartChoice choice, GameRoom room) {
+        if (choice == null || choice == FlashPreyStartChoice.NONE) {
+            return List.of();
+        }
+        List<ItemStack> items = new ArrayList<>();
+        switch (choice) {
+            case CONDENSED_PEARL -> items.add(plugin.getFlashModeManager().createCondensedEnderPearl());
+            case THREE_PEARLS -> items.add(new ItemStack(Material.ENDER_PEARL, 3));
+            case SHIELD_WIND -> {
+                ItemStack shield = new ItemStack(Material.SHIELD);
+                ItemMeta meta = shield.getItemMeta();
+                if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
+                    int remainingDurability = getFlashPreyStartShieldRemainingDurability(room);
+                    int maxDurability = Math.max(0, Material.SHIELD.getMaxDurability());
+                    if (maxDurability > 0) {
+                        damageable.setDamage(Math.max(0, maxDurability - Math.min(maxDurability, remainingDurability)));
+                    }
+                    meta.setDisplayName("§x§B§B§F§F§F§F破损盾牌");
+                    meta.setLore(List.of(
+                            "§8· · · · · · · · · · · · · ·",
+                            "§f- §e剩余耐久: §a" + remainingDurability + " §7点",
+                            "§f- §b随猎人人数变化，最低不会低于8点",
+                            "§8· · · · · · · · · · · · · ·"
+                    ));
+                    shield.setItemMeta(meta);
+                }
+                items.add(shield);
+                items.add(new ItemStack(Material.WIND_CHARGE, 3));
+            }
+            case CROSSBOW -> items.add(new ItemStack(Material.CROSSBOW));
+            case LILY_PAD -> items.add(new ItemStack(Material.LILY_PAD));
+            case STONE_HOE -> items.add(new ItemStack(Material.STONE_HOE));
+            case COAL -> items.add(new ItemStack(Material.COAL, 16));
+            case MACE -> {
+                ItemStack mace = new ItemStack(Material.MACE);
+                ItemMeta meta = mace.getItemMeta();
+                if (meta != null) {
+                    int remainingDurability = getFlashPreyStartMaceRemainingDurability(room);
+                    if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
+                        int maxDurability = Math.max(0, Material.MACE.getMaxDurability());
+                        if (maxDurability > 0) {
+                            damageable.setDamage(Math.max(0, maxDurability - Math.min(maxDurability, remainingDurability)));
+                        }
+                    }
+                    meta.setDisplayName("§x§F§F§8§8§5§5重锤");
+                    meta.setItemModel(NamespacedKey.minecraft("mace"));
+                    meta.setLore(List.of(
+                            "§8· · · · · · · · · · · · · ·",
+                            "§f- §e剩余耐久: §a" + remainingDurability + " §7点",
+                            "§8· · · · · · · · · · · · · ·"
+                    ));
+                    mace.setItemMeta(meta);
+                }
+                items.add(mace);
+            }
+            case OMINOUS_KEYS -> items.add(new ItemStack(Material.OMINOUS_TRIAL_KEY, 4));
+            case MAGIC_BRUSH -> items.add(plugin.getFlashModeManager().createMagicBrushItem());
+            case ELYTRA_ROCKETS -> items.add(createFlashPreyStartFireworks());
+            case SHEARS -> items.add(new ItemStack(Material.SHEARS));
+            case DELAYED_BOAT -> {
+            }
+            case APPLE_BOOTS -> items.add(createFlashPreyStartAppleBoots());
+            case NONE -> {
+            }
+        }
+        items.replaceAll(this::markFlashPreyStartNoAdvancement);
+        return items;
+    }
+
+    private ItemStack createFlashPreyStartFireworks() {
+        ItemStack fireworks = new ItemStack(Material.FIREWORK_ROCKET, 3);
+        ItemMeta meta = fireworks.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.FireworkMeta fireworkMeta) {
+            fireworkMeta.setPower(1);
+            fireworkMeta.setDisplayName("§x§8§8§D§D§F§F开局烟花");
+            fireworkMeta.getPersistentDataContainer().set(flashPreyStartFireworkKey,
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            fireworkMeta.getPersistentDataContainer().set(flashPreyStartNoAdvancementKey,
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            fireworkMeta.setLore(List.of(
+                    "§8· · · · · · · · · · · · · ·",
+                    "§f- §b鞘翅开局绑定烟花",
+                    "§f- §7用完后绑定鞘翅会消失",
+                    "§8· · · · · · · · · · · · · ·"
+            ));
+            fireworks.setItemMeta(fireworkMeta);
+        }
+        return fireworks;
+    }
+
+    private ItemStack createFlashPreyStartElytra() {
+        ItemStack elytra = new ItemStack(Material.ELYTRA);
+        ItemMeta meta = elytra.getItemMeta();
+        if (meta != null) {
+            if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
+                int maxDurability = Math.max(1, Material.ELYTRA.getMaxDurability());
+                damageable.setDamage(Math.max(0, maxDurability - 10));
+            }
+            meta.setDisplayName("§x§8§8§D§D§F§F开局绑定鞘翅");
+            meta.setItemModel(NamespacedKey.minecraft("elytra"));
+            meta.addEnchant(Enchantment.BINDING_CURSE, 1, true);
+            meta.getPersistentDataContainer().set(flashPreyStartElytraKey,
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            meta.getPersistentDataContainer().set(flashPreyStartNoAdvancementKey,
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            meta.setLore(List.of(
+                    "§8· · · · · · · · · · · · · ·",
+                    "§f- §b剩余耐久: §a10 §7点",
+                    "§f- §c绑定后无法摘下",
+                    "§f- §7烟花用完后会消失，耐久最低保留1点",
+                    "§8· · · · · · · · · · · · · ·"
+            ));
+            elytra.setItemMeta(meta);
+        }
+        return elytra;
+    }
+
+    private void equipFlashPreyStartElytra(Player prey) {
+        if (prey == null || !prey.isOnline()) {
+            return;
+        }
+        ItemStack oldChest = prey.getInventory().getChestplate();
+        if (oldChest != null && oldChest.getType() != Material.AIR) {
+            giveOrEnderChestOrDrop(prey, oldChest);
+        }
+        prey.getInventory().setChestplate(createFlashPreyStartElytra());
+        prey.playSound(prey.getLocation(), Sound.ITEM_ARMOR_EQUIP_ELYTRA, 0.72f, 1.28f);
+        startFlashPreyStartElytraMonitor(prey.getUniqueId());
+    }
+
+    private ItemStack createFlashPreyStartAppleBoots() {
+        ItemStack boots = new ItemStack(Material.LEATHER_BOOTS);
+        boots.addUnsafeEnchantment(Enchantment.DEPTH_STRIDER, 2);
+        ItemMeta meta = boots.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName("§x§F§F§D§D§7§7深海苹果皮革鞋");
+            meta.setItemModel(NamespacedKey.minecraft("leather_boots"));
+            meta.setLore(List.of(
+                    "§8· · · · · · · · · · · · · ·",
+                    "§f- §b深海探索者 II",
+                    "§f- §e已注入两层金苹果生命强化",
+                    "§8· · · · · · · · · · · · · ·"
+            ));
+            boots.setItemMeta(meta);
+        }
+        boots = plugin.getFlashModeManager().applyNormalGoldenAppleArmorLevels(boots, 2);
+        return markFlashPreyStartNoAdvancement(boots);
+    }
+
+    private void scheduleFlashPreyStartBoat(UUID preyUuid, String roomId) {
+        if (preyUuid == null || roomId == null) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            GameRoom room = plugin.getRoomManager().getRoom(roomId);
+            Player prey = Bukkit.getPlayer(preyUuid);
+            if (room == null || prey == null || !prey.isOnline()
+                    || room.getState() != RoomState.PLAYING
+                    || !room.isGameActuallyStarted()
+                    || !room.isPrey(preyUuid)) {
+                return;
+            }
+            StartItemGiveResult result = giveOrEnderChestOrDrop(prey,
+                    markFlashPreyStartNoAdvancement(new ItemStack(Material.OAK_BOAT)));
+            prey.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§x§B§B§8§8§5§5✦ §6开局木船已送达"
+                    + (result.storedInEnderChest() ? " §7(已放入末影箱)" : result.dropped() ? " §7(已掉落脚下)" : "")));
+            prey.playSound(prey.getLocation(), Sound.ENTITY_BOAT_PADDLE_WATER, 0.72f, 1.12f);
+            prey.playSound(prey.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.48f, 1.36f);
+        }, FLASH_PREY_START_BOAT_DELAY_TICKS);
+    }
+
+    private int getFlashPreyStartMaceRemainingDurability(GameRoom room) {
+        int hunters = room == null ? 0 : getHunterCount(room);
+        int maxDurability = Math.max(1, Material.MACE.getMaxDurability());
+        return Math.max(1, Math.min(maxDurability, hunters * 2));
+    }
+
+    private int getFlashPreyStartShieldRemainingDurability(GameRoom room) {
+        int hunters = room == null ? 0 : getHunterCount(room);
+        int maxDurability = Math.max(1, Material.SHIELD.getMaxDurability());
+        return Math.max(8, Math.min(maxDurability, hunters * 2));
+    }
+
+    public boolean isFlashPreyStartElytraItem(ItemStack item) {
+        if (item == null || item.getType() != Material.ELYTRA || !item.hasItemMeta()) {
+            return false;
+        }
+        Byte marker = item.getItemMeta().getPersistentDataContainer().get(flashPreyStartElytraKey,
+                org.bukkit.persistence.PersistentDataType.BYTE);
+        return marker != null && marker == (byte) 1;
+    }
+
+    public boolean isFlashPreyStartFireworkItem(ItemStack item) {
+        if (item == null || item.getType() != Material.FIREWORK_ROCKET || !item.hasItemMeta()) {
+            return false;
+        }
+        Byte marker = item.getItemMeta().getPersistentDataContainer().get(flashPreyStartFireworkKey,
+                org.bukkit.persistence.PersistentDataType.BYTE);
+        return marker != null && marker == (byte) 1;
+    }
+
+    private ItemStack markFlashPreyStartNoAdvancement(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) {
+            return item;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return item;
+        }
+        meta.getPersistentDataContainer().set(flashPreyStartNoAdvancementKey,
+                org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public boolean isFlashPreyStartNoAdvancementItem(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR || !item.hasItemMeta()) {
+            return false;
+        }
+        Byte marker = item.getItemMeta().getPersistentDataContainer().get(flashPreyStartNoAdvancementKey,
+                org.bukkit.persistence.PersistentDataType.BYTE);
+        return marker != null && marker == (byte) 1;
+    }
+
+    public boolean handleFlashPreyStartElytraInventoryClick(org.bukkit.event.inventory.InventoryClickEvent event,
+                                                            Player player, GameRoom room) {
+        if (event == null || player == null || room == null || !isFlashPreyStartElytraActive(player, room)) {
+            return false;
+        }
+        ItemStack chestplate = player.getInventory().getChestplate();
+        ItemStack current = event.getCurrentItem();
+        ItemStack cursor = event.getCursor();
+        boolean clickedPlayerInventory = event.getClickedInventory() != null
+                && event.getClickedInventory().equals(player.getInventory());
+        boolean clickedOwnChestSlot = clickedPlayerInventory && event.getSlot() == 38;
+        boolean clickedOwnChestRawSlot = isFlashPreyStartPlayerChestRawSlot(event.getView(), event.getRawSlot());
+        boolean touchesLockedElytra = (clickedPlayerInventory && isFlashPreyStartElytraItem(current))
+                || isFlashPreyStartElytraItem(cursor)
+                || clickedOwnChestSlot
+                || clickedOwnChestRawSlot;
+        boolean triesChestSwap = isChestArmorOrElytra(current)
+                && clickedPlayerInventory
+                && (event.isShiftClick() || event.getClick() == org.bukkit.event.inventory.ClickType.NUMBER_KEY);
+        if (!isFlashPreyStartElytraItem(chestplate) || (!touchesLockedElytra && !triesChestSwap)) {
+            return false;
+        }
+        event.setCancelled(true);
+        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.55f, 1.18f);
+        player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§x§8§8§D§D§F§F✦ §b开局鞘翅已绑定，不能摘下"));
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+        return true;
+    }
+
+    public boolean handleFlashPreyStartElytraInventoryDrag(org.bukkit.event.inventory.InventoryDragEvent event,
+                                                           Player player, GameRoom room) {
+        if (event == null || player == null || room == null || !isFlashPreyStartElytraActive(player, room)
+                || !isFlashPreyStartElytraItem(player.getInventory().getChestplate())) {
+            return false;
+        }
+        boolean touchesChestSlot = false;
+        for (Integer rawSlot : event.getRawSlots()) {
+            if (rawSlot != null && isFlashPreyStartPlayerChestRawSlot(event.getView(), rawSlot)) {
+                touchesChestSlot = true;
+                break;
+            }
+        }
+        boolean touchesLockedElytra = isFlashPreyStartElytraItem(event.getOldCursor())
+                || event.getNewItems().values().stream().anyMatch(this::isFlashPreyStartElytraItem);
+        if (!touchesChestSlot && !touchesLockedElytra) {
+            return false;
+        }
+        event.setCancelled(true);
+        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.45f, 1.18f);
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+        return true;
+    }
+
+    private boolean isFlashPreyStartPlayerChestRawSlot(org.bukkit.inventory.InventoryView view, int rawSlot) {
+        if (view == null || rawSlot < 0) {
+            return false;
+        }
+        if (view.getTopInventory().getType() == org.bukkit.event.inventory.InventoryType.CRAFTING && rawSlot == 6) {
+            return true;
+        }
+        int topSize = view.getTopInventory().getSize();
+        return rawSlot >= topSize && view.convertSlot(rawSlot) == 38;
+    }
+
+    public boolean handleFlashPreyStartElytraProtectedInteract(org.bukkit.event.player.PlayerInteractEvent event,
+                                                               Player player, GameRoom room) {
+        if (event == null || player == null || room == null || !isFlashPreyStartElytraActive(player, room)
+                || !isFlashPreyStartElytraItem(player.getInventory().getChestplate())) {
+            return false;
+        }
+        ItemStack item = event.getItem();
+        if (!isChestArmorOrElytra(item)) {
+            return false;
+        }
+        event.setCancelled(true);
+        event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.55f, 1.18f);
+        player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§x§8§8§D§D§F§F✦ §b开局鞘翅已绑定，不能替换"));
+        return true;
+    }
+
+    public void handleFlashPreyStartFireworkUse(org.bukkit.event.player.PlayerInteractEvent event,
+                                                Player player, GameRoom room) {
+        if (event == null || player == null || room == null || !isFlashPreyStartElytraActive(player, room)
+                || !isFlashPreyStartElytraItem(player.getInventory().getChestplate())
+                || !isFlashPreyStartFireworkItem(event.getItem())) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> checkFlashPreyStartElytraState(player.getUniqueId()), 2L);
+    }
+
+    public void handleFlashPreyStartElytraDamage(org.bukkit.event.player.PlayerItemDamageEvent event) {
+        if (event == null || !isFlashPreyStartElytraItem(event.getItem())) {
+            return;
+        }
+        Player player = event.getPlayer();
+        ItemStack item = event.getItem();
+        ItemMeta meta = item.getItemMeta();
+        if (!(meta instanceof org.bukkit.inventory.meta.Damageable damageable)) {
+            return;
+        }
+        int maxDurability = Math.max(1, item.getType().getMaxDurability());
+        int remaining = Math.max(0, maxDurability - damageable.getDamage());
+        if (event.getDamage() >= remaining) {
+            event.setCancelled(true);
+            damageable.setDamage(Math.max(0, maxDurability - 1));
+            item.setItemMeta(meta);
+            refreshFlashPreyStartElytraLore(player);
+            player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§x§F§F§8§8§5§5✦ §e开局鞘翅最低保留 §a1 §e点耐久"));
+            player.playSound(player.getLocation(), Sound.BLOCK_CHAIN_PLACE, 0.42f, 1.36f);
+            return;
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            refreshFlashPreyStartElytraLore(player);
+            checkFlashPreyStartElytraState(player.getUniqueId());
+        }, 1L);
+    }
+
+    private boolean isFlashPreyStartElytraActive(Player player, GameRoom room) {
+        return player != null && room != null
+                && room.getGameMode() == GameMode.FLASH
+                && room.getState() == RoomState.PLAYING
+                && room.isGameActuallyStarted()
+                && room.isPrey(player.getUniqueId());
+    }
+
+    private boolean isChestArmorOrElytra(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) {
+            return false;
+        }
+        return switch (item.getType()) {
+            case ELYTRA,
+                 LEATHER_CHESTPLATE, CHAINMAIL_CHESTPLATE, IRON_CHESTPLATE,
+                 GOLDEN_CHESTPLATE, DIAMOND_CHESTPLATE, NETHERITE_CHESTPLATE -> true;
+            default -> false;
+        };
+    }
+
+    private boolean hasFlashPreyStartFireworks(Player player) {
+        if (player == null) {
+            return false;
+        }
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (isFlashPreyStartFireworkItem(item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void startFlashPreyStartElytraMonitor(UUID uuid) {
+        if (uuid == null || !flashPreyStartElytraMonitorRunning.add(uuid)) {
+            return;
+        }
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!flashPreyStartElytraMonitorRunning.contains(uuid)) {
+                    cancel();
+                    return;
+                }
+                if (!checkFlashPreyStartElytraState(uuid)) {
+                    flashPreyStartElytraMonitorRunning.remove(uuid);
+                    cancel();
+                }
+            }
+        }.runTaskTimer(plugin, 10L, 10L);
+    }
+
+    private boolean checkFlashPreyStartElytraState(UUID uuid) {
+        Player player = Bukkit.getPlayer(uuid);
+        if (player == null || !player.isOnline()) {
+            return false;
+        }
+        GameRoom room = plugin.getRoomManager().getPlayerRoom(uuid);
+        if (!isFlashPreyStartElytraActive(player, room)) {
+            return false;
+        }
+        ItemStack chestplate = player.getInventory().getChestplate();
+        if (!isFlashPreyStartElytraItem(chestplate)) {
+            return false;
+        }
+        if (!hasFlashPreyStartFireworks(player)) {
+            removeFlashPreyStartElytra(player, "§x§F§F§8§8§5§5✦ §c开局烟花已用完，绑定鞘翅已消失");
+            return false;
+        }
+        refreshFlashPreyStartElytraLore(player);
+        return true;
+    }
+
+    private void refreshFlashPreyStartElytraLore(Player player) {
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        ItemStack chestplate = player.getInventory().getChestplate();
+        if (!isFlashPreyStartElytraItem(chestplate) || !updateFlashPreyStartElytraLore(chestplate)) {
+            return;
+        }
+        player.getInventory().setChestplate(chestplate);
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+    }
+
+    private boolean updateFlashPreyStartElytraLore(ItemStack elytra) {
+        if (!isFlashPreyStartElytraItem(elytra)) {
+            return false;
+        }
+        ItemMeta meta = elytra.getItemMeta();
+        if (!(meta instanceof org.bukkit.inventory.meta.Damageable damageable)) {
+            return false;
+        }
+        int maxDurability = Math.max(1, elytra.getType().getMaxDurability());
+        int remaining = Math.max(1, maxDurability - damageable.getDamage());
+        meta.setLore(List.of(
+                "§8· · · · · · · · · · · · · ·",
+                "§f- §b剩余耐久: §a" + remaining + " §7点",
+                "§f- §c绑定后无法摘下",
+                "§f- §7烟花用完后会消失，耐久最低保留1点",
+                "§8· · · · · · · · · · · · · ·"
+        ));
+        elytra.setItemMeta(meta);
+        return true;
+    }
+
+    private void removeFlashPreyStartElytra(Player player, String actionBar) {
+        if (player == null) {
+            return;
+        }
+        if (isFlashPreyStartElytraItem(player.getInventory().getChestplate())) {
+            player.getInventory().setChestplate(null);
+        }
+        flashPreyStartElytraMonitorRunning.remove(player.getUniqueId());
+        player.setGliding(false);
+        player.playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 0.72f, 1.22f);
+        if (actionBar != null && !actionBar.isBlank()) {
+            player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(actionBar));
+        }
+        Bukkit.getScheduler().runTask(plugin, player::updateInventory);
     }
 
     public boolean consumeRandomCompass(Player player, GameRoom room) {
@@ -11266,6 +12881,7 @@ public class GameManager {
         // 显示本局排行榜
         if (!isTournamentSilent(room)) {
             showEndGameLeaderboard(room, preyWin);
+            scheduleHunterGameSeedBroadcast(room);
         }
 
         // 猎物胜利时全部人变旁观模式，猎人胜利时只有猎物变旁观
@@ -11293,6 +12909,10 @@ public class GameManager {
     }
 
     public void endGameWithoutReward(GameRoom room) {
+        endGameWithoutReward(room, room != null && !room.isPreyQuit());
+    }
+
+    public void endGameWithoutReward(GameRoom room, boolean preyWonResult) {
         if (room == null || room.getState() == RoomState.ENDED) {
             return;
         }
@@ -11300,7 +12920,7 @@ public class GameManager {
         room.clearDualPreyProposal();
         room.clearDualPreyStack();
         room.setState(RoomState.ENDED);
-        room.setPreyWon(!room.isPreyQuit());
+        room.setPreyWon(preyWonResult);
         scheduleEndedRoomClosure(room, 10);
         setRoomAdvancementAnnouncements(room, false);
         cleanupRandomCompassMode(room.getRoomId());
@@ -11322,6 +12942,7 @@ public class GameManager {
                 room.broadcast(plugin.getMessageManager().getMessage("game.ended_no_reward"));
             } else {
                 room.broadcast(plugin.getMessageManager().getMessage("game.ended_no_reward"));
+                scheduleHunterGameSeedBroadcast(room);
             }
         } else {
             showTournamentVictoryTitle(room);
@@ -11352,6 +12973,74 @@ public class GameManager {
             }
         }
 
+    }
+
+    private void broadcastHunterGameSeed(GameRoom room) {
+        if (!shouldShowHunterGameSeed(room)) {
+            return;
+        }
+        World seedWorld = resolveHunterGameSeedWorld(room);
+        if (seedWorld == null) {
+            return;
+        }
+
+        String seed = Long.toString(seedWorld.getSeed());
+        Component message = Component.text()
+                .append(LegacyComponentSerializer.legacySection().deserialize("§f种子：["))
+                .append(LegacyComponentSerializer.legacySection().deserialize("§a" + seed)
+                        .clickEvent(ClickEvent.copyToClipboard(seed))
+                        .hoverEvent(HoverEvent.showText(LegacyComponentSerializer.legacySection()
+                                .deserialize("§x§5§5§F§F§A§A点击复制世界种子"))))
+                .append(LegacyComponentSerializer.legacySection().deserialize("§f]"))
+                .build();
+
+        Set<UUID> recipients = new LinkedHashSet<>(room.getAllPlayerUUIDs());
+        recipients.addAll(room.getSpectators());
+        for (UUID uuid : recipients) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                player.sendMessage(message);
+            }
+        }
+    }
+
+    private void scheduleHunterGameSeedBroadcast(GameRoom room) {
+        if (!shouldShowHunterGameSeed(room)) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> broadcastHunterGameSeed(room), 100L);
+    }
+
+    private boolean shouldShowHunterGameSeed(GameRoom room) {
+        if (room == null || room.getGameMode() == null || isTournamentSilent(room)) {
+            return false;
+        }
+        if (room.getGameMode() == GameMode.END_FLASH) {
+            return false;
+        }
+        return room.getGameMode().usesHunterFlowMode() && room.getGameDuration() > 600_000L;
+    }
+
+    private World resolveHunterGameSeedWorld(GameRoom room) {
+        World world = room.getGameWorld();
+        if (world != null) {
+            return world;
+        }
+
+        world = plugin.getWorldManager().getGameWorld(room.getRoomId());
+        if (world != null) {
+            return world;
+        }
+
+        Set<UUID> recipients = new LinkedHashSet<>(room.getAllPlayerUUIDs());
+        recipients.addAll(room.getSpectators());
+        for (UUID uuid : recipients) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && plugin.getWorldManager().isPrimaryGameWorld(room.getRoomId(), player.getWorld())) {
+                return player.getWorld();
+            }
+        }
+        return null;
     }
 
     private void scheduleEndedRoomClosure(GameRoom room, int closingSeconds) {
@@ -11651,7 +13340,7 @@ public class GameManager {
             return;
         }
         room.recordPreyPerformanceDeath(prey.getUniqueId());
-        int penalty = -Math.abs(getPerformanceInt("prey.death_penalty", 4));
+        int penalty = -Math.abs(Math.max(0, getPerformanceInt("prey.death_penalty", 4)));
         if (penalty == 0) {
             return;
         }
@@ -11667,11 +13356,11 @@ public class GameManager {
             return;
         }
         int count = room.recordHunterPerformanceDeath(hunter.getUniqueId());
-        int maxPenaltyCount = Math.max(1, getPerformanceInt("hunter.death_penalty_max_times", 5));
+        int maxPenaltyCount = Math.max(999, getPerformanceInt("hunter.death_penalty_max_times", 999));
         if (count > maxPenaltyCount) {
             return;
         }
-        int penalty = -Math.abs(getPerformanceInt("hunter.death_penalty", 1));
+        int penalty = -Math.abs(Math.max(0, getPerformanceInt("hunter.death_penalty", 3)));
         if (penalty == 0) {
             return;
         }
@@ -11688,7 +13377,7 @@ public class GameManager {
         }
         UUID uuid = player.getUniqueId();
         if (wasPrey) {
-            int penalty = -Math.abs(getPerformanceInt("prey.quit_penalty", 10));
+            int penalty = -Math.abs(Math.max(0, getPerformanceInt("prey.quit_penalty", 16)));
             if (penalty != 0) {
                 plugin.getPlayerDataManager().addPreyPoints(uuid, penalty, room.getGameMode());
                 Map<String, String> ph = new HashMap<>();
@@ -11699,7 +13388,7 @@ public class GameManager {
             return;
         }
 
-        int penalty = -Math.abs(getPerformanceInt("hunter.quit_penalty", 8));
+        int penalty = -Math.abs(Math.max(0, getPerformanceInt("hunter.quit_penalty", 10)));
         if (penalty != 0) {
             plugin.getPlayerDataManager().addHunterPoints(uuid, penalty, room.getGameMode());
             Map<String, String> ph = new HashMap<>();
@@ -11711,53 +13400,117 @@ public class GameManager {
 
     private void awardHunterPerformance(GameRoom room, Player player, boolean preyWin) {
         UUID uuid = player.getUniqueId();
-        int win = (!preyWin && !room.isPreyQuit()) ? getPerformanceInt("hunter.win", 5) : 0;
-        int kill = room.getHunterPerformanceKillCredit(uuid) * getPerformanceInt("hunter.kill_prey", 6);
-        int finalKill = room.getHunterPerformanceFinalKillCount(uuid) * getPerformanceInt("hunter.final_kill_bonus", 4);
-        int damageUnit = Math.max(1, getPerformanceInt("hunter.damage_unit", 30));
-        int damage = (int) Math.floor(room.getDamageDealt(uuid) / damageUnit) * getPerformanceInt("hunter.damage_points", 1);
-        int raw = Math.max(0, win + kill + finalKill + damage);
-        int capped = Math.min(raw, Math.max(1, getPerformanceInt("hunter.max_per_game", 25)));
-        int awarded = applyShortGameReduction(room, capped);
-        if (awarded <= 0) {
-            return;
-        }
+        int win = (!preyWin && !room.isPreyQuit()) ? Math.min(2, getPerformanceInt("hunter.win", 2)) : 0;
+        int kill = room.getHunterPerformanceKillCredit(uuid) * Math.min(3, getPerformanceInt("hunter.kill_prey", 3));
+        int finalKill = room.getHunterPerformanceFinalKillCount(uuid) * Math.min(2, getPerformanceInt("hunter.final_kill_bonus", 2));
+        int damageUnit = Math.max(60, getPerformanceInt("hunter.damage_unit", 70));
+        int damage = (int) Math.floor(room.getDamageDealt(uuid) / damageUnit) * Math.min(1, getPerformanceInt("hunter.damage_points", 1));
+        int attackUnit = Math.max(1, getPerformanceInt("hunter.attack_unit", 5));
+        int attack = Math.min(Math.max(0, getPerformanceInt("hunter.attack_max_points", 3)),
+                (room.getAttackCount(uuid) / attackUnit) * Math.max(0, getPerformanceInt("hunter.attack_points", 1)));
+        int miningUnit = Math.max(1, getPerformanceInt("hunter.mining_value_unit", 8));
+        int mining = Math.min(Math.max(0, getPerformanceInt("hunter.mining_max_points", 4)),
+                (room.getMiningContribution(uuid) / miningUnit) * Math.max(0, getPerformanceInt("hunter.mining_points", 1)));
+        int backpackUnit = Math.max(1, getPerformanceInt("hunter.shared_backpack_item_unit", 12));
+        int backpack = Math.min(Math.max(0, getPerformanceInt("hunter.shared_backpack_max_points", 3)),
+                (room.getSharedBackpackContribution(uuid) / backpackUnit) * Math.max(0, getPerformanceInt("hunter.shared_backpack_points", 1)));
+        int death = -room.getHunterPerformanceDeathCount(uuid)
+                * Math.abs(Math.max(0, getPerformanceInt("hunter.death_result_penalty", 3)));
+        int raw = win + kill + finalKill + damage + attack + mining + backpack + death;
+        int capped = capPerformanceScore(raw,
+                Math.max(1, getPerformanceInt("hunter.max_per_game", 12)),
+                Math.max(0, getPerformanceInt("hunter.max_loss_per_game", 10)));
+        int awarded = applyModePerformanceMultiplier(room, applyShortGameReduction(room, capped));
 
-        plugin.getPlayerDataManager().addHunterPoints(uuid, awarded, room.getGameMode());
+        if (awarded != 0) {
+            plugin.getPlayerDataManager().addHunterPoints(uuid, awarded, room.getGameMode());
+        }
         int total = plugin.getPlayerDataManager().getPlayerData(uuid).getHunterPointsTotal();
         Map<String, String> ph = new HashMap<>();
         ph.put("points", signed(awarded));
         ph.put("rank", HunterPerformanceRank.coloredHunterRank(total));
-        ph.put("breakdown", "胜利 " + win + " / 击杀 " + kill + " / 终结 " + finalKill + " / 伤害 " + damage);
+        ph.put("breakdown", "胜利 " + win + " / 击杀 " + kill + " / 终结 " + finalKill
+                + " / 伤害 " + damage + " / 攻击 " + attack + " / 挖矿 " + mining
+                + " / 背包 " + backpack + " / 阵亡 " + death);
         player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.hunter_result", ph));
     }
 
     private void awardPreyPerformance(GameRoom room, Player player, boolean preyWin) {
         UUID uuid = player.getUniqueId();
-        int win = preyWin ? getPerformanceInt("prey.win", 8) : 0;
+        int win = preyWin ? Math.min(4, getPerformanceInt("prey.win", 4)) : 0;
         long aliveMillis = room.getPreyPerformanceAliveMillis(uuid);
-        int survivalUnitMinutes = Math.max(1, getPerformanceInt("prey.survival_unit_minutes", 6));
-        int survival = (int) (aliveMillis / (survivalUnitMinutes * 60_000L)) * getPerformanceInt("prey.survival_points", 2);
-        int kill = room.getPreyPerformanceKillCredit(uuid) * getPerformanceInt("prey.kill_hunter", 3);
-        int distanceUnit = Math.max(1, getPerformanceInt("prey.distance_unit", 800));
-        int distance = (int) Math.floor(room.getDistanceRun(uuid) / distanceUnit) * getPerformanceInt("prey.distance_points", 1);
-        int raw = Math.max(0, win + survival + kill + distance);
-        int capped = Math.min(raw, Math.max(1, getPerformanceInt("prey.max_per_game", 30)));
+        int survivalUnitMinutes = Math.max(10, getPerformanceInt("prey.survival_unit_minutes", 10));
+        int survival = (int) (aliveMillis / (survivalUnitMinutes * 60_000L)) * Math.min(1, getPerformanceInt("prey.survival_points", 1));
+        int kill = room.getPreyPerformanceKillCredit(uuid) * Math.min(2, getPerformanceInt("prey.kill_hunter", 2));
+        int damageUnit = Math.max(50, getPerformanceInt("prey.damage_unit", 60));
+        int damage = (int) Math.floor(room.getDamageDealt(uuid) / damageUnit) * Math.min(1, getPerformanceInt("prey.damage_points", 1));
+        int attackUnit = Math.max(1, getPerformanceInt("prey.attack_unit", 5));
+        int attack = Math.min(Math.max(0, getPerformanceInt("prey.attack_max_points", 3)),
+                (room.getAttackCount(uuid) / attackUnit) * Math.max(0, getPerformanceInt("prey.attack_points", 1)));
+        int miningUnit = Math.max(1, getPerformanceInt("prey.mining_value_unit", 10));
+        int mining = Math.min(Math.max(0, getPerformanceInt("prey.mining_max_points", 4)),
+                (room.getMiningContribution(uuid) / miningUnit) * Math.max(0, getPerformanceInt("prey.mining_points", 1)));
+        int backpackUnit = Math.max(1, getPerformanceInt("prey.shared_backpack_item_unit", 16));
+        int backpack = Math.min(Math.max(0, getPerformanceInt("prey.shared_backpack_max_points", 2)),
+                (room.getSharedBackpackContribution(uuid) / backpackUnit) * Math.max(0, getPerformanceInt("prey.shared_backpack_points", 1)));
+        int distanceUnit = Math.max(1400, getPerformanceInt("prey.distance_unit", 1400));
+        int distance = (int) Math.floor(room.getDistanceRun(uuid) / distanceUnit) * Math.min(1, getPerformanceInt("prey.distance_points", 1));
+        int death = -room.getPreyPerformanceDeathCount(uuid)
+                * Math.abs(Math.max(0, getPerformanceInt("prey.death_result_penalty", 2)));
+        int startItemPercent = getFlashPreyStartChoicePerformancePercent(room, uuid);
+        int raw = win + survival + kill + damage + attack + mining + backpack + distance + death;
+        int capped = capPerformanceScore(raw,
+                Math.max(1, getPerformanceInt("prey.max_per_game", 14)),
+                Math.max(0, getPerformanceInt("prey.max_loss_per_game", 12)));
         int awarded = applyShortGameReduction(room, capped);
-        if (preyWin && room.getDistanceRun(uuid) < getPerformanceInt("prey.win_min_distance", 200)) {
+        if (preyWin && room.getDistanceRun(uuid) < Math.max(900, getPerformanceInt("prey.win_min_distance", 900))) {
             awarded = halfPositive(awarded);
         }
-        if (awarded <= 0) {
-            return;
-        }
+        awarded = applyModePerformanceMultiplier(room, awarded);
+        awarded = applyFlashPreyStartChoicePerformancePercent(awarded, startItemPercent);
 
-        plugin.getPlayerDataManager().addPreyPoints(uuid, awarded, room.getGameMode());
+        if (awarded != 0) {
+            plugin.getPlayerDataManager().addPreyPoints(uuid, awarded, room.getGameMode());
+        }
         int total = plugin.getPlayerDataManager().getPlayerData(uuid).getPreyPointsTotal();
         Map<String, String> ph = new HashMap<>();
         ph.put("points", signed(awarded));
         ph.put("rank", HunterPerformanceRank.coloredPreyRank(total));
-        ph.put("breakdown", "胜利 " + win + " / 存活 " + survival + " / 反杀 " + kill + " / 移动 " + distance);
+        ph.put("breakdown", "胜利 " + win + " / 存活 " + survival + " / 反杀 " + kill
+                + " / 伤害 " + damage + " / 攻击 " + attack + " / 挖矿 " + mining
+                + " / 背包 " + backpack + " / 移动 " + distance + " / 阵亡 " + death
+                + (startItemPercent == 0 ? "" : " / 开局 " + signedPercent(startItemPercent)));
         player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("points.prey_result", ph));
+    }
+
+    private int getFlashPreyStartChoicePerformancePercent(GameRoom room, UUID uuid) {
+        if (!usesFlashPreyStartChoices(room) || uuid == null) {
+            return 0;
+        }
+        return getFlashPreyStartChoice(room, uuid).performancePercent;
+    }
+
+    private int applyFlashPreyStartChoicePerformancePercent(int amount, int percent) {
+        if (amount == 0 || percent == 0) {
+            return amount;
+        }
+        int delta = Math.max(1, (int) Math.round(Math.abs(amount) * (Math.abs(percent) / 100.0D)));
+        if (amount > 0) {
+            return percent > 0 ? amount + delta : Math.max(0, amount - delta);
+        }
+        return percent > 0 ? Math.min(0, amount + delta) : amount - delta;
+    }
+
+    private int capPerformanceScore(int raw, int maxGain, int maxLoss) {
+        int gainCap = Math.max(0, maxGain);
+        int lossCap = Math.max(0, maxLoss);
+        if (raw > 0) {
+            return Math.min(raw, gainCap);
+        }
+        if (raw < 0) {
+            return Math.max(raw, -lossCap);
+        }
+        return 0;
     }
 
     private int applyShortGameReduction(GameRoom room, int amount) {
@@ -11775,12 +13528,32 @@ public class GameManager {
         return Math.max(1, amount / 2);
     }
 
+    private int applyModePerformanceMultiplier(GameRoom room, int amount) {
+        if (amount <= 0 || room == null || room.getGameMode() == null) {
+            return amount;
+        }
+        double defaultMultiplier = room.getGameMode() == GameMode.END_FLASH ? 0.35D : 1.0D;
+        double multiplier = plugin.getConfigManager().getConfig().getDouble(
+                "hunter_game.performance_value.mode_multipliers." + room.getGameMode().getId(), defaultMultiplier);
+        if (multiplier >= 0.999D) {
+            return amount;
+        }
+        if (multiplier <= 0.0D) {
+            return 0;
+        }
+        return Math.max(1, (int) Math.floor(amount * multiplier));
+    }
+
     private int getPerformanceInt(String path, int fallback) {
         return plugin.getConfigManager().getConfig().getInt("hunter_game.performance_value." + path, fallback);
     }
 
     private String signed(int value) {
         return value > 0 ? "+" + value : String.valueOf(value);
+    }
+
+    private String signedPercent(int value) {
+        return (value > 0 ? "+" : "") + value + "%";
     }
 
     private void recordGameData(GameRoom room, boolean preyWin) {
@@ -11953,6 +13726,12 @@ public class GameManager {
             bossBar.setVisible(false);
         }
         survivalBossBars.clear();
+
+        for (BossBar bossBar : deathSwapBossBars.values()) {
+            bossBar.removeAll();
+            bossBar.setVisible(false);
+        }
+        deathSwapBossBars.clear();
     }
 
     // 获取安全的出生位置（避免卡在方块里）
@@ -12134,7 +13913,7 @@ public class GameManager {
             }
             case THUNDER_MARK -> {
                 world.spawnParticle(Particle.ELECTRIC_SPARK, center, 36, 0.45D, 0.5D, 0.45D, 0.08D);
-                world.spawnParticle(Particle.FLASH, center, 1,
+                world.spawnParticle(Particle.END_ROD, center, 1,
                         0.0D, 0.0D, 0.0D, 0.0D);
                 playKillEffectNearbySound(center, Sound.ENTITY_LIGHTNING_BOLT_THUNDER, 0.45f, 1.35f, 20.0D);
             }
@@ -12160,7 +13939,7 @@ public class GameManager {
                 world.spawnParticle(Particle.FLAME, center, 40, 0.4D, 0.35D, 0.4D, 0.02D);
                 world.spawnParticle(Particle.DUST, center, 28, 0.36D, 0.24D, 0.36D,
                         new Particle.DustOptions(Color.fromRGB(255, 184, 52), 1.75f));
-                world.spawnParticle(Particle.FLASH, center, 1,
+                world.spawnParticle(Particle.END_ROD, center, 1,
                         0.0D, 0.0D, 0.0D, 0.0D);
                 playKillEffectNearbySound(center, Sound.ITEM_FIRECHARGE_USE, 0.82f, 1.28f, 18.0D);
             }
@@ -12216,34 +13995,44 @@ public class GameManager {
         }
     }
 
+    private void runVictoryEffectTimer(int maxTick, long periodTicks, int tickStep,
+                                       java.util.function.IntConsumer tickAction, Runnable finishAction) {
+        final int[] tick = {0};
+        final BukkitTask[] task = new BukkitTask[1];
+        task[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (tick[0] > maxTick) {
+                if (finishAction != null) {
+                    finishAction.run();
+                }
+                if (task[0] != null) {
+                    task[0].cancel();
+                }
+                return;
+            }
+            tickAction.accept(tick[0]);
+            tick[0] += Math.max(1, tickStep);
+        }, 0L, Math.max(1L, periodTicks));
+    }
+
     private void playBlackHoleEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_BEACON_DEACTIVATE, 1.3f, 0.55f);
         world.playSound(center, Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 0.65f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 100) {
-                    world.playSound(center, Sound.ENTITY_GENERIC_EXPLODE, 0.8f, 0.7f);
-                    world.spawnParticle(Particle.FLASH, center, 1,
-                            0.0D, 0.0D, 0.0D, 0.0D);
-                    cancel();
-                    return;
-                }
-                world.spawnParticle(Particle.DUST, center, 30, 1.2, 1.2, 1.2,
-                        new Particle.DustOptions(Color.BLACK, 3.5f));
-                for (int i = 0; i < 28; i++) {
-                    double angle = Math.toRadians((tick * 18 + i * 360.0 / 28));
-                    double radius = Math.max(0.3, 7.0 - tick * 0.06);
-                    Location p = center.clone().add(Math.cos(angle) * radius, 0.4 + Math.sin(tick * 0.13 + i) * 1.8, Math.sin(angle) * radius);
-                    world.spawnParticle(Particle.REVERSE_PORTAL, p, 2, 0.05, 0.05, 0.05, 0.02);
-                    world.spawnParticle(Particle.SQUID_INK, p, 1, 0.03, 0.03, 0.03, 0.01);
-                }
-                tick += 2;
+        runVictoryEffectTimer(100, 2L, 2, tick -> {
+            world.spawnParticle(Particle.DUST, center, 30, 1.2, 1.2, 1.2,
+                    new Particle.DustOptions(Color.BLACK, 3.5f));
+            for (int i = 0; i < 28; i++) {
+                double angle = Math.toRadians((tick * 18 + i * 360.0 / 28));
+                double radius = Math.max(0.3, 7.0 - tick * 0.06);
+                Location p = center.clone().add(Math.cos(angle) * radius, 0.4 + Math.sin(tick * 0.13 + i) * 1.8, Math.sin(angle) * radius);
+                world.spawnParticle(Particle.REVERSE_PORTAL, p, 2, 0.05, 0.05, 0.05, 0.02);
+                world.spawnParticle(Particle.SQUID_INK, p, 1, 0.03, 0.03, 0.03, 0.01);
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, () -> {
+            world.playSound(center, Sound.ENTITY_GENERIC_EXPLODE, 0.8f, 0.7f);
+            world.spawnParticle(Particle.END_ROD, center, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        });
     }
 
     private void playStarRainEffect(Location center) {
@@ -12251,49 +14040,30 @@ public class GameManager {
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_AMETHYST_CLUSTER_BREAK, 1.1f, 1.8f);
         Random random = new Random();
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 80) {
-                    spawnFireworksNearLocation(world, center, 8);
-                    cancel();
-                    return;
-                }
-                for (int i = 0; i < 10; i++) {
-                    Location p = center.clone().add((random.nextDouble() - 0.5) * 14, 7 - random.nextDouble() * 4, (random.nextDouble() - 0.5) * 14);
-                    world.spawnParticle(Particle.END_ROD, p, 3, 0.12, 0.6, 0.12, 0.04);
-                    world.spawnParticle(Particle.FIREWORK, p, 2, 0.08, 0.2, 0.08, 0.03);
-                }
-                tick += 4;
+        runVictoryEffectTimer(80, 4L, 4, tick -> {
+            for (int i = 0; i < 10; i++) {
+                Location p = center.clone().add((random.nextDouble() - 0.5) * 14, 7 - random.nextDouble() * 4, (random.nextDouble() - 0.5) * 14);
+                world.spawnParticle(Particle.END_ROD, p, 3, 0.12, 0.6, 0.12, 0.04);
+                world.spawnParticle(Particle.FIREWORK, p, 2, 0.08, 0.2, 0.08, 0.03);
             }
-        }.runTaskTimer(plugin, 0L, 4L);
+        }, () -> spawnFireworksNearLocation(world, center, 8));
     }
 
     private void playDragonBreathBloomEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.ENTITY_ENDER_DRAGON_GROWL, 0.8f, 1.45f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 90) {
-                    cancel();
-                    return;
-                }
-                double radius = 1.0 + tick * 0.055;
-                for (int i = 0; i < 36; i++) {
-                    double angle = Math.toRadians(i * 10 + tick * 4);
-                    Location p = center.clone().add(Math.cos(angle) * radius, 0.6 + Math.sin(angle * 2) * 0.35, Math.sin(angle) * radius);
-                    world.spawnParticle(Particle.DRAGON_BREATH, p,
-                            2, 0.05, 0.05, 0.05, 0.01, 1.0F);
-                }
-                world.spawnParticle(Particle.DUST, center.clone().add(0, 1, 0), 12, 1.0, 0.6, 1.0,
-                        new Particle.DustOptions(Color.PURPLE, 1.8f));
-                tick += 3;
+        runVictoryEffectTimer(90, 3L, 3, tick -> {
+            double radius = 1.0 + tick * 0.055;
+            for (int i = 0; i < 36; i++) {
+                double angle = Math.toRadians(i * 10 + tick * 4);
+                Location p = center.clone().add(Math.cos(angle) * radius, 0.6 + Math.sin(angle * 2) * 0.35, Math.sin(angle) * radius);
+                world.spawnParticle(Particle.DRAGON_BREATH, p,
+                        2, 0.05, 0.05, 0.05, 0.01, 1.0F);
             }
-        }.runTaskTimer(plugin, 0L, 3L);
+            world.spawnParticle(Particle.DUST, center.clone().add(0, 1, 0), 12, 1.0, 0.6, 1.0,
+                    new Particle.DustOptions(Color.PURPLE, 1.8f));
+        }, null);
     }
 
     private void playThunderCrownEffect(Location center) {
@@ -12301,147 +14071,93 @@ public class GameManager {
         if (world == null) return;
         world.strikeLightningEffect(center);
         world.playSound(center, Sound.ITEM_TRIDENT_THUNDER, 1.2f, 1.15f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 70) {
-                    cancel();
-                    return;
-                }
-                for (int i = 0; i < 12; i++) {
-                    double angle = Math.toRadians(i * 30 + tick * 7);
-                    Location p = center.clone().add(Math.cos(angle) * 3.0, 2.2 + Math.sin(i) * 0.35, Math.sin(angle) * 3.0);
-                    world.spawnParticle(Particle.ELECTRIC_SPARK, p, 5, 0.1, 0.1, 0.1, 0.05);
-                    world.spawnParticle(Particle.DUST, p, 2, 0.04, 0.04, 0.04,
-                            new Particle.DustOptions(Color.YELLOW, 1.6f));
-                }
-                tick += 2;
+        runVictoryEffectTimer(70, 2L, 2, tick -> {
+            for (int i = 0; i < 12; i++) {
+                double angle = Math.toRadians(i * 30 + tick * 7);
+                Location p = center.clone().add(Math.cos(angle) * 3.0, 2.2 + Math.sin(i) * 0.35, Math.sin(angle) * 3.0);
+                world.spawnParticle(Particle.ELECTRIC_SPARK, p, 5, 0.1, 0.1, 0.1, 0.05);
+                world.spawnParticle(Particle.DUST, p, 2, 0.04, 0.04, 0.04,
+                        new Particle.DustOptions(Color.YELLOW, 1.6f));
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 
     private void playSoulVortexEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_SOUL_SAND_PLACE, 1.2f, 0.8f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 100) {
-                    cancel();
-                    return;
-                }
-                for (int i = 0; i < 26; i++) {
-                    double y = i * 0.11;
-                    double angle = Math.toRadians(tick * 8 + i * 24);
-                    double radius = 3.2 - i * 0.07;
-                    Location p = center.clone().add(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
-                    world.spawnParticle(Particle.SOUL_FIRE_FLAME, p, 2, 0.04, 0.04, 0.04, 0.01);
-                    world.spawnParticle(Particle.SOUL, p, 1, 0.04, 0.04, 0.04, 0.01);
-                }
-                tick += 2;
+        runVictoryEffectTimer(100, 2L, 2, tick -> {
+            for (int i = 0; i < 26; i++) {
+                double y = i * 0.11;
+                double angle = Math.toRadians(tick * 8 + i * 24);
+                double radius = 3.2 - i * 0.07;
+                Location p = center.clone().add(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
+                world.spawnParticle(Particle.SOUL_FIRE_FLAME, p, 2, 0.04, 0.04, 0.04, 0.01);
+                world.spawnParticle(Particle.SOUL, p, 1, 0.04, 0.04, 0.04, 0.01);
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 
     private void playAuroraSpiralEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_BEACON_POWER_SELECT, 1.0f, 1.7f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 90) {
-                    cancel();
-                    return;
-                }
-                for (int i = 0; i < 32; i++) {
-                    double angle = Math.toRadians(tick * 6 + i * 18);
-                    double radius = 2.0 + Math.sin((tick + i) * 0.12);
-                    Location p = center.clone().add(Math.cos(angle) * radius, i * 0.09, Math.sin(angle) * radius);
-                    Color color = i % 2 == 0 ? Color.AQUA : Color.FUCHSIA;
-                    world.spawnParticle(Particle.DUST, p, 2, 0.06, 0.06, 0.06,
-                            new Particle.DustOptions(color, 1.4f));
-                }
-                tick += 2;
+        runVictoryEffectTimer(90, 2L, 2, tick -> {
+            for (int i = 0; i < 32; i++) {
+                double angle = Math.toRadians(tick * 6 + i * 18);
+                double radius = 2.0 + Math.sin((tick + i) * 0.12);
+                Location p = center.clone().add(Math.cos(angle) * radius, i * 0.09, Math.sin(angle) * radius);
+                Color color = i % 2 == 0 ? Color.AQUA : Color.FUCHSIA;
+                world.spawnParticle(Particle.DUST, p, 2, 0.06, 0.06, 0.06,
+                        new Particle.DustOptions(color, 1.4f));
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 
     private void playCrystalBloomEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_AMETHYST_CLUSTER_BREAK, 1.2f, 1.4f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 70) {
-                    cancel();
-                    return;
-                }
-                double radius = 0.5 + tick * 0.07;
-                for (int i = 0; i < 40; i++) {
-                    double angle = Math.toRadians(i * 9);
-                    Location p = center.clone().add(Math.cos(angle) * radius, 0.7 + Math.sin(tick * 0.12) * 0.6, Math.sin(angle) * radius);
-                    world.spawnParticle(Particle.END_ROD, p, 1, 0.03, 0.03, 0.03, 0.02);
-                    world.spawnParticle(Particle.DUST, p, 1, 0.03, 0.03, 0.03,
-                            new Particle.DustOptions(Color.fromRGB(190, 130, 255), 1.2f));
-                }
-                tick += 2;
+        runVictoryEffectTimer(70, 2L, 2, tick -> {
+            double radius = 0.5 + tick * 0.07;
+            for (int i = 0; i < 40; i++) {
+                double angle = Math.toRadians(i * 9);
+                Location p = center.clone().add(Math.cos(angle) * radius, 0.7 + Math.sin(tick * 0.12) * 0.6, Math.sin(angle) * radius);
+                world.spawnParticle(Particle.END_ROD, p, 1, 0.03, 0.03, 0.03, 0.02);
+                world.spawnParticle(Particle.DUST, p, 1, 0.03, 0.03, 0.03,
+                        new Particle.DustOptions(Color.fromRGB(190, 130, 255), 1.2f));
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 
     private void playGoldenPillarEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_BEACON_POWER_SELECT, 1.0f, 1.45f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 60) {
-                    cancel();
-                    return;
-                }
-                for (int y = 0; y < 8; y++) {
-                    Location p = center.clone().add(0.0D, y * 0.45D, 0.0D);
-                    world.spawnParticle(Particle.END_ROD, p, 2, 0.12D, 0.05D, 0.12D, 0.02D);
-                    world.spawnParticle(Particle.DUST, p, 3, 0.18D, 0.08D, 0.18D,
-                            new Particle.DustOptions(Color.fromRGB(255, 214, 64), 1.7f));
-                }
-                tick += 3;
+        runVictoryEffectTimer(60, 3L, 3, tick -> {
+            for (int y = 0; y < 8; y++) {
+                Location p = center.clone().add(0.0D, y * 0.45D, 0.0D);
+                world.spawnParticle(Particle.END_ROD, p, 2, 0.12D, 0.05D, 0.12D, 0.02D);
+                world.spawnParticle(Particle.DUST, p, 3, 0.18D, 0.08D, 0.18D,
+                        new Particle.DustOptions(Color.fromRGB(255, 214, 64), 1.7f));
             }
-        }.runTaskTimer(plugin, 0L, 3L);
+        }, null);
     }
 
     private void playCloverRingEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.9f, 1.7f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 72) {
-                    cancel();
-                    return;
-                }
-                double radius = 2.0D + Math.sin(tick * 0.08D) * 0.5D;
-                for (int i = 0; i < 28; i++) {
-                    double angle = Math.toRadians(i * (360.0D / 28.0D) + tick * 5.0D);
-                    Location p = center.clone().add(Math.cos(angle) * radius, 0.55D, Math.sin(angle) * radius);
-                    world.spawnParticle(Particle.HAPPY_VILLAGER, p, 1, 0.04D, 0.04D, 0.04D, 0.01D);
-                    world.spawnParticle(Particle.DUST, p, 1, 0.03D, 0.03D, 0.03D,
-                            new Particle.DustOptions(Color.fromRGB(92, 255, 120), 1.45f));
-                }
-                tick += 2;
+        runVictoryEffectTimer(72, 2L, 2, tick -> {
+            double radius = 2.0D + Math.sin(tick * 0.08D) * 0.5D;
+            for (int i = 0; i < 28; i++) {
+                double angle = Math.toRadians(i * (360.0D / 28.0D) + tick * 5.0D);
+                Location p = center.clone().add(Math.cos(angle) * radius, 0.55D, Math.sin(angle) * radius);
+                world.spawnParticle(Particle.HAPPY_VILLAGER, p, 1, 0.04D, 0.04D, 0.04D, 0.01D);
+                world.spawnParticle(Particle.DUST, p, 1, 0.03D, 0.03D, 0.03D,
+                        new Particle.DustOptions(Color.fromRGB(92, 255, 120), 1.45f));
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 
     private void playSkyGiftEffect(Location center) {
@@ -12450,51 +14166,32 @@ public class GameManager {
         world.playSound(center, Sound.ENTITY_ITEM_PICKUP, 0.85f, 0.8f);
         world.playSound(center, Sound.BLOCK_CHEST_OPEN, 0.7f, 1.2f);
         Random random = new Random();
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 50) {
-                    spawnFireworksNearLocation(world, center, 6);
-                    cancel();
-                    return;
-                }
-                for (int i = 0; i < 8; i++) {
-                    Location p = center.clone().add((random.nextDouble() - 0.5D) * 6.0D, 5.5D - tick * 0.08D, (random.nextDouble() - 0.5D) * 6.0D);
-                    world.spawnParticle(Particle.GLOW, p, 2, 0.05D, 0.05D, 0.05D, 0.02D);
-                    world.spawnParticle(Particle.TOTEM_OF_UNDYING, p, 1, 0.04D, 0.04D, 0.04D, 0.01D);
-                }
-                tick += 2;
+        runVictoryEffectTimer(50, 2L, 2, tick -> {
+            for (int i = 0; i < 8; i++) {
+                Location p = center.clone().add((random.nextDouble() - 0.5D) * 6.0D, 5.5D - tick * 0.08D, (random.nextDouble() - 0.5D) * 6.0D);
+                world.spawnParticle(Particle.GLOW, p, 2, 0.05D, 0.05D, 0.05D, 0.02D);
+                world.spawnParticle(Particle.TOTEM_OF_UNDYING, p, 1, 0.04D, 0.04D, 0.04D, 0.01D);
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, () -> spawnFireworksNearLocation(world, center, 6));
     }
 
     private void playVoidLotusEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.ENTITY_ENDERMAN_TELEPORT, 0.95f, 0.7f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 68) {
-                    cancel();
-                    return;
+        runVictoryEffectTimer(68, 2L, 2, tick -> {
+            double radius = 0.8D + tick * 0.05D;
+            for (int petal = 0; petal < 6; petal++) {
+                double base = Math.toRadians(petal * 60.0D + tick * 3.0D);
+                for (int i = 0; i < 8; i++) {
+                    double angle = base + Math.toRadians(i * 6.0D);
+                    Location p = center.clone().add(Math.cos(angle) * radius, 0.45D + Math.sin(i * 0.55D) * 0.25D, Math.sin(angle) * radius);
+                    world.spawnParticle(Particle.REVERSE_PORTAL, p, 1, 0.03D, 0.03D, 0.03D, 0.02D);
+                    world.spawnParticle(Particle.DUST, p, 1, 0.03D, 0.03D, 0.03D,
+                            new Particle.DustOptions(Color.fromRGB(150, 78, 255), 1.35f));
                 }
-                double radius = 0.8D + tick * 0.05D;
-                for (int petal = 0; petal < 6; petal++) {
-                    double base = Math.toRadians(petal * 60.0D + tick * 3.0D);
-                    for (int i = 0; i < 8; i++) {
-                        double angle = base + Math.toRadians(i * 6.0D);
-                        Location p = center.clone().add(Math.cos(angle) * radius, 0.45D + Math.sin(i * 0.55D) * 0.25D, Math.sin(angle) * radius);
-                        world.spawnParticle(Particle.REVERSE_PORTAL, p, 1, 0.03D, 0.03D, 0.03D, 0.02D);
-                        world.spawnParticle(Particle.DUST, p, 1, 0.03D, 0.03D, 0.03D,
-                                new Particle.DustOptions(Color.fromRGB(150, 78, 255), 1.35f));
-                    }
-                }
-                tick += 2;
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 
     private void playHoneySplashEffect(Location center) {
@@ -12511,54 +14208,36 @@ public class GameManager {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.BLOCK_BEACON_AMBIENT, 0.82f, 1.52f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 70) {
-                    cancel();
-                    return;
-                }
-                for (int i = 0; i < 20; i++) {
-                    double angle = Math.toRadians(i * 18.0D + tick * 8.0D);
-                    double radius = 1.25D + Math.sin((tick + i) * 0.15D) * 0.35D;
-                    Location p = center.clone().add(Math.cos(angle) * radius, i * 0.12D, Math.sin(angle) * radius);
-                    Color color = switch (i % 4) {
-                        case 0 -> Color.AQUA;
-                        case 1 -> Color.FUCHSIA;
-                        case 2 -> Color.YELLOW;
-                        default -> Color.WHITE;
-                    };
-                    world.spawnParticle(Particle.DUST, p, 2, 0.03D, 0.03D, 0.03D,
-                            new Particle.DustOptions(color, 1.35f));
-                    world.spawnParticle(Particle.END_ROD, p, 1, 0.02D, 0.02D, 0.02D, 0.01D);
-                }
-                tick += 2;
+        runVictoryEffectTimer(70, 2L, 2, tick -> {
+            for (int i = 0; i < 20; i++) {
+                double angle = Math.toRadians(i * 18.0D + tick * 8.0D);
+                double radius = 1.25D + Math.sin((tick + i) * 0.15D) * 0.35D;
+                Location p = center.clone().add(Math.cos(angle) * radius, i * 0.12D, Math.sin(angle) * radius);
+                Color color = switch (i % 4) {
+                    case 0 -> Color.AQUA;
+                    case 1 -> Color.FUCHSIA;
+                    case 2 -> Color.YELLOW;
+                    default -> Color.WHITE;
+                };
+                world.spawnParticle(Particle.DUST, p, 2, 0.03D, 0.03D, 0.03D,
+                        new Particle.DustOptions(color, 1.35f));
+                world.spawnParticle(Particle.END_ROD, p, 1, 0.02D, 0.02D, 0.02D, 0.01D);
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 
     private void playTotemGardenEffect(Location center) {
         World world = center.getWorld();
         if (world == null) return;
         world.playSound(center, Sound.ITEM_TOTEM_USE, 0.72f, 1.05f);
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override
-            public void run() {
-                if (tick > 56) {
-                    cancel();
-                    return;
-                }
-                double radius = 1.0D + tick * 0.06D;
-                for (int i = 0; i < 18; i++) {
-                    double angle = Math.toRadians(i * 20.0D);
-                    Location p = center.clone().add(Math.cos(angle) * radius, 0.35D + Math.sin(tick * 0.12D) * 0.2D, Math.sin(angle) * radius);
-                    world.spawnParticle(Particle.TOTEM_OF_UNDYING, p, 1, 0.03D, 0.03D, 0.03D, 0.01D);
-                    world.spawnParticle(Particle.GLOW, p, 1, 0.04D, 0.04D, 0.04D, 0.01D);
-                }
-                tick += 2;
+        runVictoryEffectTimer(56, 2L, 2, tick -> {
+            double radius = 1.0D + tick * 0.06D;
+            for (int i = 0; i < 18; i++) {
+                double angle = Math.toRadians(i * 20.0D);
+                Location p = center.clone().add(Math.cos(angle) * radius, 0.35D + Math.sin(tick * 0.12D) * 0.2D, Math.sin(angle) * radius);
+                world.spawnParticle(Particle.TOTEM_OF_UNDYING, p, 1, 0.03D, 0.03D, 0.03D, 0.01D);
+                world.spawnParticle(Particle.GLOW, p, 1, 0.04D, 0.04D, 0.04D, 0.01D);
             }
-        }.runTaskTimer(plugin, 0L, 2L);
+        }, null);
     }
 }

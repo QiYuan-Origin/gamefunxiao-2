@@ -8,6 +8,10 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
+import org.bukkit.block.Block;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.generator.structure.Structure;
+import org.bukkit.util.StructureSearchResult;
 import org.bukkit.entity.Player;
 import org.mvplugins.multiverse.core.MultiverseCoreApi;
 import org.mvplugins.multiverse.core.world.options.UnloadWorldOptions;
@@ -27,8 +31,10 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.Locale;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,21 +42,46 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class WorldManager {
 
     private static final String TEMPLATE_LOBBY_NAME = "hugamelobby";
+    private static final String DEATH_SWAP_TEMPLATE_LOBBY_NAME = "gamefun_deathswap_lobby";
     private static final String LOBBY_PREFIX = "gamefun_lobby_";
     private static final String GAME_PREFIX = "gamefun_game_";
     private static final String END_FLASH_TUNING_WORLD_NAME = "gamefun_end_flash_debug_lobby";
+    private static final int FLASH_OUTPOST_REQUIRED_RADIUS_BLOCKS = 170;
+    private static final int FLASH_OUTPOST_VERIFY_RADIUS_CHUNKS = 8;
+    private static final int FLASH_OUTPOST_RESCUE_RADIUS_CHUNKS = 192;
+    private static final int FLASH_OUTPOST_SPAWN_ANCHOR_BLOCKS = 96;
+    private static final int FLASH_OUTPOST_CANDIDATE_SEARCH_RADIUS_BLOCKS = 1536;
+    private static final int FLASH_OUTPOST_SEED_MAX_ATTEMPTS = 1_000_000;
+    private static final long FLASH_OUTPOST_SEARCH_TIMEOUT_NANOS = 8_000_000_000L;
+    private static final long DEATH_SWAP_VILLAGE_SEARCH_TIMEOUT_NANOS = 8_000_000_000L;
+    private static final int FLASH_OUTPOST_VERIFY_WORLD_MAX_ATTEMPTS = 20;
+    private static final int FLASH_OUTPOST_SPACING = 32;
+    private static final int FLASH_OUTPOST_SEPARATION = 8;
+    private static final int FLASH_OUTPOST_DEFAULT_SALT = 165745296;
+    private static final int FLASH_OUTPOST_FREQUENCY_DIVISOR = 5;
+    private static final int FLASH_OUTPOST_VILLAGE_EXCLUSION_CHUNKS = 10;
+    private static final int FLASH_VILLAGE_SPACING = 34;
+    private static final int FLASH_VILLAGE_SEPARATION = 8;
+    private static final int FLASH_VILLAGE_DEFAULT_SALT = 10387312;
+    private static final long LARGE_FEATURE_X_MULTIPLIER = 341873128712L;
+    private static final long LARGE_FEATURE_Z_MULTIPLIER = 132897987541L;
     private final GameFunXiao plugin;
     private World templateLobbyWorld;
+    private World deathSwapTemplateLobbyWorld;
     private World endFlashTuningWorld;
     private final Map<String, World> lobbyWorlds = new HashMap<>();
     private final Map<String, Location> normalizedLobbySpawns = new HashMap<>();
     private final Map<String, World> gameWorlds = new HashMap<>();
+    private final Map<String, FlashOutpostSeedStatus> flashOutpostSeedStatuses = new HashMap<>();
+    private final Map<String, DeathSwapVillageSeedStatus> deathSwapVillageSeedStatuses = new HashMap<>();
     private final Map<String, World> netherWorlds = new HashMap<>();
     private final Map<String, World> endWorlds = new HashMap<>();
+    private final Set<Long> issuedGameSeeds = new LinkedHashSet<>();
 
     public WorldManager(GameFunXiao plugin) {
         this.plugin = plugin;
         initTemplateLobbyWorld();
+        initDeathSwapTemplateLobbyWorld();
     }
 
     private void initTemplateLobbyWorld() {
@@ -82,6 +113,34 @@ public class WorldManager {
         }
     }
 
+    private void initDeathSwapTemplateLobbyWorld() {
+        deathSwapTemplateLobbyWorld = Bukkit.getWorld(DEATH_SWAP_TEMPLATE_LOBBY_NAME);
+        if (deathSwapTemplateLobbyWorld != null) {
+            applyTemplateLobbyRules(deathSwapTemplateLobbyWorld);
+            plugin.getLogger().info("死亡互换等待大厅模板已加载: " + DEATH_SWAP_TEMPLATE_LOBBY_NAME);
+            return;
+        }
+
+        File templateFolder = new File(Bukkit.getWorldContainer(), DEATH_SWAP_TEMPLATE_LOBBY_NAME);
+        boolean existingTemplateWorld = templateFolder.exists();
+
+        WorldCreator creator = new WorldCreator(DEATH_SWAP_TEMPLATE_LOBBY_NAME);
+        creator.type(WorldType.FLAT);
+        creator.generateStructures(false);
+        creator.generator(new VoidWorldGenerator());
+
+        deathSwapTemplateLobbyWorld = creator.createWorld();
+        if (deathSwapTemplateLobbyWorld != null) {
+            if (existingTemplateWorld) {
+                applyTemplateLobbyRules(deathSwapTemplateLobbyWorld);
+                plugin.getLogger().info("死亡互换等待大厅模板已从已有文件加载: " + DEATH_SWAP_TEMPLATE_LOBBY_NAME);
+            } else {
+                setupNewDeathSwapTemplateLobbyWorld(deathSwapTemplateLobbyWorld);
+                plugin.getLogger().info("死亡互换等待大厅模板已创建: " + DEATH_SWAP_TEMPLATE_LOBBY_NAME);
+            }
+        }
+    }
+
     private void setRule(World world, String name, Object value) {
         if (world == null) {
             return;
@@ -107,6 +166,31 @@ public class WorldManager {
         applyTemplateLobbyRules(world);
         world.setSpawnLocation(new Location(world, 0.5, 65, 0.5));
         createDefaultPlatform(world);
+    }
+
+    private void setupNewDeathSwapTemplateLobbyWorld(World world) {
+        applyTemplateLobbyRules(world);
+        int baseY = 64;
+        int radius = 12;
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                boolean edge = Math.abs(x) == radius || Math.abs(z) == radius;
+                boolean axis = Math.abs(x) <= 1 || Math.abs(z) <= 1;
+                Material material = edge ? Material.RED_STAINED_GLASS : (axis ? Material.GRAY_STAINED_GLASS : Material.WHITE_STAINED_GLASS);
+                world.getBlockAt(x, baseY, z).setType(material, false);
+            }
+        }
+        for (int y = baseY + 1; y <= baseY + 3; y++) {
+            for (int x = -radius; x <= radius; x++) {
+                world.getBlockAt(x, y, -radius).setType(Material.BARRIER, false);
+                world.getBlockAt(x, y, radius).setType(Material.BARRIER, false);
+            }
+            for (int z = -radius; z <= radius; z++) {
+                world.getBlockAt(-radius, y, z).setType(Material.BARRIER, false);
+                world.getBlockAt(radius, y, z).setType(Material.BARRIER, false);
+            }
+        }
+        world.setSpawnLocation(new Location(world, 0.5D, baseY + 1.0D, 0.5D, 0.0F, 0.0F));
     }
 
     private void createDefaultPlatform(World world) {
@@ -151,7 +235,13 @@ public class WorldManager {
 
         MiniGameMapManager.MapDefinition miniGameMap = null;
         World sourceTemplateWorld = null;
-        if (mode != null && plugin.getMiniGameMapManager() != null && mode.isMiniGameMapEditableMode()) {
+        if (mode != null && mode.isDeathSwap()) {
+            if (deathSwapTemplateLobbyWorld == null) {
+                initDeathSwapTemplateLobbyWorld();
+            }
+            sourceTemplateWorld = deathSwapTemplateLobbyWorld;
+        }
+        if (sourceTemplateWorld == null && mode != null && plugin.getMiniGameMapManager() != null && mode.isMiniGameMapEditableMode()) {
             miniGameMap = plugin.getMiniGameMapManager().findUsableMap(mode, 1);
             if (miniGameMap != null) {
                 sourceTemplateWorld = getOrCreateMiniGameTemplateWorld(miniGameMap, MiniGameMapManager.EditWorldKind.LOBBY);
@@ -471,8 +561,12 @@ public class WorldManager {
         if (world.equals(templateLobbyWorld)) {
             return true;
         }
+        if (world.equals(deathSwapTemplateLobbyWorld)) {
+            return true;
+        }
         String name = world.getName();
         return TEMPLATE_LOBBY_NAME.equalsIgnoreCase(name)
+                || DEATH_SWAP_TEMPLATE_LOBBY_NAME.equalsIgnoreCase(name)
                 || END_FLASH_TUNING_WORLD_NAME.equalsIgnoreCase(name)
                 || (plugin.getMiniGameMapManager() != null && plugin.getMiniGameMapManager().isTemplateWorldName(name))
                 || name.toLowerCase().startsWith(LOBBY_PREFIX)
@@ -490,6 +584,9 @@ public class WorldManager {
     public void keepLobbyWeatherClear() {
         if (templateLobbyWorld != null) {
             applyLobbyWorldRules(templateLobbyWorld);
+        }
+        if (deathSwapTemplateLobbyWorld != null) {
+            applyLobbyWorldRules(deathSwapTemplateLobbyWorld);
         }
         if (endFlashTuningWorld != null) {
             applyLobbyWorldRules(endFlashTuningWorld);
@@ -629,6 +726,9 @@ public class WorldManager {
         if (resolved == null && sourceTemplateWorld != null) {
             resolved = copyLocationToWorld(sourceTemplateWorld.getSpawnLocation(), world);
         }
+        if (resolved == null && mode != null && mode.isDeathSwap() && deathSwapTemplateLobbyWorld != null) {
+            resolved = copyLocationToWorld(deathSwapTemplateLobbyWorld.getSpawnLocation(), world);
+        }
         if (resolved == null && templateLobbyWorld != null
                 && (mode == null || !mode.isMiniGameMapEditableMode())) {
             resolved = copyLocationToWorld(templateLobbyWorld.getSpawnLocation(), world);
@@ -664,10 +764,354 @@ public class WorldManager {
     }
 
     public World createGameWorld(String roomId) {
+        return createGameWorld(roomId, null);
+    }
+
+    public World createGameWorld(String roomId, GameMode mode) {
+        flashOutpostSeedStatuses.remove(roomId);
+        deathSwapVillageSeedStatuses.remove(roomId);
+        if (mode != null && mode.isDeathSwap()) {
+            return createDeathSwapGameWorld(roomId);
+        }
+        if (isFlashOutpostSeededMode(mode)) {
+            return createFlashOutpostSeededGameWorld(roomId, mode);
+        }
         String worldName = GAME_PREFIX + roomId.toLowerCase();
-        long seed = System.currentTimeMillis();
+        long seed = nextUniqueGameSeed(null);
+        markGameSeedIssued(seed);
 
         prepareFreshWorldFolder(worldName);
+        World world = createNormalGameWorldWithSeed(worldName, seed, true);
+
+        if (world != null) {
+            world.setKeepSpawnInMemory(false);
+            setupGameWorld(world);
+            gameWorlds.put(roomId, world);
+        }
+        return world;
+    }
+
+    public World createDeathSwapGameWorld(String roomId) {
+        deathSwapVillageSeedStatuses.remove(roomId);
+        String worldName = GAME_PREFIX + roomId.toLowerCase();
+        int radiusBlocks = plugin.getConfigManager().getDeathSwapVillageRadiusBlocks();
+        int maxAttempts = plugin.getConfigManager().getDeathSwapVillageMaxAttempts();
+        int villageSalt = readSpigotStructureSeed(worldName, "seed-village", FLASH_VILLAGE_DEFAULT_SALT);
+        plugin.getLogger().info("开始为死亡互换外部算法筛选村庄种子: " + worldName
+                + "，要求出生点附近 " + radiusBlocks + " 格内有村庄候选，筛中前不会创建世界，超过 8 秒就随机世界"
+                + "，villageSalt=" + villageSalt);
+
+        long searchStartedAt = System.nanoTime();
+        Set<Long> attemptedSeeds = new LinkedHashSet<>();
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (isDeathSwapVillageSearchTimedOut(searchStartedAt)) {
+                return createDeathSwapRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
+                        "死亡互换外部筛村庄超过 8 秒，随机创建世界", attempt - 1);
+            }
+            long seed = nextUniqueGameSeed(attemptedSeeds);
+            DeathSwapVillageSeedCandidate candidate = findDeathSwapVillageSeedCandidate(seed, attempt, villageSalt, radiusBlocks);
+            if (candidate == null) {
+                if (attempt == 1 || attempt % 128 == 0) {
+                    plugin.getLogger().info("死亡互换外部筛种进度 " + attempt + "/" + maxAttempts
+                            + "：还没有命中可用村庄候选，不创建世界，已去重种子数=" + attemptedSeeds.size());
+                }
+                continue;
+            }
+
+            plugin.getLogger().info("死亡互换外部筛种命中候选: " + worldName
+                    + " seed=" + seed
+                    + " attempt=" + attempt
+                    + " chunk=" + candidate.villageChunkX() + "," + candidate.villageChunkZ()
+                    + " predictedVillage=" + candidate.villageBlockX() + ",0," + candidate.villageBlockZ()
+                    + " originDistance=" + Math.round(candidate.distanceFromOrigin())
+                    + "，开始创建最终游戏世界；本次筛种只创建这一个世界");
+
+            markGameSeedIssued(seed);
+            prepareFreshWorldFolder(worldName);
+            World world = createNormalGameWorldWithSeed(worldName, seed, true);
+            if (world == null) {
+                recordDeathSwapVillageStatus(roomId, false, true, null, null,
+                        "死亡互换命中候选后世界创建失败");
+                plugin.getLogger().warning("死亡互换候选世界创建失败: seed=" + seed + " attempt=" + attempt);
+                return null;
+            }
+            world.setKeepSpawnInMemory(false);
+            setupGameWorld(world);
+            Location villageLocation = candidate.toLocation(world);
+            Location flatSpawn = findDeathSwapFlatSpawn(world, villageLocation, radiusBlocks);
+            if (flatSpawn != null) {
+                world.setSpawnLocation(flatSpawn);
+            }
+            Location spawn = world.getSpawnLocation();
+            gameWorlds.put(roomId, world);
+            recordDeathSwapVillageStatus(roomId, true, false, spawn, villageLocation,
+                    "外部算法筛中村庄候选");
+            plugin.getLogger().info("死亡互换外部筛种最终世界已创建: " + worldName
+                    + " seed=" + seed
+                    + " attempt=" + attempt
+                    + " spawn=" + formatBlockLocation(spawn)
+                    + " predictedVillage=" + formatBlockLocation(villageLocation)
+                    + " distance=" + Math.round(Math.sqrt(horizontalDistanceSquared(spawn, villageLocation)))
+                    + "；按要求不再反复创建/定位验证世界");
+            return world;
+        }
+
+        return createDeathSwapRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
+                "达到最大外部筛种次数后随机创建世界", maxAttempts);
+    }
+
+    private boolean isDeathSwapVillageSearchTimedOut(long searchStartedAt) {
+        return System.nanoTime() - searchStartedAt >= DEATH_SWAP_VILLAGE_SEARCH_TIMEOUT_NANOS;
+    }
+
+    private World createDeathSwapRandomFallbackGameWorld(String roomId, String worldName, Set<Long> attemptedSeeds,
+                                                        String reason, int attempts) {
+        long seed = nextUniqueGameSeed(attemptedSeeds);
+        markGameSeedIssued(seed);
+        prepareFreshWorldFolder(worldName);
+        World fallback = createNormalGameWorldWithSeed(worldName, seed, true);
+        if (fallback != null) {
+            fallback.setKeepSpawnInMemory(false);
+            setupGameWorld(fallback);
+            Location flatSpawn = findDeathSwapFlatSpawn(fallback);
+            if (flatSpawn != null) {
+                fallback.setSpawnLocation(flatSpawn);
+            }
+            gameWorlds.put(roomId, fallback);
+            recordDeathSwapVillageStatus(roomId, false, true, fallback.getSpawnLocation(), null, reason);
+            plugin.getLogger().warning("死亡互换村庄筛种降级随机世界: " + worldName
+                    + " seed=" + seed
+                    + " reason=" + reason
+                    + " attempts=" + attempts
+                    + " uniqueSeeds=" + (attemptedSeeds == null ? 0 : attemptedSeeds.size())
+                    + "；按要求不再继续筛或验证村庄");
+        } else {
+            recordDeathSwapVillageStatus(roomId, false, true, null, null, reason + "，但随机世界创建失败");
+            plugin.getLogger().severe("死亡互换村庄筛种降级随机世界失败: " + worldName
+                    + " seed=" + seed
+                    + " reason=" + reason);
+        }
+        return fallback;
+    }
+
+    private DeathSwapVillageSeedCandidate findDeathSwapVillageSeedCandidate(long seed, int attempt, int villageSalt, int radiusBlocks) {
+        int safeRadius = Math.max(96, radiusBlocks);
+        int radiusChunks = (safeRadius + 15) / 16 + 1;
+        int minRegionX = Math.floorDiv(-radiusChunks, FLASH_VILLAGE_SPACING);
+        int maxRegionX = Math.floorDiv(radiusChunks, FLASH_VILLAGE_SPACING);
+        int minRegionZ = Math.floorDiv(-radiusChunks, FLASH_VILLAGE_SPACING);
+        int maxRegionZ = Math.floorDiv(radiusChunks, FLASH_VILLAGE_SPACING);
+        DeathSwapVillageSeedCandidate best = null;
+        for (int regionX = minRegionX; regionX <= maxRegionX; regionX++) {
+            for (int regionZ = minRegionZ; regionZ <= maxRegionZ; regionZ++) {
+                ChunkCandidate villageChunk = getRandomSpreadChunkForRegion(
+                        seed,
+                        regionX,
+                        regionZ,
+                        FLASH_VILLAGE_SPACING,
+                        FLASH_VILLAGE_SEPARATION,
+                        villageSalt
+                );
+                int blockX = chunkLocateBlock(villageChunk.chunkX());
+                int blockZ = chunkLocateBlock(villageChunk.chunkZ());
+                double distance = Math.sqrt((double) blockX * blockX + (double) blockZ * blockZ);
+                if (distance > safeRadius) {
+                    continue;
+                }
+                DeathSwapVillageSeedCandidate candidate = new DeathSwapVillageSeedCandidate(
+                        seed,
+                        attempt,
+                        villageChunk.chunkX(),
+                        villageChunk.chunkZ(),
+                        blockX,
+                        blockZ,
+                        distance
+                );
+                if (best == null || candidate.distanceFromOrigin() < best.distanceFromOrigin()) {
+                    best = candidate;
+                }
+            }
+        }
+        return best;
+    }
+
+    public Location findDeathSwapFlatSpawn(World world) {
+        if (world == null) {
+            return null;
+        }
+        return findDeathSwapFlatSpawn(world, world.getSpawnLocation(), 128);
+    }
+
+    private Location findDeathSwapFlatSpawn(World world, Location preferred, int maxRadiusBlocks) {
+        if (world == null) {
+            return null;
+        }
+        Location anchor = preferred == null || preferred.getWorld() == null
+                ? world.getSpawnLocation()
+                : preferred;
+        int centerX = anchor.getBlockX();
+        int centerZ = anchor.getBlockZ();
+        int safeMaxRadius = Math.max(16, Math.min(192, maxRadiusBlocks));
+        int[] radii = {0, 8, 16, 24, 32, 48, 64, 80, 96, 128, 160, 192};
+        int[][] directions = {
+                {0, 0},
+                {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+                {1, 1}, {-1, 1}, {1, -1}, {-1, -1},
+                {2, 1}, {-2, 1}, {2, -1}, {-2, -1},
+                {1, 2}, {-1, 2}, {1, -2}, {-1, -2}
+        };
+        for (int radius : radii) {
+            if (radius > safeMaxRadius) {
+                break;
+            }
+            for (int[] direction : directions) {
+                if (radius == 0 && (direction[0] != 0 || direction[1] != 0)) {
+                    continue;
+                }
+                if (radius > 0 && direction[0] == 0 && direction[1] == 0) {
+                    continue;
+                }
+                double length = Math.sqrt((double) direction[0] * direction[0] + (double) direction[1] * direction[1]);
+                int x = centerX + (radius == 0 ? 0 : (int) Math.round(radius * direction[0] / length));
+                int z = centerZ + (radius == 0 ? 0 : (int) Math.round(radius * direction[1] / length));
+                Location candidate = getSurfaceSpawnAt(world, x, z);
+                if (isDeathSwapFlatSpawnCandidate(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isDeathSwapFlatSpawnCandidate(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return false;
+        }
+        World world = location.getWorld();
+        int centerX = location.getBlockX();
+        int centerZ = location.getBlockZ();
+        int minY = Integer.MAX_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                int x = centerX + dx;
+                int z = centerZ + dz;
+                int standY = Math.min(world.getMaxHeight() - 2,
+                        Math.max(world.getMinHeight() + 2, world.getHighestBlockYAt(x, z) + 1));
+                Block floor = world.getBlockAt(x, standY - 1, z);
+                Block feet = world.getBlockAt(x, standY, z);
+                Block head = world.getBlockAt(x, standY + 1, z);
+                if (!isDeathSwapSafeFloor(floor)
+                        || !isDeathSwapPassableForSpawn(feet)
+                        || !isDeathSwapPassableForSpawn(head)) {
+                    return false;
+                }
+                minY = Math.min(minY, standY);
+                maxY = Math.max(maxY, standY);
+            }
+        }
+        if (maxY - minY > 1) {
+            return false;
+        }
+        location.setY(world.getHighestBlockYAt(centerX, centerZ) + 1.0D);
+        location.setX(centerX + 0.5D);
+        location.setZ(centerZ + 0.5D);
+        return true;
+    }
+
+    private boolean isDeathSwapSafeFloor(Block block) {
+        if (block == null || block.isEmpty() || block.isLiquid() || !block.getType().isSolid()) {
+            return false;
+        }
+        Material type = block.getType();
+        String name = type.name();
+        return type != Material.CACTUS
+                && type != Material.MAGMA_BLOCK
+                && type != Material.CAMPFIRE
+                && type != Material.SOUL_CAMPFIRE
+                && type != Material.POWDER_SNOW
+                && !name.contains("LEAVES")
+                && !name.contains("LOG")
+                && !name.contains("WOOD")
+                && !name.contains("STEM")
+                && !name.contains("HYPHAE")
+                && !name.contains("WART_BLOCK");
+    }
+
+    private boolean isDeathSwapPassableForSpawn(Block block) {
+        return block != null && (block.isEmpty() || block.isPassable()) && !block.isLiquid();
+    }
+
+    private StructureSearchResult findNearestNonDesertVillageNearSpawn(World world, int radiusChunks) {
+        if (world == null) {
+            return null;
+        }
+        Location spawn = world.getSpawnLocation();
+        StructureSearchResult best = null;
+        double bestDistance = Double.MAX_VALUE;
+        Structure[] candidates = {
+                Structure.VILLAGE_PLAINS,
+                Structure.VILLAGE_SAVANNA,
+                Structure.VILLAGE_SNOWY,
+                Structure.VILLAGE_TAIGA
+        };
+        for (Structure structure : candidates) {
+            try {
+                StructureSearchResult result = world.locateNearestStructure(spawn, structure, Math.max(1, radiusChunks), true);
+                if (result == null || result.getLocation() == null) {
+                    continue;
+                }
+                double distance = horizontalDistanceSquared(spawn, result.getLocation());
+                if (distance < bestDistance) {
+                    best = result;
+                    bestDistance = distance;
+                }
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("死亡互换定位村庄失败: " + world.getName()
+                        + " structure=" + structure.getKey() + " - " + throwable.getMessage());
+            }
+        }
+        return best;
+    }
+
+    private boolean isVillageWithinRadius(Location spawn, StructureSearchResult village, int radiusBlocks) {
+        return spawn != null
+                && spawn.getWorld() != null
+                && village != null
+                && village.getLocation() != null
+                && village.getLocation().getWorld() != null
+                && spawn.getWorld().equals(village.getLocation().getWorld())
+                && horizontalDistanceSquared(spawn, village.getLocation()) <= (double) radiusBlocks * radiusBlocks;
+    }
+
+    private void recordDeathSwapVillageStatus(String roomId, boolean confirmed, boolean fallback,
+                                              Location spawn, Location village, String reason) {
+        if (roomId == null || roomId.isBlank()) {
+            return;
+        }
+        int distance = -1;
+        if (spawn != null && village != null && spawn.getWorld() != null && village.getWorld() != null
+                && spawn.getWorld().equals(village.getWorld())) {
+            distance = (int) Math.round(Math.sqrt(horizontalDistanceSquared(spawn, village)));
+        }
+        deathSwapVillageSeedStatuses.put(roomId, new DeathSwapVillageSeedStatus(
+                confirmed,
+                fallback,
+                distance,
+                village == null ? "" : formatBlockLocation(village),
+                reason == null || reason.isBlank() ? "未知" : reason
+        ));
+    }
+
+    public DeathSwapVillageSeedStatus getDeathSwapVillageSeedStatus(String roomId) {
+        return roomId == null ? null : deathSwapVillageSeedStatuses.get(roomId);
+    }
+
+    public record DeathSwapVillageSeedStatus(boolean confirmed, boolean fallback, int distance,
+                                             String villageLocation, String reason) {
+    }
+
+    private World createNormalGameWorldWithSeed(String worldName, long seed, boolean verbose) {
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv create " + worldName + " NORMAL --seed " + seed);
 
         World world = Bukkit.getWorld(worldName);
@@ -676,21 +1120,608 @@ public class WorldManager {
             creator.seed(seed);
             creator.type(WorldType.NORMAL);
             creator.environment(World.Environment.NORMAL);
+            creator.generateStructures(true);
             creator.keepSpawnLoaded(net.kyori.adventure.util.TriState.FALSE);
             world = creator.createWorld();
-            if (world != null) {
+            if (world != null && verbose) {
                 plugin.getLogger().info("游戏世界已创建(Bukkit降级): " + worldName);
             }
-        } else {
+        } else if (verbose) {
             plugin.getLogger().info("游戏世界已创建(MV): " + worldName);
         }
+        return world;
+    }
 
+    private boolean isFlashOutpostSeededMode(GameMode mode) {
+        return mode == GameMode.FLASH || mode == GameMode.FLASH_TOURNAMENT;
+    }
+
+    private World createFlashOutpostSeededGameWorld(String roomId, GameMode mode) {
+        String worldName = GAME_PREFIX + roomId.toLowerCase();
+        String modeName = mode == null ? "闪光" : mode.getDisplayName().replaceAll("§.", "");
+        int outpostSalt = readSpigotStructureSeed(worldName, "seed-outpost", FLASH_OUTPOST_DEFAULT_SALT);
+        int villageSalt = readSpigotStructureSeed(worldName, "seed-village", FLASH_VILLAGE_DEFAULT_SALT);
+        plugin.getLogger().info("开始为 " + modeName + " 外部算法筛选哨塔种子: " + worldName
+                + "，要求出生点 " + FLASH_OUTPOST_REQUIRED_RADIUS_BLOCKS
+                + " 格内必有掠夺者哨塔，候选搜索半径 " + FLASH_OUTPOST_CANDIDATE_SEARCH_RADIUS_BLOCKS
+                + " 格，筛中候选前不会创建世界"
+                + "，outpostSalt=" + outpostSalt + "，villageSalt=" + villageSalt);
+
+        Set<Long> attemptedSeeds = new LinkedHashSet<>();
+        long searchStartedAt = System.nanoTime();
+        int verifiedWorlds = 0;
+        for (int attempt = 1; attempt <= FLASH_OUTPOST_SEED_MAX_ATTEMPTS; attempt++) {
+            if (isFlashOutpostSearchTimedOut(searchStartedAt)) {
+                return createRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
+                        "外部筛种超过 8 秒，已停止搜索并改为随机世界",
+                        attempt - 1,
+                        verifiedWorlds);
+            }
+
+            long seed = nextUniqueGameSeed(attemptedSeeds);
+            FlashOutpostSeedCandidate candidate = findFlashOutpostSeedCandidate(seed, attempt, outpostSalt, villageSalt);
+            if (candidate == null) {
+                if (attempt == 1 || attempt % 512 == 0) {
+                    plugin.getLogger().info("闪光外部筛种进度 " + attempt + "/" + FLASH_OUTPOST_SEED_MAX_ATTEMPTS
+                            + "：还没有命中可用哨塔候选，不创建世界，已去重种子数=" + attemptedSeeds.size());
+                }
+                continue;
+            }
+
+            if (verifiedWorlds >= FLASH_OUTPOST_VERIFY_WORLD_MAX_ATTEMPTS) {
+                return createRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
+                        "候选世界连续 " + verifiedWorlds + " 次未通过服务器哨塔确认，改为随机世界",
+                        attempt - 1,
+                        verifiedWorlds);
+            }
+
+            plugin.getLogger().info("闪光外部筛种命中候选: " + worldName
+                    + " seed=" + seed
+                    + " attempt=" + attempt
+                    + " chunk=" + candidate.outpostChunkX() + "," + candidate.outpostChunkZ()
+                    + " predictedOutpost=" + candidate.outpostBlockX() + ",0," + candidate.outpostBlockZ()
+                    + " originDistance=" + Math.round(candidate.distanceFromOrigin())
+                    + "，开始创建第 " + (verifiedWorlds + 1) + " 个候选验证世界");
+
+            markGameSeedIssued(seed);
+            prepareFreshWorldFolder(worldName);
+            World world = createNormalGameWorldWithSeed(worldName, seed, false);
+            if (world == null) {
+                plugin.getLogger().warning("闪光外部候选创建世界失败: seed=" + seed + " attempt=" + attempt + "，继续寻找下一个候选");
+                continue;
+            }
+
+            world.setKeepSpawnInMemory(false);
+            setupGameWorld(world);
+            verifiedWorlds++;
+            if (confirmFinalOutpostCheck(roomId, world, candidate, seed, attempt, verifiedWorlds)) {
+                gameWorlds.put(roomId, world);
+                return world;
+            }
+
+            plugin.getLogger().warning("闪光候选世界未通过服务器哨塔确认，已删除并继续筛下一个候选: "
+                    + worldName + " seed=" + seed + " verifiedWorlds=" + verifiedWorlds);
+            deleteWorld(world);
+        }
+
+        return createRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
+                "外部筛种达到最大尝试次数，改为随机世界",
+                FLASH_OUTPOST_SEED_MAX_ATTEMPTS,
+                verifiedWorlds);
+    }
+
+    private boolean confirmFinalOutpostCheck(String roomId, World world, FlashOutpostSeedCandidate candidate, long seed, int attempt, int verifiedWorlds) {
+        if (world == null || candidate == null) {
+            return false;
+        }
+        StructureSearchResult outpost = findPillagerOutpostNearSpawn(world);
+        Location spawn = world.getSpawnLocation();
+        if (isOutpostWithinSpawnRadius(spawn, outpost, null)) {
+            logConfirmedOutpost(world, seed, attempt, verifiedWorlds, spawn, outpost.getLocation(), "原出生点确认");
+            recordFlashOutpostStatus(roomId, true, false, spawn, outpost.getLocation(), "原出生点确认");
+            return true;
+        }
+
+        StructureSearchResult predictedOutpost = findPredictedPillagerOutpost(world, candidate);
+        if (tryAnchorFlashSpawnNearOutpost(world, predictedOutpost)) {
+            Location anchoredSpawn = world.getSpawnLocation();
+            if (isOutpostWithinSpawnRadius(anchoredSpawn, predictedOutpost, null)) {
+                logConfirmedOutpost(world, seed, attempt, verifiedWorlds,
+                        anchoredSpawn, predictedOutpost.getLocation(), "预测哨塔校准出生点");
+                recordFlashOutpostStatus(roomId, true, false, anchoredSpawn, predictedOutpost.getLocation(), "预测哨塔校准出生点");
+                return true;
+            }
+        }
+
+        StructureSearchResult rescueOutpost = findNearestPillagerOutpostForSpawnRescue(world);
+        if (tryAnchorFlashSpawnNearOutpost(world, rescueOutpost)) {
+            Location anchoredSpawn = world.getSpawnLocation();
+            if (isOutpostWithinSpawnRadius(anchoredSpawn, rescueOutpost, null)) {
+                logConfirmedOutpost(world, seed, attempt, verifiedWorlds,
+                        anchoredSpawn, rescueOutpost.getLocation(), "服务器定位哨塔校准出生点");
+                recordFlashOutpostStatus(roomId, true, false, anchoredSpawn, rescueOutpost.getLocation(), "服务器定位哨塔校准出生点");
+                return true;
+            }
+        }
+
+        plugin.getLogger().warning("闪光外部筛种候选未通过服务器结构定位确认: " + world.getName()
+                + " seed=" + seed
+                + " attempt=" + attempt
+                + " verifiedWorlds=" + verifiedWorlds
+                + " spawn=" + formatBlockLocation(spawn)
+                + " serverOutpost=" + (outpost == null ? "null" : formatBlockLocation(outpost.getLocation()))
+                + " predictedServerOutpost=" + (predictedOutpost == null ? "null" : formatBlockLocation(predictedOutpost.getLocation()))
+                + " rescueOutpost=" + (rescueOutpost == null ? "null" : formatBlockLocation(rescueOutpost.getLocation()))
+                + " predictedOutpost=" + candidate.outpostBlockX() + ",0," + candidate.outpostBlockZ()
+                + "；不会继续使用这个世界");
+        return false;
+    }
+
+    private void recordFlashOutpostStatus(String roomId, boolean confirmed, boolean fallback,
+                                          Location spawn, Location outpost, String reason) {
+        if (roomId == null || roomId.isBlank()) {
+            return;
+        }
+        int distance = -1;
+        if (spawn != null && outpost != null && spawn.getWorld() != null && outpost.getWorld() != null
+                && spawn.getWorld().equals(outpost.getWorld())) {
+            distance = (int) Math.round(Math.sqrt(horizontalDistanceSquared(spawn, outpost)));
+        }
+        String outpostText = outpost == null ? "" : formatBlockLocation(outpost);
+        flashOutpostSeedStatuses.put(roomId, new FlashOutpostSeedStatus(confirmed, fallback, distance, outpostText,
+                reason == null || reason.isBlank() ? "未知" : reason));
+    }
+
+    public FlashOutpostSeedStatus getFlashOutpostSeedStatus(String roomId) {
+        return roomId == null ? null : flashOutpostSeedStatuses.get(roomId);
+    }
+
+    public record FlashOutpostSeedStatus(boolean confirmed, boolean fallback, int distance,
+                                         String outpostLocation, String reason) {
+    }
+
+    private void logConfirmedOutpost(World world, long seed, int attempt, int verifiedWorlds,
+                                     Location spawn, Location outpost, String mode) {
+        plugin.getLogger().info("闪光外部筛种最终确认: " + world.getName()
+                + " seed=" + seed
+                + " attempt=" + attempt
+                + " verifiedWorlds=" + verifiedWorlds
+                + " mode=" + mode
+                + " spawn=" + formatBlockLocation(spawn)
+                + " outpost=" + formatBlockLocation(outpost)
+                + " distance=" + Math.round(Math.sqrt(horizontalDistanceSquared(spawn, outpost))));
+    }
+
+    private boolean isFlashOutpostSearchTimedOut(long searchStartedAt) {
+        return System.nanoTime() - searchStartedAt >= FLASH_OUTPOST_SEARCH_TIMEOUT_NANOS;
+    }
+
+    private World createRandomFallbackGameWorld(String roomId, String worldName, Set<Long> attemptedSeeds,
+                                                String reason, int attempts, int verifiedWorlds) {
+        long seed = nextUniqueGameSeed(attemptedSeeds);
+        markGameSeedIssued(seed);
+        prepareFreshWorldFolder(worldName);
+        World world = createNormalGameWorldWithSeed(worldName, seed, true);
         if (world != null) {
             world.setKeepSpawnInMemory(false);
             setupGameWorld(world);
+            StructureSearchResult fallbackOutpost = findNearestPillagerOutpostForSpawnRescue(world);
+            boolean rescued = tryAnchorFlashSpawnNearOutpost(world, fallbackOutpost)
+                    && isOutpostWithinSpawnRadius(world.getSpawnLocation(), fallbackOutpost, null);
             gameWorlds.put(roomId, world);
+            if (rescued) {
+                recordFlashOutpostStatus(roomId, true, true, world.getSpawnLocation(), fallbackOutpost.getLocation(), "随机世界补救定位");
+            } else {
+                recordFlashOutpostStatus(roomId, false, true, world.getSpawnLocation(), null, reason);
+            }
+            plugin.getLogger().warning("闪光筛种降级随机世界: " + worldName
+                    + " seed=" + seed
+                    + " reason=" + reason
+                    + " attempts=" + attempts
+                    + " verifiedWorlds=" + verifiedWorlds
+                    + " uniqueSeeds=" + (attemptedSeeds == null ? 0 : attemptedSeeds.size())
+                    + (rescued
+                    ? "，已补救校准出生点到哨塔附近 spawn=" + formatBlockLocation(world.getSpawnLocation())
+                    + " outpost=" + formatBlockLocation(fallbackOutpost.getLocation())
+                    + " distance=" + Math.round(Math.sqrt(horizontalDistanceSquared(world.getSpawnLocation(), fallbackOutpost.getLocation())))
+                    : "，补救定位未找到可用哨塔"));
+        } else {
+            recordFlashOutpostStatus(roomId, false, true, null, null, reason);
+            plugin.getLogger().severe("闪光筛种降级随机世界失败: " + worldName
+                    + " seed=" + seed
+                    + " reason=" + reason);
         }
         return world;
+    }
+
+    private long nextGameSeed() {
+        return ThreadLocalRandom.current().nextLong()
+                ^ Long.rotateLeft(ThreadLocalRandom.current().nextLong(), 21)
+                ^ Long.reverse(System.nanoTime());
+    }
+
+    private long nextUniqueGameSeed(Set<Long> attemptedSeeds) {
+        if (attemptedSeeds == null) {
+            for (int retry = 0; retry < 64; retry++) {
+                long seed = nextGameSeed();
+                if (!isGameSeedIssued(seed)) {
+                    return seed;
+                }
+            }
+            long seed;
+            do {
+                seed = nextGameSeed();
+            } while (isGameSeedIssued(seed));
+            return seed;
+        }
+        for (int retry = 0; retry < 64; retry++) {
+            long seed = nextGameSeed();
+            if (!attemptedSeeds.contains(seed) && !isGameSeedIssued(seed)) {
+                attemptedSeeds.add(seed);
+                return seed;
+            }
+        }
+        long seed;
+        do {
+            seed = nextGameSeed();
+        } while (attemptedSeeds.contains(seed) || isGameSeedIssued(seed));
+        attemptedSeeds.add(seed);
+        return seed;
+    }
+
+    private boolean isGameSeedIssued(long seed) {
+        synchronized (issuedGameSeeds) {
+            return issuedGameSeeds.contains(seed);
+        }
+    }
+
+    private void markGameSeedIssued(long seed) {
+        synchronized (issuedGameSeeds) {
+            issuedGameSeeds.add(seed);
+        }
+    }
+
+    private FlashOutpostSeedCandidate findFlashOutpostSeedCandidate(long seed, int attempt, int outpostSalt, int villageSalt) {
+        int radiusChunks = (FLASH_OUTPOST_CANDIDATE_SEARCH_RADIUS_BLOCKS + 15) / 16 + 1;
+        int minRegionX = Math.floorDiv(-radiusChunks, FLASH_OUTPOST_SPACING);
+        int maxRegionX = Math.floorDiv(radiusChunks, FLASH_OUTPOST_SPACING);
+        int minRegionZ = Math.floorDiv(-radiusChunks, FLASH_OUTPOST_SPACING);
+        int maxRegionZ = Math.floorDiv(radiusChunks, FLASH_OUTPOST_SPACING);
+        FlashOutpostSeedCandidate best = null;
+        for (int regionX = minRegionX; regionX <= maxRegionX; regionX++) {
+            for (int regionZ = minRegionZ; regionZ <= maxRegionZ; regionZ++) {
+                ChunkCandidate outpostChunk = getRandomSpreadChunkForRegion(
+                        seed,
+                        regionX,
+                        regionZ,
+                        FLASH_OUTPOST_SPACING,
+                        FLASH_OUTPOST_SEPARATION,
+                        outpostSalt
+                );
+                int blockX = chunkLocateBlock(outpostChunk.chunkX());
+                int blockZ = chunkLocateBlock(outpostChunk.chunkZ());
+                double distance = Math.sqrt((double) blockX * blockX + (double) blockZ * blockZ);
+                if (distance > FLASH_OUTPOST_CANDIDATE_SEARCH_RADIUS_BLOCKS) {
+                    continue;
+                }
+                if (!passesPillagerOutpostLegacyFrequency(seed, outpostChunk.chunkX(), outpostChunk.chunkZ())) {
+                    continue;
+                }
+                if (isForbiddenByNearbyVillage(seed, outpostChunk.chunkX(), outpostChunk.chunkZ(), villageSalt)) {
+                    continue;
+                }
+                FlashOutpostSeedCandidate candidate = new FlashOutpostSeedCandidate(
+                        seed,
+                        attempt,
+                        outpostChunk.chunkX(),
+                        outpostChunk.chunkZ(),
+                        blockX,
+                        blockZ,
+                        distance
+                );
+                if (best == null || candidate.distanceFromOrigin() < best.distanceFromOrigin()) {
+                    best = candidate;
+                }
+            }
+        }
+        return best;
+    }
+
+    private ChunkCandidate getRandomSpreadChunkForRegion(long seed, int regionX, int regionZ,
+                                                         int spacing, int separation, int salt) {
+        Random random = new Random();
+        setLargeFeatureWithSalt(random, seed, regionX, regionZ, salt);
+        int maxOffset = spacing - separation;
+        int offsetX = random.nextInt(maxOffset);
+        int offsetZ = random.nextInt(maxOffset);
+        return new ChunkCandidate(regionX * spacing + offsetX, regionZ * spacing + offsetZ);
+    }
+
+    private void setLargeFeatureWithSalt(Random random, long seed, int regionX, int regionZ, int salt) {
+        long structureSeed = (long) regionX * LARGE_FEATURE_X_MULTIPLIER
+                + (long) regionZ * LARGE_FEATURE_Z_MULTIPLIER
+                + seed
+                + salt;
+        random.setSeed(structureSeed);
+    }
+
+    private boolean passesPillagerOutpostLegacyFrequency(long seed, int chunkX, int chunkZ) {
+        int reducedChunkX = chunkX >> 4;
+        int reducedChunkZ = chunkZ >> 4;
+        Random random = new Random(((long) (reducedChunkX ^ (reducedChunkZ << 4))) ^ seed);
+        random.nextInt();
+        return random.nextInt(FLASH_OUTPOST_FREQUENCY_DIVISOR) == 0;
+    }
+
+    private boolean isForbiddenByNearbyVillage(long seed, int outpostChunkX, int outpostChunkZ, int villageSalt) {
+        int minChunkX = outpostChunkX - FLASH_OUTPOST_VILLAGE_EXCLUSION_CHUNKS;
+        int maxChunkX = outpostChunkX + FLASH_OUTPOST_VILLAGE_EXCLUSION_CHUNKS;
+        int minChunkZ = outpostChunkZ - FLASH_OUTPOST_VILLAGE_EXCLUSION_CHUNKS;
+        int maxChunkZ = outpostChunkZ + FLASH_OUTPOST_VILLAGE_EXCLUSION_CHUNKS;
+        int minRegionX = Math.floorDiv(minChunkX, FLASH_VILLAGE_SPACING);
+        int maxRegionX = Math.floorDiv(maxChunkX, FLASH_VILLAGE_SPACING);
+        int minRegionZ = Math.floorDiv(minChunkZ, FLASH_VILLAGE_SPACING);
+        int maxRegionZ = Math.floorDiv(maxChunkZ, FLASH_VILLAGE_SPACING);
+        for (int regionX = minRegionX; regionX <= maxRegionX; regionX++) {
+            for (int regionZ = minRegionZ; regionZ <= maxRegionZ; regionZ++) {
+                ChunkCandidate villageChunk = getRandomSpreadChunkForRegion(
+                        seed,
+                        regionX,
+                        regionZ,
+                        FLASH_VILLAGE_SPACING,
+                        FLASH_VILLAGE_SEPARATION,
+                        villageSalt
+                );
+                if (villageChunk.chunkX() >= minChunkX
+                        && villageChunk.chunkX() <= maxChunkX
+                        && villageChunk.chunkZ() >= minChunkZ
+                        && villageChunk.chunkZ() <= maxChunkZ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private int chunkLocateBlock(int chunk) {
+        return chunk * 16;
+    }
+
+    private int readSpigotStructureSeed(String worldName, String key, int fallback) {
+        File spigotFile = new File("spigot.yml");
+        if (!spigotFile.isFile()) {
+            return fallback;
+        }
+        try {
+            YamlConfiguration configuration = YamlConfiguration.loadConfiguration(spigotFile);
+            Integer worldValue = readStructureSeedValue(configuration, "world-settings." + worldName + "." + key);
+            if (worldValue != null) {
+                return worldValue;
+            }
+            Integer defaultValue = readStructureSeedValue(configuration, "world-settings.default." + key);
+            return defaultValue == null ? fallback : defaultValue;
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("读取 spigot.yml 结构盐失败，使用默认值 " + key + "=" + fallback + ": " + throwable.getMessage());
+            return fallback;
+        }
+    }
+
+    private Integer readStructureSeedValue(YamlConfiguration configuration, String path) {
+        Object value = configuration.get(path);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text) {
+            String trimmed = text.trim();
+            if (trimmed.equalsIgnoreCase("default") || trimmed.isEmpty()) {
+                return null;
+            }
+            try {
+                return Integer.parseInt(trimmed);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private StructureSearchResult findPredictedPillagerOutpost(World world, FlashOutpostSeedCandidate candidate) {
+        if (world == null || candidate == null) {
+            return null;
+        }
+        try {
+            Location predicted = new Location(
+                    world,
+                    candidate.outpostBlockX() + 8.0D,
+                    Math.max(world.getMinHeight() + 64.0D, world.getSpawnLocation().getY()),
+                    candidate.outpostBlockZ() + 8.0D
+            );
+            return world.locateNearestStructure(
+                    predicted,
+                    Structure.PILLAGER_OUTPOST,
+                    FLASH_OUTPOST_VERIFY_RADIUS_CHUNKS,
+                    true
+            );
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("筛种验证预测掠夺者哨塔失败: " + world.getName() + " - " + throwable.getMessage());
+            return null;
+        }
+    }
+
+    private StructureSearchResult findPillagerOutpostNearSpawn(World world) {
+        if (world == null) {
+            return null;
+        }
+        try {
+            Location spawn = world.getSpawnLocation();
+            int radiusChunks = (FLASH_OUTPOST_REQUIRED_RADIUS_BLOCKS + 15) / 16 + 2;
+            return world.locateNearestStructure(
+                    spawn,
+                    Structure.PILLAGER_OUTPOST,
+                    radiusChunks,
+                    true
+            );
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("筛种验证出生点附近掠夺者哨塔失败: " + world.getName() + " - " + throwable.getMessage());
+            return null;
+        }
+    }
+
+    private StructureSearchResult findNearestPillagerOutpostForSpawnRescue(World world) {
+        if (world == null) {
+            return null;
+        }
+        try {
+            return world.locateNearestStructure(
+                    world.getSpawnLocation(),
+                    Structure.PILLAGER_OUTPOST,
+                    FLASH_OUTPOST_RESCUE_RADIUS_CHUNKS,
+                    true
+            );
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("筛种补救定位掠夺者哨塔失败: " + world.getName() + " - " + throwable.getMessage());
+            return null;
+        }
+    }
+
+    private boolean tryAnchorFlashSpawnNearOutpost(World world, StructureSearchResult result) {
+        if (world == null || result == null || result.getLocation() == null) {
+            return false;
+        }
+        Location outpost = result.getLocation();
+        if (outpost.getWorld() == null || !outpost.getWorld().equals(world)) {
+            return false;
+        }
+        Location safeSpawn = findSafeFlashOutpostSpawn(world, outpost);
+        if (safeSpawn == null) {
+            return false;
+        }
+        world.setSpawnLocation(safeSpawn);
+        return true;
+    }
+
+    private Location findSafeFlashOutpostSpawn(World world, Location outpost) {
+        if (world == null || outpost == null) {
+            return null;
+        }
+        int[] radii = {96, 80, 112, 64, 128, 48, 144, 32, 160};
+        int[][] directions = {
+                {1, 0},
+                {-1, 0},
+                {0, 1},
+                {0, -1},
+                {1, 1},
+                {-1, 1},
+                {1, -1},
+                {-1, -1},
+                {2, 1},
+                {-2, 1},
+                {2, -1},
+                {-2, -1},
+                {1, 2},
+                {-1, 2},
+                {1, -2},
+                {-1, -2}
+        };
+        for (int radius : radii) {
+            for (int[] direction : directions) {
+                double length = Math.sqrt((double) direction[0] * direction[0] + (double) direction[1] * direction[1]);
+                int offsetX = (int) Math.round(radius * direction[0] / length);
+                int offsetZ = (int) Math.round(radius * direction[1] / length);
+                Location candidate = getSurfaceSpawnAt(world,
+                        outpost.getBlockX() + offsetX,
+                        outpost.getBlockZ() + offsetZ);
+                if (isSafeOutpostSpawn(candidate) && horizontalDistanceSquared(candidate, outpost)
+                        <= (double) FLASH_OUTPOST_REQUIRED_RADIUS_BLOCKS * FLASH_OUTPOST_REQUIRED_RADIUS_BLOCKS) {
+                    return candidate;
+                }
+            }
+        }
+        Location fallback = getSurfaceSpawnAt(world, outpost.getBlockX(), outpost.getBlockZ());
+        return isSafeOutpostSpawn(fallback) ? fallback : null;
+    }
+
+    private Location getSurfaceSpawnAt(World world, int x, int z) {
+        if (world == null) {
+            return null;
+        }
+        int y = Math.min(world.getMaxHeight() - 2, Math.max(world.getMinHeight() + 2, world.getHighestBlockYAt(x, z) + 1));
+        return new Location(world, x + 0.5D, y, z + 0.5D, 0.0F, 0.0F);
+    }
+
+    private boolean isSafeOutpostSpawn(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return false;
+        }
+        World world = location.getWorld();
+        Block feet = world.getBlockAt(location);
+        Block head = world.getBlockAt(location.clone().add(0.0D, 1.0D, 0.0D));
+        Block floor = world.getBlockAt(location.clone().add(0.0D, -1.0D, 0.0D));
+        return feet.getType().isAir()
+                && head.getType().isAir()
+                && floor.getType().isSolid()
+                && floor.getType() != Material.CACTUS
+                && floor.getType() != Material.MAGMA_BLOCK
+                && floor.getType() != Material.CAMPFIRE
+                && floor.getType() != Material.SOUL_CAMPFIRE;
+    }
+
+    private boolean isOutpostWithinSpawnRadius(Location spawn, StructureSearchResult result, FlashOutpostSeedCandidate candidate) {
+        if (spawn == null || result == null || result.getLocation() == null) {
+            return false;
+        }
+        Location outpost = result.getLocation();
+        if (spawn.getWorld() == null || outpost.getWorld() == null || !spawn.getWorld().equals(outpost.getWorld())) {
+            return false;
+        }
+        double max = FLASH_OUTPOST_REQUIRED_RADIUS_BLOCKS;
+        if (horizontalDistanceSquared(spawn, outpost) > max * max) {
+            return false;
+        }
+        if (candidate == null) {
+            return true;
+        }
+        double verifyMax = (FLASH_OUTPOST_VERIFY_RADIUS_CHUNKS + 1.0D) * 16.0D;
+        double dx = outpost.getX() - candidate.outpostBlockX();
+        double dz = outpost.getZ() - candidate.outpostBlockZ();
+        return dx * dx + dz * dz <= verifyMax * verifyMax;
+    }
+
+    private double horizontalDistanceSquared(Location first, Location second) {
+        if (first == null || second == null) {
+            return Double.MAX_VALUE;
+        }
+        double dx = first.getX() - second.getX();
+        double dz = first.getZ() - second.getZ();
+        return dx * dx + dz * dz;
+    }
+
+    private String formatBlockLocation(Location location) {
+        if (location == null) {
+            return "null";
+        }
+        return location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
+    }
+
+    private record ChunkCandidate(int chunkX, int chunkZ) {
+    }
+
+    private record FlashOutpostSeedCandidate(long seed, int attempt, int outpostChunkX, int outpostChunkZ,
+                                             int outpostBlockX, int outpostBlockZ, double distanceFromOrigin) {
+    }
+
+    private record DeathSwapVillageSeedCandidate(long seed, int attempt, int villageChunkX, int villageChunkZ,
+                                                 int villageBlockX, int villageBlockZ, double distanceFromOrigin) {
+        private Location toLocation(World world) {
+            if (world == null) {
+                return null;
+            }
+            int centerX = villageBlockX + 8;
+            int centerZ = villageBlockZ + 8;
+            int y = Math.min(world.getMaxHeight() - 2,
+                    Math.max(world.getMinHeight() + 2, world.getHighestBlockYAt(centerX, centerZ) + 1));
+            return new Location(world, centerX + 0.5D, y, centerZ + 0.5D, 0.0F, 0.0F);
+        }
     }
 
     public World createLuckyPillarsWorld(String roomId) {
@@ -748,7 +1779,8 @@ public class WorldManager {
             }
         }
 
-        long seed = System.currentTimeMillis();
+        long seed = nextUniqueGameSeed(null);
+        markGameSeedIssued(seed);
 
         WorldCreator creator = new WorldCreator(worldName);
         creator.seed(seed);
@@ -788,7 +1820,8 @@ public class WorldManager {
 
     public World createEndFlashWorld(String roomId) {
         String worldName = GAME_PREFIX + roomId.toLowerCase() + "_end_flash";
-        long seed = System.currentTimeMillis();
+        long seed = nextUniqueGameSeed(null);
+        markGameSeedIssued(seed);
 
         prepareFreshWorldFolder(worldName);
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mv create " + worldName + " THE_END --seed " + seed);
@@ -1042,6 +2075,8 @@ public class WorldManager {
     }
 
     public void deleteGameWorlds(String roomId) {
+        flashOutpostSeedStatuses.remove(roomId);
+        deathSwapVillageSeedStatuses.remove(roomId);
         World overworld = gameWorlds.remove(roomId);
         if (overworld != null) {
             deleteWorld(overworld);
@@ -1062,6 +2097,8 @@ public class WorldManager {
         if (roomId == null || roomId.isBlank()) {
             return;
         }
+        flashOutpostSeedStatuses.remove(roomId);
+        deathSwapVillageSeedStatuses.remove(roomId);
 
         ArrayList<World> worlds = new ArrayList<>();
         World overworld = gameWorlds.remove(roomId);
@@ -1094,6 +2131,17 @@ public class WorldManager {
             return;
         }
         gameWorlds.put(roomId, newWorld);
+    }
+
+    public void remapFlashOutpostSeedStatus(String fromRoomId, String toRoomId) {
+        if (fromRoomId == null || fromRoomId.isBlank() || toRoomId == null || toRoomId.isBlank()
+                || fromRoomId.equals(toRoomId)) {
+            return;
+        }
+        FlashOutpostSeedStatus status = flashOutpostSeedStatuses.remove(fromRoomId);
+        if (status != null) {
+            flashOutpostSeedStatuses.put(toRoomId, status);
+        }
     }
 
     public void preloadChunks(World world, int centerChunkX, int centerChunkZ, int radius, Runnable callback) {
@@ -1157,6 +2205,10 @@ public class WorldManager {
         }
         if (TEMPLATE_LOBBY_NAME.equals(world.getName())) {
             plugin.getLogger().warning("不能删除模板大厅世界！");
+            return;
+        }
+        if (DEATH_SWAP_TEMPLATE_LOBBY_NAME.equals(world.getName())) {
+            plugin.getLogger().warning("不能删除死亡互换等待大厅模板！");
             return;
         }
         if (plugin.getMiniGameMapManager() != null && plugin.getMiniGameMapManager().isTemplateWorldName(world.getName())) {
@@ -1250,7 +2302,9 @@ public class WorldManager {
         if (children != null) {
             for (File child : children) {
                 String name = child.getName();
-                if ((name.startsWith(GAME_PREFIX) || name.startsWith(LOBBY_PREFIX)) && !TEMPLATE_LOBBY_NAME.equals(name)) {
+                if ((name.startsWith(GAME_PREFIX) || name.startsWith(LOBBY_PREFIX))
+                        && !TEMPLATE_LOBBY_NAME.equals(name)
+                        && !DEATH_SWAP_TEMPLATE_LOBBY_NAME.equals(name)) {
                     leftoverNames.add(name);
                 }
             }
@@ -1259,6 +2313,9 @@ public class WorldManager {
         int cleaned = 0;
         for (String worldName : leftoverNames) {
             if (TEMPLATE_LOBBY_NAME.equals(worldName)) {
+                continue;
+            }
+            if (DEATH_SWAP_TEMPLATE_LOBBY_NAME.equals(worldName)) {
                 continue;
             }
 

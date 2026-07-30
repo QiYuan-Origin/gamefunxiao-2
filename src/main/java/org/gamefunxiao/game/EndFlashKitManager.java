@@ -959,6 +959,27 @@ public class EndFlashKitManager {
         return kit;
     }
 
+    public Kit applyKit(Player player, Role role, String kitId) {
+        if (player == null || role == null || kitId == null || kitId.isBlank()) {
+            return null;
+        }
+        Kit kit = getKit(kitId);
+        if (kit == null || kit.role() != role) {
+            return null;
+        }
+        if (syncKitLore(kit)) {
+            save(false);
+        }
+        player.getInventory().clear();
+        player.getEnderChest().clear();
+        player.getInventory().setStorageContents(kit.storageContents());
+        player.getInventory().setArmorContents(kit.armorContents());
+        player.getInventory().setItemInOffHand(kit.offHandItem());
+        applyEnderChestKit(player, kit);
+        applyStartExperience(player, kit);
+        return kit;
+    }
+
     public void applyStartExperience(Player player, Kit kit) {
         if (player == null || kit == null) {
             return;

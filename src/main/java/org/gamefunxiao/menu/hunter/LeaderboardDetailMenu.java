@@ -95,6 +95,9 @@ public class LeaderboardDetailMenu extends BaseMenu {
         if (section == MenuSection.LUCKY_PILLARS) {
             return "§0§l🍀 幸运之柱榜单详情 🍀";
         }
+        if (section == MenuSection.DEATH_SWAP) {
+            return "§0§l⟲ 死亡互换榜单详情 ⟲";
+        }
         return switch (type) {
             case "pass_count" -> "§0§l✓ 通关次数排行榜 ✓";
             case "fastest_time" -> "§0§l⏱ 最快通关排行榜 ⏱";
@@ -109,6 +112,7 @@ public class LeaderboardDetailMenu extends BaseMenu {
     private static Set<GameMode> defaultFilter(MenuSection section) {
         return switch (section) {
             case LUCKY_PILLARS -> GameMode.getLuckyPillarsSectionModes();
+            case DEATH_SWAP -> GameMode.getDeathSwapSectionModes();
             case GENERIC, HUNTER -> GameMode.getHunterSectionModes();
         };
     }
@@ -336,6 +340,9 @@ public class LeaderboardDetailMenu extends BaseMenu {
         if (menuSection == MenuSection.LUCKY_PILLARS) {
             lore.add("§f- §a这里只统计幸运之柱经典模式");
             lore.add("§f- §7不会混入猎人玩法数据");
+        } else if (menuSection == MenuSection.DEATH_SWAP) {
+            lore.add("§f- §a这里只统计死亡互换模式");
+            lore.add("§f- §7不会混入猎人玩法数据");
         } else {
             lore.add("§f- §a这里只统计当前猎人玩法分区的数据");
             lore.add("§f- §7不会和小游戏积分串一起");
@@ -415,7 +422,11 @@ public class LeaderboardDetailMenu extends BaseMenu {
     }
 
     private String getSectionName() {
-        return switch (menuSection) { case LUCKY_PILLARS -> "幸运之柱"; case GENERIC, HUNTER -> "猎人玩法"; };
+        return switch (menuSection) {
+            case LUCKY_PILLARS -> "幸运之柱";
+            case DEATH_SWAP -> "死亡互换";
+            case GENERIC, HUNTER -> "猎人玩法";
+        };
     }
 
     private String getFastestModeName(String modeId) {

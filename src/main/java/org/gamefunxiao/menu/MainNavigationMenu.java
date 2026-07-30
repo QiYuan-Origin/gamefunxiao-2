@@ -35,8 +35,9 @@ public class MainNavigationMenu extends BaseMenu {
 
         // 主菜单直达入口
         inventory.setItem(8, createShopButton());
-        inventory.setItem(21, createHunterGameButton());
-        inventory.setItem(23, createLuckyPillarsButton());
+        inventory.setItem(20, createHunterGameButton());
+        inventory.setItem(22, createDeathSwapButton());
+        inventory.setItem(24, createLuckyPillarsButton());
         inventory.setItem(44, createSettingsButton());
 
         // 关闭按钮
@@ -74,6 +75,24 @@ public class MainNavigationMenu extends BaseMenu {
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a多人乱斗小游戏");
             lore.add("§f- §b进入房间、查看排行、创建房间");
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §a点击进入");
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createDeathSwapButton() {
+        ItemStack item = new ItemStack(Material.ENDER_PEARL);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName("   §8[§x§8§8§D§D§F§F⟲ §x§A§A§E§E§F§F死§x§C§C§F§F§F§F亡§x§E§E§F§F§D§D互§x§F§F§D§D§B§B换§8]");
+            List<String> lore = new ArrayList<>();
+            lore.add("§8· · · · · · · · · · · · · ·");
+            lore.add("§f- §a周期互换所有存活玩家的位置");
+            lore.add("§f- §b出生点附近会筛非沙漠村庄");
+            lore.add("§f- §c每人只有一次生命，死亡后旁观");
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a点击进入");
             meta.setLore(lore);
@@ -129,14 +148,19 @@ public class MainNavigationMenu extends BaseMenu {
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.5f, 1.8f);
                 plugin.getMenuManager().openMiniGameShopCategoryMenu(player);
             }
-            case 21 -> {
+            case 20 -> {
                 playClickSound();
                 plugin.getMenuManager().openHunterGameMenu(player);
             }
-            case 23 -> {
+            case 24 -> {
                 player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_CLUSTER_BREAK, 0.62f, 1.72f);
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_FIREWORK_ROCKET_BLAST, 0.35f, 1.8f);
                 plugin.getMenuManager().openLuckyPillarsMenu(player);
+            }
+            case 22 -> {
+                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.74f, 1.55f);
+                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 0.34f, 1.25f);
+                plugin.getMenuManager().openDeathSwapMenu(player);
             }
             case 44 -> {
                 player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_NOTE_BLOCK_CHIME, 0.8f, 1.45f);

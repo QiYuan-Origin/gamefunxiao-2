@@ -1,118 +1,236 @@
 # 游戏模式配置
+
 # 配置版本（请勿手动修改）
-config_version: 4
+
+config_version: 6
+
+
 
 modes:
+
   classic:
+
     display_name: "经典模式"
+
     description: "猎人有追踪指南针，击败末影龙获胜"
+
     goal: "KILL_DRAGON"
+
     hunter_reward: 150
+
     prey_reward: 300
+
     min_prey: 1
+
     max_prey: 1
+
     features:
+
       - compass
+
       - tp_on_double_drop
+
+
 
   random_compass:
+
     display_name: "随机指南针"
+
     description: "每5分钟随机发放指南针"
+
     goal: "KILL_DRAGON"
+
     hunter_reward: 150
+
     prey_reward: 300
+
     min_prey: 1
+
     max_prey: 1
+
     features:
+
       - random_compass_5min
 
+
+
   swap:
+
     display_name: "互换模式"
+
     description: "两位猎物每分钟互换位置和背包"
+
     goal: "KILL_DRAGON"
+
     hunter_reward: 300
+
     prey_reward: 400
+
     min_prey: 2
+
     max_prey: 2
+
     features:
+
       - compass
+
       - swap_1min
 
+
+
   no_item:
+
     display_name: "无有模式"
+
     description: "纯正猎人游戏，没有任何辅助"
+
     goal: "KILL_DRAGON"
+
     hunter_reward: 500
+
     prey_reward: 600
+
     min_prey: 1
+
     max_prey: 1
+
     features: []
 
+
+
   survival:
+
     display_name: "存活模式"
+
     description: "猎物存活指定时间即可获胜"
+
     goal: "SURVIVE"
+
     survival_time: 30
+
     hunter_reward: 50
+
     prey_reward: 100
+
     min_prey: 1
+
     max_prey: 1
+
     features:
+
       - compass
+
       - tp_on_double_drop
 
+
+
   flash:
-    display_name: "闪光模式"
+
+    display_name: "闪光公式"
+
     description: "不进入世界选择，倒计时结束直接开始；每把剑都能按 Q 打出剑气"
+
     goal: "KILL_DRAGON"
+
     hunter_reward: 150
+
     prey_reward: 300
+
     min_prey: 1
+
     max_prey: 3
+
     max_players: 64
+
     features:
+
       - direct_start
+
       - sword_wave
+
       - enchant_upgrade_book
+
       - multi_ring_hunter_spawn
+
       - stacked_multi_prey
+
+
 
   end_flash:
+
     display_name: "终章 · 闪光"
-    description: "继承闪光模式全部特殊物品和战斗机制，只创建末地游戏世界，猎人猎物使用自定义 Kit 随机开局"
+
+    description: "继承闪光公式全部特殊物品和战斗机制，只创建末地游戏世界，猎人猎物使用自定义 Kit 随机开局"
+
     goal: "KILL_DRAGON"
-    hunter_reward: 220
-    prey_reward: 420
+
+    hunter_reward: 60
+
+    prey_reward: 120
+
     min_prey: 1
+
     max_prey: 3
+
     max_players: 64
+
     features:
+
       - direct_start
+
       - end_only_world
+
       - sword_wave
+
       - enchant_upgrade_book
+
       - multi_ring_hunter_spawn
+
       - stacked_multi_prey
+
       - custom_role_kits
+
       - shared_backpack
+
       - teammate_teleport
 
+
+
   flash_tournament:
+
     display_name: "闪光 · §c§l赛事"
+
     description: "继承闪光玩法并保留世界选择；赛事内无职业头衔、无TAB职业、无游戏记分板，正式开始后只允许/teammsg或简单语音聊天，指南针只追踪"
+
     goal: "KILL_DRAGON"
+
     hunter_reward: 150
+
     prey_reward: 300
+
     min_prey: 1
+
     max_prey: 3
+
     max_players: 67
+
     features:
+
       - world_selection
+
       - sword_wave
+
       - enchant_upgrade_book
+
       - multi_ring_hunter_spawn
+
       - stacked_multi_prey
+
       - tournament_silent_ui
+
       - hunter_friendly_fire
+
       - always_drop_inventory
+
       - silent_compass_tracking
+
