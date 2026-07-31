@@ -157,7 +157,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             entries.add("§c管理员命令：");
             entries.add("§e/gamefunxiao reload §7- §f重载配置文件");
             entries.add("§e/gamefunxiao cleanuprooms §7- §f清理跨服幽灵房间");
-            entries.add("§e/gamefunxiao editlobbytemplate <大厅名> §7- §f前往对应等待大厅模板进行修改");
+            entries.add("§e/gamefunxiao editlobbytemplate [玩法] §7- §f编辑对应玩法的等待大厅模板");
             entries.add("§e/gamefun setlobbyspawn §7- §f在 gameing 的等待大厅世界中自动设置出生点");
             entries.add("§e/gamefunxiao map list [模式] §7- §f查看小游戏地图列表");
             entries.add("§e/gamefunxiao map create <模式> <地图ID> [人数] [显示名] §7- §f创建地图配置");
@@ -347,10 +347,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
             return;
         }
-        player.sendMessage("§x§F§F§8§8§5§5用法：§e/gamefunxiao editlobbytemplate <大厅名>");
+        handleEditLobbyTemplate(sender, "hunter");
     }
 
-    private void handleEditLobbyTemplate(CommandSender sender, String lobbyWorldName) {
+    private void handleEditLobbyTemplate(CommandSender sender, String lobbyTarget) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.player_only"));
             return;
@@ -359,28 +359,58 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
             return;
         }
-        if (lobbyWorldName == null || lobbyWorldName.isBlank()) {
-            player.sendMessage("§x§F§F§8§8§5§5用法：§e/gamefunxiao editlobbytemplate <大厅名>");
+        if (lobbyTarget == null || lobbyTarget.isBlank()) {
+            player.sendMessage("§x§F§F§8§8§5§5用法：§e/gamefunxiao editlobbytemplate [hunter|death_swap|lucky_pillars]");
             return;
         }
 
-        String target = lobbyWorldName.trim();
-        if (target.equalsIgnoreCase("hugamelobby")) {
-            plugin.getChildServerManager().requestTemplateLobbyEdit(player);
+        String target = lobbyTarget.trim();
+        GameMode mode = resolveLobbyTemplateMode(target);
+        if (mode == null) {
+            player.sendMessage("§x§F§F§8§8§5§5⚠ §c没有找到这个等待大厅玩法：§e" + target);
+            player.sendMessage("§7可用：§ehunter §8/ §edeath_swap §8/ §elucky_pillars");
             return;
         }
+        plugin.getChildServerManager().requestTemplateLobbyEdit(player, mode);
+    }
 
-        for (GameMode mode : GameMode.getMiniGameMapEditableModes()) {
-            for (MiniGameMapManager.MapDefinition definition : plugin.getMiniGameMapManager().getMapDefinitions(mode)) {
-                if (definition.lobbyTemplateWorld().equalsIgnoreCase(target)) {
-                    plugin.getMiniGameMapManager().requestEdit(player, mode, definition.mapId(),
-                            MiniGameMapManager.EditWorldKind.LOBBY, definition.maxPlayers());
-                    return;
-                }
-            }
+    private GameMode resolveLobbyTemplateMode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return GameMode.CLASSIC;
         }
-
-        player.sendMessage("§x§F§F§8§8§5§5⚠ §c没有找到这个等待大厅：§e" + target);
+        String normalized = raw.trim().toLowerCase(Locale.ROOT)
+                .replace('-', '_')
+                .replace(" ", "_");
+        if (normalized.equals("hunter") || normalized.equals("huntergame") || normalized.equals("hunter_game")
+                || normalized.equals("hg") || normalized.equals("hunt") || normalized.equals("hugamelobby")
+                || normalized.equals("猎人") || normalized.equals("猎人游戏") || normalized.equals("等待大厅")) {
+            return GameMode.CLASSIC;
+        }
+        if (normalized.equals("deathswap") || normalized.equals("death_swap") || normalized.equals("ds")
+                || normalized.equals("gamefun_deathswap_lobby") || normalized.equals("死亡互换")) {
+            return GameMode.DEATH_SWAP;
+        }
+        if (normalized.equals("luckypillars") || normalized.equals("lucky_pillars") || normalized.equals("lp")
+                || normalized.equals("gamefun_template_lucky_pillars_lobby") || normalized.equals("幸运之柱")) {
+            return GameMode.LUCKY_PILLARS;
+        }
+        if (normalized.startsWith("gamefun_template_lucky_pillars_") && normalized.endsWith("_lobby")) {
+            return GameMode.LUCKY_PILLARS;
+        }
+        GameMode mode = GameMode.findByIdStrict(normalized).orElse(null);
+        if (mode == null) {
+            return null;
+        }
+        if (mode.isDeathSwap()) {
+            return GameMode.DEATH_SWAP;
+        }
+        if (mode.isLuckyPillars()) {
+            return GameMode.LUCKY_PILLARS;
+        }
+        if (mode.usesHunterFlowMode()) {
+            return GameMode.CLASSIC;
+        }
+        return null;
     }
 
     private void handleMiniGameMap(CommandSender sender, String[] args) {
@@ -2088,6 +2118,36 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
+        if (currentWorld.getName().equalsIgnoreCase("gamefun_deathswap_lobby")) {
+            Location loc = player.getLocation().clone();
+            currentWorld.setSpawnLocation(loc);
+            currentWorld.save();
+            Map<String, String> placeholders = new HashMap<>();
+            placeholders.put("world", currentWorld.getName());
+            placeholders.put("x", formatCoordinate(loc.getX()));
+            placeholders.put("y", formatCoordinate(loc.getY()));
+            placeholders.put("z", formatCoordinate(loc.getZ()));
+            player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("minigame_map.lobby_spawn_set", placeholders));
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
+            return;
+        }
+
+        if (currentWorld.getName().equalsIgnoreCase("gamefun_template_lucky_pillars_lobby")) {
+            Location loc = player.getLocation().clone();
+            currentWorld.setSpawnLocation(loc);
+            currentWorld.save();
+            plugin.getMiniGameMapManager().ensureMapDefinition(GameMode.LUCKY_PILLARS, "default", -1);
+            plugin.getMiniGameMapManager().writeSharedLobbySpawn(GameMode.LUCKY_PILLARS, loc);
+            Map<String, String> placeholders = new HashMap<>();
+            placeholders.put("world", currentWorld.getName());
+            placeholders.put("x", formatCoordinate(loc.getX()));
+            placeholders.put("y", formatCoordinate(loc.getY()));
+            placeholders.put("z", formatCoordinate(loc.getZ()));
+            player.sendMessage(plugin.getMessageManager().getLuckyPillarsMessageWithPrefix("minigame_map.lobby_spawn_set", placeholders));
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
+            return;
+        }
+
         for (GameMode mode : GameMode.getMiniGameMapEditableModes()) {
             for (MiniGameMapManager.MapDefinition definition : plugin.getMiniGameMapManager().getMapDefinitions(mode)) {
                 if (!definition.lobbyTemplateWorld().equalsIgnoreCase(currentWorld.getName())) {
@@ -2095,10 +2155,14 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 }
                 Location loc = player.getLocation().clone();
                 currentWorld.setSpawnLocation(loc);
-                plugin.getMiniGameMapManager().writeDefaultLobbyTemplateData(definition, loc);
+                plugin.getMiniGameMapManager().writeSharedLobbySpawn(mode, loc);
                 Map<String, String> placeholders = new HashMap<>();
                 placeholders.put("mode", definition.mode().getDisplayName());
                 placeholders.put("map", definition.displayName());
+                placeholders.put("world", currentWorld.getName());
+                placeholders.put("x", formatCoordinate(loc.getX()));
+                placeholders.put("y", formatCoordinate(loc.getY()));
+                placeholders.put("z", formatCoordinate(loc.getZ()));
                 player.sendMessage(plugin.getMessageManager().getMiniGameMessageWithPrefix("minigame_map.lobby_spawn_set", placeholders));
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
                 return;
@@ -2106,6 +2170,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         }
 
         player.sendMessage("§x§F§F§8§8§5§5⚠ §c你当前不在任何等待大厅模板世界中。");
+    }
+
+    private String formatCoordinate(double value) {
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 
     private void handleSetLobbySpawnCommand(CommandSender sender) {
@@ -2271,12 +2339,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
                 completions.addAll(getMiniGameMapActions());
             } else if ((args[0].equalsIgnoreCase("editlobbytemplate") || args[0].equalsIgnoreCase("edittemplate"))
                     && sender.hasPermission("gamefunxiao.admin")) {
-                completions.add("hugamelobby");
-                for (GameMode mode : GameMode.getMiniGameMapEditableModes()) {
-                    for (MiniGameMapManager.MapDefinition definition : plugin.getMiniGameMapManager().getMapDefinitions(mode)) {
-                        completions.add(definition.lobbyTemplateWorld());
-                    }
-                }
+                completions.addAll(Arrays.asList("hunter", "death_swap", "lucky_pillars", "hugamelobby", "gamefun_deathswap_lobby", "gamefun_template_lucky_pillars_lobby"));
             } else if (isLobbyInteractCommand(args[0]) && sender.hasPermission("gamefunxiao.admin")) {
                 completions.addAll(Arrays.asList("add", "remove", "list"));
             } else if (isCommandBranch(args[0])) {

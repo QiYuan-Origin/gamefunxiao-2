@@ -166,6 +166,9 @@ public class MiniGameMapManager {
             return false;
         }
         for (org.gamefunxiao.game.GameMode mode : org.gamefunxiao.game.GameMode.getMiniGameMapEditableModes()) {
+            if (worldName.equalsIgnoreCase(defaultTemplateWorldName(mode, "default", EditWorldKind.LOBBY))) {
+                return true;
+            }
             String modePath = "maps." + mode.getId();
             if (!cfg.isConfigurationSection(modePath)) {
                 continue;
@@ -220,6 +223,16 @@ public class MiniGameMapManager {
             cfg.set(path + ".max_players", safeMaxPlayers);
             changed = true;
         }
+        String sharedLobbyTemplate = defaultTemplateWorldName(mode, normalizedMapId, EditWorldKind.LOBBY);
+        if (!sharedLobbyTemplate.equalsIgnoreCase(cfg.getString(path + ".lobby_template_world", ""))) {
+            cfg.set(path + ".lobby_template_world", sharedLobbyTemplate);
+            changed = true;
+        }
+        if (cfg.isConfigurationSection(path + ".lobby_spawn")
+                && !sharedLobbyTemplate.equalsIgnoreCase(cfg.getString(path + ".lobby_spawn.world", ""))) {
+            cfg.set(path + ".lobby_spawn.world", sharedLobbyTemplate);
+            changed = true;
+        }
 
         String activePath = "active_maps." + mode.getId();
         if (cfg.getString(activePath, "").isBlank()) {
@@ -247,7 +260,7 @@ public class MiniGameMapManager {
         boolean enabled = cfg.getBoolean(path + ".enabled", true);
         int minPlayers = Math.max(2, cfg.getInt(path + ".min_players", 2));
         int maxPlayers = Math.max(minPlayers, cfg.getInt(path + ".max_players", DEFAULT_LUCKY_PILLARS_MAX_PLAYERS));
-        String lobbyTemplate = cfg.getString(path + ".lobby_template_world", defaultTemplateWorldName(mode, normalizedMapId, EditWorldKind.LOBBY));
+        String lobbyTemplate = defaultTemplateWorldName(mode, normalizedMapId, EditWorldKind.LOBBY);
         String gameTemplate = cfg.getString(path + ".game_template_world", defaultTemplateWorldName(mode, normalizedMapId, EditWorldKind.GAME));
         LocationSpec lobbySpawn = readLocation(path + ".lobby_spawn");
         List<LocationSpec> gameSpawns = readLocationList(path + ".game_spawns");
@@ -678,7 +691,7 @@ public class MiniGameMapManager {
 
     private void setLobbySpawn(Player player, MapDefinition definition) {
         Location loc = player.getLocation();
-        config().set(mapPath(definition) + ".lobby_spawn", writeLocation(loc));
+        writeSharedLobbySpawn(definition.mode(), loc);
         World world = loc.getWorld();
         if (world != null) {
             world.setSpawnLocation(loc);
@@ -692,6 +705,20 @@ public class MiniGameMapManager {
         placeholders.put("z", format(loc.getZ()));
         player.sendMessage(plugin.getMessageManager().getMiniGameMessageWithPrefix("minigame_map.lobby_spawn_set", placeholders));
         playEditConfirmSound(player);
+    }
+
+    public void writeSharedLobbySpawn(org.gamefunxiao.game.GameMode mode, Location loc) {
+        if (mode == null || loc == null) {
+            return;
+        }
+        String sharedWorldName = defaultTemplateWorldName(mode, "default", EditWorldKind.LOBBY);
+        for (MapDefinition definition : getMapDefinitions(mode)) {
+            String path = mapPath(definition);
+            config().set(path + ".lobby_template_world", sharedWorldName);
+            config().set(path + ".lobby_spawn", writeLocation(loc));
+            config().set(path + ".lobby_spawn.world", sharedWorldName);
+        }
+        plugin.getConfigManager().saveConfig(CONFIG_NAME);
     }
 
     private void setPrimaryGameSpawn(Player player, MapDefinition definition) {
@@ -918,8 +945,7 @@ public class MiniGameMapManager {
         }
         String path = mapPath(definition);
         if (!config().isConfigurationSection(path + ".lobby_spawn")) {
-            config().set(path + ".lobby_spawn", writeLocation(spawn));
-            plugin.getConfigManager().saveConfig(CONFIG_NAME);
+            writeSharedLobbySpawn(definition.mode(), spawn);
         }
     }
 
@@ -1140,6 +1166,9 @@ public class MiniGameMapManager {
     }
 
     private String defaultTemplateWorldName(org.gamefunxiao.game.GameMode mode, String mapId, EditWorldKind kind) {
+        if (kind == EditWorldKind.LOBBY) {
+            return "gamefun_template_" + mode.getId().toLowerCase(Locale.ROOT) + "_lobby";
+        }
         return "gamefun_template_" + mode.getId().toLowerCase(Locale.ROOT) + "_" + normalizeMapId(mapId) + "_" + kind.id();
     }
 

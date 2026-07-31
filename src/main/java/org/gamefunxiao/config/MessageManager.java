@@ -16,6 +16,7 @@ import java.util.Map;
 public class MessageManager {
 
     private static final int DEATH_SWAP_THEME_MESSAGES_VERSION = 29;
+    private static final int SHARED_LOBBY_MESSAGES_VERSION = 30;
 
     private final GameFunXiao plugin;
     private FileConfiguration messages;
@@ -41,6 +42,9 @@ public class MessageManager {
         if (migrateDeathSwapMessages(messages, defaults, previousVersion)) {
             changed = true;
         }
+        if (migrateSharedLobbyMessages(messages, defaults, previousVersion)) {
+            changed = true;
+        }
         if (changed) {
             saveMessages();
         }
@@ -64,6 +68,9 @@ public class MessageManager {
         messages.setDefaults(defaults);
         boolean changed = mergeMissingKeys(messages, defaults);
         if (migrateDeathSwapMessages(messages, defaults, previousVersion)) {
+            changed = true;
+        }
+        if (migrateSharedLobbyMessages(messages, defaults, previousVersion)) {
             changed = true;
         }
         if (changed) {
@@ -224,6 +231,16 @@ public class MessageManager {
             }
         }
         target.set("points.minigame_participate", defaults.get("points.minigame_participate"));
+        return true;
+    }
+
+    private boolean migrateSharedLobbyMessages(FileConfiguration target, FileConfiguration defaults, int previousVersion) {
+        if (target == null || defaults == null || previousVersion >= SHARED_LOBBY_MESSAGES_VERSION) {
+            return false;
+        }
+        target.set("lobby.template_edit_request_sent", defaults.get("lobby.template_edit_request_sent"));
+        target.set("lobby.template_edit_joined", defaults.get("lobby.template_edit_joined"));
+        target.set("lobby.template_edit_failed", defaults.get("lobby.template_edit_failed"));
         return true;
     }
 

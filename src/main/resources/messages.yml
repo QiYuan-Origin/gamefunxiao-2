@@ -1,6 +1,6 @@
 # GameFunXiao 消息配置文件
 # 配置版本（请勿手动修改）
-config_version: 29
+config_version: 30
 
 # 通用消息
 general:
@@ -307,9 +307,9 @@ lobby:
   must_be_in_template: "§x§F§F§A§A§5§5⚠ §c你必须在模板大厅世界 §ehugamelobby §c中才能设置出生点！"
   spawn_set: "§x§5§5§F§F§5§5✔ §a大厅出生点已设置为当前位置！"
   lobby_creation_failed: "§x§F§F§5§5§5§5✘ §c创建大厅世界失败！"
-  template_edit_request_sent: "§x§8§8§D§D§F§F🛠 §b正在送你前往 §egameing §b等待大厅模板，进入后即可修改。"
-  template_edit_joined: "§x§5§5§F§F§A§A✔ §a已进入等待大厅模板 §ehugamelobby§a，可以开始修改。"
-  template_edit_failed: "§x§F§F§8§8§5§5⚠ §c无法进入等待大厅模板，请检查 gameing 是否在线。"
+  template_edit_request_sent: "§x§F§F§B§B§6§6🛠 §e正在送你前往 §fgameing §e编辑 §f{mode} §e等待大厅。"
+  template_edit_joined: "§x§5§5§F§F§A§A✔ §a已进入 §e{mode} §a等待大厅模板：§f{world}"
+  template_edit_failed: "§x§F§F§8§8§5§5⚠ §c无法进入 §e{mode} §c等待大厅模板，请检查 gameing 是否在线。"
 
 minigame_map:
   created: "§x§7§D§F§F§C§8✦ §a已创建地图配置：§e{mode} §8/ §b{id} §7最大人数 §d{max}§7。"

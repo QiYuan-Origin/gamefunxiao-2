@@ -1,4 +1,4 @@
-config_version: 3
+config_version: 4
 
 size_profiles:
   lucky_pillars:
@@ -27,11 +27,11 @@ maps:
       min_players: 2
       max_players: 8
       theme: "WOOL"
-      lobby_template_world: "gamefun_template_lucky_pillars_small_lobby"
+      lobby_template_world: "gamefun_template_lucky_pillars_lobby"
       game_template_world: "gamefun_template_lucky_pillars_small_game"
       auto_create_template: true
       lobby_spawn:
-        world: "gamefun_template_lucky_pillars_small_lobby"
+        world: "gamefun_template_lucky_pillars_lobby"
         x: 0.5
         y: 65.0
         z: 0.5
@@ -56,11 +56,11 @@ maps:
       min_players: 9
       max_players: 16
       theme: "VOID"
-      lobby_template_world: "gamefun_template_lucky_pillars_middle_lobby"
+      lobby_template_world: "gamefun_template_lucky_pillars_lobby"
       game_template_world: "gamefun_template_lucky_pillars_middle_game"
       auto_create_template: true
       lobby_spawn:
-        world: "gamefun_template_lucky_pillars_middle_lobby"
+        world: "gamefun_template_lucky_pillars_lobby"
         x: 0.5
         y: 65.0
         z: 0.5
@@ -85,11 +85,11 @@ maps:
       min_players: 17
       max_players: 32
       theme: "OCEAN"
-      lobby_template_world: "gamefun_template_lucky_pillars_large_lobby"
+      lobby_template_world: "gamefun_template_lucky_pillars_lobby"
       game_template_world: "gamefun_template_lucky_pillars_large_game"
       auto_create_template: true
       lobby_spawn:
-        world: "gamefun_template_lucky_pillars_large_lobby"
+        world: "gamefun_template_lucky_pillars_lobby"
         x: 0.5
         y: 65.0
         z: 0.5

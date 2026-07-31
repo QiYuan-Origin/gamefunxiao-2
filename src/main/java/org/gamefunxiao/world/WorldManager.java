@@ -104,6 +104,7 @@ public class WorldManager {
         if (templateLobbyWorld != null) {
             if (existingTemplateWorld) {
                 applyTemplateLobbyRules(templateLobbyWorld);
+                upgradeLegacyTemplateLobbyIfNeeded(templateLobbyWorld, LobbyTemplateStyle.HUNTER);
                 plugin.getLogger().info("模板大厅世界已从已有文件加载: " + TEMPLATE_LOBBY_NAME);
             } else {
                 setupNewTemplateLobbyWorld(templateLobbyWorld);
@@ -133,6 +134,7 @@ public class WorldManager {
         if (deathSwapTemplateLobbyWorld != null) {
             if (existingTemplateWorld) {
                 applyTemplateLobbyRules(deathSwapTemplateLobbyWorld);
+                upgradeLegacyTemplateLobbyIfNeeded(deathSwapTemplateLobbyWorld, LobbyTemplateStyle.DEATH_SWAP);
                 plugin.getLogger().info("死亡互换等待大厅模板已从已有文件加载: " + DEATH_SWAP_TEMPLATE_LOBBY_NAME);
             } else {
                 setupNewDeathSwapTemplateLobbyWorld(deathSwapTemplateLobbyWorld);
@@ -164,33 +166,12 @@ public class WorldManager {
 
     private void setupNewTemplateLobbyWorld(World world) {
         applyTemplateLobbyRules(world);
-        world.setSpawnLocation(new Location(world, 0.5, 65, 0.5));
-        createDefaultPlatform(world);
+        createStyledLobbyTemplate(world, LobbyTemplateStyle.HUNTER, false);
     }
 
     private void setupNewDeathSwapTemplateLobbyWorld(World world) {
         applyTemplateLobbyRules(world);
-        int baseY = 64;
-        int radius = 12;
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                boolean edge = Math.abs(x) == radius || Math.abs(z) == radius;
-                boolean axis = Math.abs(x) <= 1 || Math.abs(z) <= 1;
-                Material material = edge ? Material.RED_STAINED_GLASS : (axis ? Material.GRAY_STAINED_GLASS : Material.WHITE_STAINED_GLASS);
-                world.getBlockAt(x, baseY, z).setType(material, false);
-            }
-        }
-        for (int y = baseY + 1; y <= baseY + 3; y++) {
-            for (int x = -radius; x <= radius; x++) {
-                world.getBlockAt(x, y, -radius).setType(Material.BARRIER, false);
-                world.getBlockAt(x, y, radius).setType(Material.BARRIER, false);
-            }
-            for (int z = -radius; z <= radius; z++) {
-                world.getBlockAt(-radius, y, z).setType(Material.BARRIER, false);
-                world.getBlockAt(radius, y, z).setType(Material.BARRIER, false);
-            }
-        }
-        world.setSpawnLocation(new Location(world, 0.5D, baseY + 1.0D, 0.5D, 0.0F, 0.0F));
+        createStyledLobbyTemplate(world, LobbyTemplateStyle.DEATH_SWAP, false);
     }
 
     private void createDefaultPlatform(World world) {
@@ -212,8 +193,306 @@ public class WorldManager {
         }
     }
 
+    private enum LobbyTemplateStyle {
+        HUNTER(Material.LIGHT_BLUE_CONCRETE, Material.CYAN_STAINED_GLASS, Material.SEA_LANTERN, Material.WARPED_PLANKS),
+        DEATH_SWAP(Material.RED_CONCRETE, Material.ORANGE_STAINED_GLASS, Material.SHROOMLIGHT, Material.CRIMSON_PLANKS),
+        LUCKY_PILLARS(Material.LIME_CONCRETE, Material.YELLOW_STAINED_GLASS, Material.OCHRE_FROGLIGHT, Material.BAMBOO_PLANKS);
+
+        private final Material accent;
+        private final Material glass;
+        private final Material lamp;
+        private final Material plank;
+
+        LobbyTemplateStyle(Material accent, Material glass, Material lamp, Material plank) {
+            this.accent = accent;
+            this.glass = glass;
+            this.lamp = lamp;
+            this.plank = plank;
+        }
+    }
+
+    private LobbyTemplateStyle lobbyStyleFor(GameMode mode) {
+        if (mode != null && mode.isDeathSwap()) {
+            return LobbyTemplateStyle.DEATH_SWAP;
+        }
+        if (mode != null && mode.isLuckyPillars()) {
+            return LobbyTemplateStyle.LUCKY_PILLARS;
+        }
+        return LobbyTemplateStyle.HUNTER;
+    }
+
+    private void upgradeLegacyTemplateLobbyIfNeeded(World world, LobbyTemplateStyle style) {
+        if (world == null || style == null) {
+            return;
+        }
+        if (!isLegacySimpleLobbyTemplate(world, style)) {
+            return;
+        }
+        createStyledLobbyTemplate(world, style, true);
+        world.save();
+        plugin.getLogger().info("已把旧版预置等待大厅升级为新版大厅: " + world.getName());
+    }
+
+    private boolean isLegacySimpleLobbyTemplate(World world, LobbyTemplateStyle style) {
+        int radius = style == LobbyTemplateStyle.DEATH_SWAP ? 12 : 10;
+        Material center = world.getBlockAt(0, 64, 0).getType();
+        Material edgeBarrier = world.getBlockAt(radius, 65, 0).getType();
+        if (edgeBarrier != Material.BARRIER) {
+            return false;
+        }
+        if (style == LobbyTemplateStyle.DEATH_SWAP) {
+            if (center != Material.GRAY_STAINED_GLASS && center != Material.WHITE_STAINED_GLASS) {
+                return false;
+            }
+        } else if (style == LobbyTemplateStyle.LUCKY_PILLARS) {
+            if (center != Material.LIME_STAINED_GLASS && center != Material.LIGHT_BLUE_STAINED_GLASS
+                    && center != Material.WHITE_STAINED_GLASS) {
+                return false;
+            }
+        } else if (center != Material.WHITE_STAINED_GLASS) {
+            return false;
+        }
+        Set<Material> allowed = new LinkedHashSet<>();
+        allowed.add(Material.AIR);
+        allowed.add(Material.CAVE_AIR);
+        allowed.add(Material.VOID_AIR);
+        allowed.add(Material.BARRIER);
+        allowed.add(Material.WHITE_STAINED_GLASS);
+        allowed.add(Material.GRAY_STAINED_GLASS);
+        allowed.add(Material.RED_STAINED_GLASS);
+        allowed.add(Material.LIME_STAINED_GLASS);
+        allowed.add(Material.LIGHT_BLUE_STAINED_GLASS);
+        for (int x = -radius - 1; x <= radius + 1; x++) {
+            for (int y = 64; y <= 68; y++) {
+                for (int z = -radius - 1; z <= radius + 1; z++) {
+                    if (!allowed.contains(world.getBlockAt(x, y, z).getType())) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    private void createStyledLobbyTemplate(World world, LobbyTemplateStyle style, boolean clear) {
+        if (world == null) {
+            return;
+        }
+        int baseY = 64;
+        if (clear) {
+            clearLobbyBuildArea(world, baseY);
+        }
+        buildLobbyFloor(world, baseY, style);
+        buildLobbyRail(world, baseY, style);
+        buildLobbyPads(world, baseY, style);
+        buildLobbyPillars(world, baseY, style);
+        buildLobbyArches(world, baseY, style);
+        buildLobbyCeilingRune(world, baseY, style);
+        buildLobbyGardens(world, baseY, style);
+        world.setSpawnLocation(new Location(world, 0.5D, baseY + 1.0D, 0.5D, 0.0F, 0.0F));
+    }
+
+    private void clearLobbyBuildArea(World world, int baseY) {
+        for (int x = -34; x <= 34; x++) {
+            for (int y = baseY - 3; y <= baseY + 24; y++) {
+                for (int z = -34; z <= 34; z++) {
+                    world.getBlockAt(x, y, z).setType(Material.AIR, false);
+                }
+            }
+        }
+    }
+
+    private void buildLobbyFloor(World world, int baseY, LobbyTemplateStyle style) {
+        int radius = 24;
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                double distance = Math.sqrt(x * x + z * z);
+                if (distance > radius + 0.35D) {
+                    continue;
+                }
+                Material material;
+                if (distance > 22.2D) {
+                    material = Material.POLISHED_BLACKSTONE_BRICKS;
+                } else if (distance > 19.4D) {
+                    material = ((x + z) & 1) == 0 ? Material.DEEPSLATE_TILES : style.accent;
+                } else if (Math.abs(x) <= 1 || Math.abs(z) <= 1 || Math.abs(Math.abs(x) - Math.abs(z)) <= 1) {
+                    material = style.accent;
+                } else if (distance <= 4.8D) {
+                    material = distance <= 2.1D ? style.lamp : style.plank;
+                } else {
+                    material = ((x + z) & 1) == 0 ? Material.SMOOTH_QUARTZ : Material.POLISHED_ANDESITE;
+                }
+                world.getBlockAt(x, baseY, z).setType(material, false);
+                if (distance <= 5.5D && distance >= 4.4D) {
+                    world.getBlockAt(x, baseY + 1, z).setType(style.glass, false);
+                }
+            }
+        }
+        for (int i = -2; i <= 2; i++) {
+            world.getBlockAt(i, baseY + 1, 0).setType(Material.AIR, false);
+            world.getBlockAt(0, baseY + 1, i).setType(Material.AIR, false);
+        }
+    }
+
+    private void buildLobbyRail(World world, int baseY, LobbyTemplateStyle style) {
+        int radius = 25;
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                double distance = Math.sqrt(x * x + z * z);
+                if (distance < 24.3D || distance > 25.3D) {
+                    continue;
+                }
+                boolean gate = Math.abs(x) <= 3 || Math.abs(z) <= 3;
+                if (!gate) {
+                    world.getBlockAt(x, baseY, z).setType(Material.POLISHED_BLACKSTONE_BRICKS, false);
+                    world.getBlockAt(x, baseY + 1, z).setType(((x + z) & 1) == 0 ? style.glass : Material.IRON_BARS, false);
+                }
+                world.getBlockAt(x, baseY + 2, z).setType(Material.BARRIER, false);
+                world.getBlockAt(x, baseY + 3, z).setType(Material.BARRIER, false);
+            }
+        }
+    }
+
+    private void buildLobbyPads(World world, int baseY, LobbyTemplateStyle style) {
+        for (int i = 0; i < 8; i++) {
+            double angle = Math.PI * 2.0D * i / 8.0D;
+            int centerX = (int) Math.round(Math.cos(angle) * 13.0D);
+            int centerZ = (int) Math.round(Math.sin(angle) * 13.0D);
+            for (int x = -2; x <= 2; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    double distance = Math.sqrt(x * x + z * z);
+                    if (distance > 2.35D) {
+                        continue;
+                    }
+                    Material material = distance <= 0.8D ? style.lamp : (distance > 1.7D ? style.glass : Material.SMOOTH_QUARTZ);
+                    world.getBlockAt(centerX + x, baseY + 1, centerZ + z).setType(material, false);
+                }
+            }
+        }
+    }
+
+    private void buildLobbyPillars(World world, int baseY, LobbyTemplateStyle style) {
+        int[][] points = {{18, 18}, {-18, 18}, {18, -18}, {-18, -18}};
+        for (int[] point : points) {
+            buildLobbyPillar(world, point[0], baseY, point[1], style);
+        }
+    }
+
+    private void buildLobbyPillar(World world, int centerX, int baseY, int centerZ, LobbyTemplateStyle style) {
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                world.getBlockAt(centerX + x, baseY + 1, centerZ + z).setType(Material.POLISHED_DEEPSLATE, false);
+            }
+        }
+        for (int y = baseY + 2; y <= baseY + 10; y++) {
+            world.getBlockAt(centerX, y, centerZ).setType(y % 3 == 0 ? style.accent : Material.POLISHED_DEEPSLATE, false);
+            if (y == baseY + 5 || y == baseY + 8) {
+                world.getBlockAt(centerX + 1, y, centerZ).setType(style.lamp, false);
+                world.getBlockAt(centerX - 1, y, centerZ).setType(style.lamp, false);
+                world.getBlockAt(centerX, y, centerZ + 1).setType(style.lamp, false);
+                world.getBlockAt(centerX, y, centerZ - 1).setType(style.lamp, false);
+            }
+        }
+        for (int x = -2; x <= 2; x++) {
+            for (int z = -2; z <= 2; z++) {
+                if (Math.max(Math.abs(x), Math.abs(z)) <= 1 || Math.abs(x) + Math.abs(z) <= 3) {
+                    world.getBlockAt(centerX + x, baseY + 11, centerZ + z).setType(style.glass, false);
+                }
+            }
+        }
+    }
+
+    private void buildLobbyArches(World world, int baseY, LobbyTemplateStyle style) {
+        buildLobbyArch(world, 0, -24, true, baseY, style);
+        buildLobbyArch(world, 0, 24, true, baseY, style);
+        buildLobbyArch(world, -24, 0, false, baseY, style);
+        buildLobbyArch(world, 24, 0, false, baseY, style);
+    }
+
+    private void buildLobbyArch(World world, int centerX, int centerZ, boolean eastWest, int baseY, LobbyTemplateStyle style) {
+        for (int side : new int[]{-4, 4}) {
+            for (int y = baseY + 1; y <= baseY + 7; y++) {
+                int x = eastWest ? centerX + side : centerX;
+                int z = eastWest ? centerZ : centerZ + side;
+                world.getBlockAt(x, y, z).setType(y == baseY + 4 ? style.lamp : Material.POLISHED_BLACKSTONE_BRICKS, false);
+            }
+        }
+        for (int offset = -4; offset <= 4; offset++) {
+            int x = eastWest ? centerX + offset : centerX;
+            int z = eastWest ? centerZ : centerZ + offset;
+            world.getBlockAt(x, baseY + 8, z).setType(offset == 0 ? style.lamp : style.accent, false);
+            if (Math.abs(offset) <= 2) {
+                world.getBlockAt(x, baseY + 7, z).setType(style.glass, false);
+            }
+        }
+    }
+
+    private void buildLobbyCeilingRune(World world, int baseY, LobbyTemplateStyle style) {
+        for (int y = baseY + 8; y <= baseY + 12; y++) {
+            world.getBlockAt(0, y, 0).setType(Material.END_ROD, false);
+        }
+        world.getBlockAt(0, baseY + 7, 0).setType(style.lamp, false);
+        int y = baseY + 12;
+        for (int degree = 0; degree < 360; degree += 15) {
+            double rad = Math.toRadians(degree);
+            int x = (int) Math.round(Math.cos(rad) * 9.0D);
+            int z = (int) Math.round(Math.sin(rad) * 9.0D);
+            world.getBlockAt(x, y, z).setType(degree % 45 == 0 ? style.lamp : style.glass, false);
+        }
+        for (int i = -6; i <= 6; i++) {
+            if (i == 0) {
+                continue;
+            }
+            world.getBlockAt(i, y, 0).setType(style.accent, false);
+            world.getBlockAt(0, y, i).setType(style.accent, false);
+        }
+    }
+
+    private void buildLobbyGardens(World world, int baseY, LobbyTemplateStyle style) {
+        Material leaves = style == LobbyTemplateStyle.DEATH_SWAP ? Material.NETHER_WART_BLOCK
+                : style == LobbyTemplateStyle.LUCKY_PILLARS ? Material.AZALEA_LEAVES : Material.CHERRY_LEAVES;
+        int[][] beds = {{10, 18}, {-10, 18}, {10, -18}, {-10, -18}, {18, 10}, {-18, 10}, {18, -10}, {-18, -10}};
+        for (int[] bed : beds) {
+            for (int x = -1; x <= 1; x++) {
+                for (int z = -1; z <= 1; z++) {
+                    world.getBlockAt(bed[0] + x, baseY + 1, bed[1] + z).setType(Material.MOSS_BLOCK, false);
+                }
+            }
+            world.getBlockAt(bed[0], baseY + 2, bed[1]).setType(leaves, false);
+            world.getBlockAt(bed[0] + 1, baseY + 2, bed[1]).setType(leaves, false);
+            world.getBlockAt(bed[0] - 1, baseY + 2, bed[1]).setType(leaves, false);
+            world.getBlockAt(bed[0], baseY + 2, bed[1] + 1).setType(leaves, false);
+            world.getBlockAt(bed[0], baseY + 2, bed[1] - 1).setType(leaves, false);
+            world.getBlockAt(bed[0], baseY + 3, bed[1]).setType(style.glass, false);
+        }
+    }
+
     public World getTemplateLobbyWorld() {
         return templateLobbyWorld;
+    }
+
+    public World getTemplateLobbyWorld(GameMode mode) {
+        if (mode != null && mode.isDeathSwap()) {
+            return getDeathSwapTemplateLobbyWorld();
+        }
+        if (mode != null && mode.isMiniGameMapEditableMode() && plugin.getMiniGameMapManager() != null) {
+            MiniGameMapManager.MapDefinition definition = plugin.getMiniGameMapManager().ensureMapDefinition(mode, "default", -1);
+            World world = getOrCreateMiniGameTemplateWorld(definition, MiniGameMapManager.EditWorldKind.LOBBY);
+            if (world != null) {
+                return world;
+            }
+        }
+        if (templateLobbyWorld == null) {
+            initTemplateLobbyWorld();
+        }
+        return templateLobbyWorld;
+    }
+
+    public World getDeathSwapTemplateLobbyWorld() {
+        if (deathSwapTemplateLobbyWorld == null) {
+            initDeathSwapTemplateLobbyWorld();
+        }
+        return deathSwapTemplateLobbyWorld;
     }
 
     public World createLobbyWorld(String roomId) {
@@ -391,6 +670,9 @@ public class WorldManager {
         World loaded = Bukkit.getWorld(worldName);
         if (loaded != null) {
             applyTemplateLobbyRules(loaded);
+            if (kind == MiniGameMapManager.EditWorldKind.LOBBY) {
+                upgradeLegacyTemplateLobbyIfNeeded(loaded, lobbyStyleFor(definition.mode()));
+            }
             return loaded;
         }
 
@@ -417,6 +699,9 @@ public class WorldManager {
             setupNewMiniGameTemplateWorld(world, definition, kind);
             plugin.getLogger().info("小游戏模板世界已创建: " + worldName + " (" + definition.mode().getDisplayName() + " / " + kind.displayName() + ")");
         } else {
+            if (kind == MiniGameMapManager.EditWorldKind.LOBBY) {
+                upgradeLegacyTemplateLobbyIfNeeded(world, lobbyStyleFor(definition.mode()));
+            }
             plugin.getLogger().info("小游戏模板世界已从已有文件加载: " + worldName);
         }
         return world;
@@ -439,30 +724,8 @@ public class WorldManager {
     }
 
     private void createMiniGameLobbyTemplate(World world, MiniGameMapManager.MapDefinition definition) {
-        int baseY = 64;
-        int radius = 12;
-        Material corner = definition != null && definition.mode() != null && definition.mode().isLuckyPillars()
-                ? Material.LIME_STAINED_GLASS
-                : Material.LIGHT_BLUE_STAINED_GLASS;
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                boolean edge = Math.abs(x) == radius || Math.abs(z) == radius;
-                boolean axis = Math.abs(x) <= 1 || Math.abs(z) <= 1;
-                Material material = edge ? Material.GRAY_STAINED_GLASS : (axis ? corner : Material.WHITE_STAINED_GLASS);
-                world.getBlockAt(x, baseY, z).setType(material, false);
-            }
-        }
-        for (int y = baseY + 1; y <= baseY + 3; y++) {
-            for (int x = -radius; x <= radius; x++) {
-                world.getBlockAt(x, y, -radius).setType(Material.BARRIER, false);
-                world.getBlockAt(x, y, radius).setType(Material.BARRIER, false);
-            }
-            for (int z = -radius; z <= radius; z++) {
-                world.getBlockAt(-radius, y, z).setType(Material.BARRIER, false);
-                world.getBlockAt(radius, y, z).setType(Material.BARRIER, false);
-            }
-        }
-        world.setSpawnLocation(new Location(world, 0.5D, baseY + 1.0D, 0.5D, 0.0F, 0.0F));
+        GameMode mode = definition == null ? null : definition.mode();
+        createStyledLobbyTemplate(world, lobbyStyleFor(mode), false);
     }
 
     private void createLuckyPillarsTemplate(World world, MiniGameMapManager.MapDefinition definition) {

@@ -823,11 +823,16 @@ public class ChildServerManager implements PluginMessageListener {
     }
 
     public boolean requestTemplateLobbyEdit(Player player) {
+        return requestTemplateLobbyEdit(player, GameMode.CLASSIC);
+    }
+
+    public boolean requestTemplateLobbyEdit(Player player, GameMode mode) {
         if (player == null || !player.isOnline()) {
             return false;
         }
+        GameMode editMode = mode == null ? GameMode.CLASSIC : mode;
         if (!ensureCrossServerAvailable(player, crossGameServerName)) {
-            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("lobby.template_edit_failed"));
+            player.sendMessage(plugin.getMessageManager().getModeMessageWithPrefix(editMode, "lobby.template_edit_failed"));
             return false;
         }
 
@@ -835,16 +840,19 @@ public class ChildServerManager implements PluginMessageListener {
         FileConfiguration config = new org.bukkit.configuration.file.YamlConfiguration();
         config.set("uuid", player.getUniqueId().toString());
         config.set("name", player.getName());
+        config.set("mode", editMode.getId());
         config.set("created_at", System.currentTimeMillis());
         try {
             config.save(file);
         } catch (IOException exception) {
             plugin.getLogger().warning("保存等待大厅模板编辑请求失败: " + exception.getMessage());
-            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("lobby.template_edit_failed"));
+            player.sendMessage(plugin.getMessageManager().getModeMessageWithPrefix(editMode, "lobby.template_edit_failed"));
             return false;
         }
 
-        player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("lobby.template_edit_request_sent"));
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("mode", editMode.usesHunterFlowMode() ? "猎人游戏" : editMode.getDisplayName());
+        player.sendMessage(plugin.getMessageManager().getModeMessageWithPrefix(editMode, "lobby.template_edit_request_sent", placeholders));
         connectPlayer(player, crossGameServerName);
         return true;
     }
@@ -939,11 +947,13 @@ public class ChildServerManager implements PluginMessageListener {
         if (!file.exists()) {
             return false;
         }
+        FileConfiguration config = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(file);
         file.delete();
 
-        World templateWorld = plugin.getWorldManager().getTemplateLobbyWorld();
+        GameMode mode = GameMode.fromId(config.getString("mode", GameMode.CLASSIC.getId()));
+        World templateWorld = plugin.getWorldManager().getTemplateLobbyWorld(mode);
         if (templateWorld == null) {
-            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("lobby.template_not_found"));
+            player.sendMessage(plugin.getMessageManager().getModeMessageWithPrefix(mode, "lobby.template_not_found"));
             return true;
         }
 
@@ -955,7 +965,10 @@ public class ChildServerManager implements PluginMessageListener {
             player.teleport(spawn);
             player.setGameMode(org.bukkit.GameMode.CREATIVE);
             player.setAllowFlight(true);
-            player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("lobby.template_edit_joined"));
+            Map<String, String> placeholders = new HashMap<>();
+            placeholders.put("mode", mode.usesHunterFlowMode() ? "猎人游戏" : mode.getDisplayName());
+            placeholders.put("world", templateWorld.getName());
+            player.sendMessage(plugin.getMessageManager().getModeMessageWithPrefix(mode, "lobby.template_edit_joined", placeholders));
             player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.9f, 1.6f);
             player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.25f);
         }, 10L);
