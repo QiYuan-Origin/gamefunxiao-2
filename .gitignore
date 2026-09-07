@@ -115,3 +115,42 @@ run/
 # Frontend dependencies / generated wiki assets
 node_modules/
 dist/
+
+# Local-only agent notes and unrelated projects
+/AGENTS.md
+/AI-config.txt
+/task.md
+/开发指南.md
+/开发日记.txt
+/插件介绍.md
+/闪光模式.md
+/standalone-brickguard/
+/gamefun-flashsmp-mod/
+/.agents/
+/tools/
+/net/
+/patches/
+*.javap.txt
+mod_foods*
+plugin_foods*
+.fabric_methods_lines.txt
+.forge_methods_lines.txt
+
+# Local analysis, screenshots, crash reports, and generated helpers
+/.ai-orchestrator/
+/.baoyu-skills/
+/.audit_*
+/.current_*
+/.missing_*
+/.mod_*
+/.plugin_*
+/.tmp_*
+/convert_foods.py
+/generate_spear.py
+/crossbow_javap.txt
+/windcharge.javap.txt
+/worldtab.javap.txt
+/forge-screen*.png
+/codex-clipboard-*.png
+/grep.exe.stackdump
+/replay_pid*.log

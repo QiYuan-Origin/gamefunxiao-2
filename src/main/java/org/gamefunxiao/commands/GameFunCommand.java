@@ -88,7 +88,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "endflashcompass", "efcompass", "终章指南针" -> handleEndFlashCompass(sender);
             case "endflashdebug", "endflashtest", "tuneendflash", "efdebug", "调终章", "终章调试" -> handleEndFlashDebug(sender);
             case "flashuse", "flashtest", "flashitems" -> handleFlashUse(sender, args);
-            case "railgun", "chargedrailgun", "轨道炮", "充能轨道炮" -> handleChargedRailgun(sender);
+            case "railgun", "chargedrailgun", "轨道炮", "充能轨道炮" -> handleChargedRailgun(sender, args);
             case "unstablemace", "unstable", "不稳定重锤", "重锤" -> handleRemovedUnstableMace(sender);
             case "wiki", "bookwiki", "flashwiki", "guidebook", "guide", "手册", "书wiki", "闪光手册" -> handleFlashWikiBook(sender);
             case "wikiopen", "openwiki", "flashwikiopen", "打开书wiki" -> handleOpenFlashWikiBook(sender, args);
@@ -181,7 +181,7 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             entries.add("§e/gamefunxiao endflashkit remove <kitId> §7- §f删除 Kit");
             entries.add("§e/gamefunxiao 调终章 §7- §f请求 gameing 进入固定终章调试世界");
             entries.add("§e/gamefunxiao flashuse <on|off|toggle|status> [玩家] §7- §f切换闪光测试能力");
-            entries.add("§e/gamefunxiao railgun §7- §f获得一把已充能的轨道炮");
+            entries.add("§e/gamefunxiao railgun [nuke|stab|lawnuke] §7- §f获得一把已充能的轨道炮");
             entries.add("§e/gamefunxiao flashmusic all <歌曲名> [Mall] §7- §f给全服播放闪光音符盒音乐");
             entries.add("§e/gamefunxiao flashmusic nearby <范围> <歌曲名> [Mall] §7- §f给附近玩家播放闪光音符盒音乐");
             entries.add("§e/gamefunxiao flashmusic stopall §7- §f停止所有闪光音符盒播放");
@@ -207,11 +207,14 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
         plugin.getConfigManager().reloadConfigs();
         plugin.getMessageManager().reloadMessages();
         plugin.getTabHeaderFooterManager().start();
+        if (plugin.getFlashAdvancementManager() != null) {
+            plugin.getFlashAdvancementManager().loadAdvancements();
+        }
 
         sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.reload_success"));
     }
 
-    private void handleChargedRailgun(CommandSender sender) {
+    private void handleChargedRailgun(CommandSender sender, String[] args) {
         if (!sender.hasPermission("gamefunxiao.admin.railgun")) {
             sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix("general.no_permission"));
             return;
@@ -221,7 +224,8 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        ItemStack railgun = plugin.getFlashModeManager().createChargedRailgun();
+        String type = args.length >= 2 ? args[1] : null;
+        ItemStack railgun = plugin.getFlashModeManager().createChargedRailgun(type);
         Map<Integer, ItemStack> leftovers = player.getInventory().addItem(railgun);
         if (leftovers.isEmpty()) {
             player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.command_given"));
@@ -229,10 +233,10 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             leftovers.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
             player.sendMessage(plugin.getMessageManager().getHunterGameMessageWithPrefix("railgun.command_dropped"));
         }
-        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.72F, 1.42F);
-        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_PISTON_EXTEND, 0.55F, 0.82F);
+        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.72F, 1.0F);
+        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_PISTON_EXTEND, 0.55F, 1.0F);
         Bukkit.getScheduler().runTaskLater(plugin, () ->
-                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_ACTIVATE, 0.48F, 1.68F), 3L);
+                player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_ACTIVATE, 0.48F, 1.0F), 3L);
     }
 
     private void handleLobbyInteractionRegion(CommandSender sender, String[] args) {
@@ -1531,7 +1535,9 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             case "main", "home", "hunter", "huntergame", "hg",
                     "deathswap", "death_swap", "ds",
                     "leaderboard", "lb", "rank", "ranks", "points", "performance", "shop", "settings",
-                    "victoryshop", "victorysettings", "endflashkit", "endflashkitadmin", "personalkit",
+                    "victoryshop", "victorysettings", "deathswapshop", "dsshop",
+                    "deathswapvictoryshop", "dsvictoryshop",
+                    "endflashkit", "endflashkitadmin", "personalkit",
                     "endflashpersonalkit", "pass_count", "fastest_time", "play_count", "hunter_points",
                     "prey_points", "minigame_points", "主菜单", "猎人游戏", "排行榜", "表现值", "段位", "商城", "设置" ->
                     openCommandMenuTarget(player, action, backCommand);
@@ -2345,7 +2351,8 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if (isCommandBranch(args[0])) {
                 completions.addAll(Arrays.asList(
                         "help", "menu", "open", "quick", "match", "create", "join", "rooms",
-                        "main", "hunter", "leaderboard", "rank", "points", "performance", "shop", "settings", "personalkit"
+                        "main", "hunter", "leaderboard", "rank", "points", "performance", "shop", "settings",
+                        "deathswap", "deathswapshop", "deathswapvictoryshop", "personalkit"
                 ));
                 if (sender.hasPermission("gamefunxiao.admin")) {
                     completions.add("endflashkit");
@@ -2365,6 +2372,9 @@ public class GameFunCommand implements CommandExecutor, TabCompleter {
             } else if ((args[0].equalsIgnoreCase("flashuse") || args[0].equalsIgnoreCase("flashtest") || args[0].equalsIgnoreCase("flashitems"))
                     && (sender.hasPermission("gamefunxiao.flashuse") || sender.hasPermission("gamefunxiao.admin"))) {
                 completions.addAll(Arrays.asList("on", "off", "toggle", "status"));
+            } else if ((args[0].equalsIgnoreCase("railgun") || args[0].equalsIgnoreCase("chargedrailgun") || args[0].equalsIgnoreCase("轨道炮") || args[0].equalsIgnoreCase("充能轨道炮"))
+                    && sender.hasPermission("gamefunxiao.admin.railgun")) {
+                completions.addAll(Arrays.asList("nuke", "stab", "lawnuke"));
             }
         } else if (args.length == 3) {
             if (isFlashMusicCommand(args[0])) {

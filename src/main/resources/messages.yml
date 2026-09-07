@@ -270,6 +270,8 @@ death_swap:
   world_preparing: "§x§F§F§6§6§0§0🌍 §e正在准备死亡互换世界。"
   world_ready_village: "§x§F§F§D§D§5§5✔ §a本局出生点附近有村庄。§7村庄: §e{village} §7距离约 §6{distance} §7格。"
   world_no_village: "§x§F§F§B§B§6§6⚠ §e本局没有确认到出生点附近村庄。§7原因：§f{reason}"
+  nearby_structure: "§x§F§F§D§D§5§5✔ §a离你最近的结构: §e{type} §7坐标: §f{location} §7距离约 §6{distance} §7格。"
+  nearby_structure_none: "§x§F§F§B§B§6§6⚠ §e附近没有确认到沉船、废门或村庄。"
   world_failed: "§x§F§F§5§5§5§5✘ §c死亡互换世界创建失败，已取消本局。"
   start_countdown: "§x§F§F§9§9§3§3⏱ §e死亡互换将在 §f{time} §e后开始。"
   started: "§x§F§F§6§6§0§0⟲ §e死亡互换开始！§f下一次互换: §e{time}"

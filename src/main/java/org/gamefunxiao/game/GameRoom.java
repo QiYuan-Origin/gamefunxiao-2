@@ -1,6 +1,8 @@
 package org.gamefunxiao.game;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -58,6 +60,7 @@ public class GameRoom {
     private final Map<UUID, Integer> deathSwapIntervalVotes; // 死亡互换：玩家选择的互换分钟数
     private final Map<UUID, Integer> deathSwapVoteCursor; // 死亡互换：菜单当前游标分钟数
     private final Set<UUID> deathSwapEliminatedPlayers; // 死亡互换：已淘汰玩家
+    private final Map<UUID, Integer> deathSwapTeamIndexes; // 死亡互换：玩家队伍颜色
     private int deathSwapIntervalSeconds = 300; // 死亡互换：最终互换间隔
     private int deathSwapNextSwapSeconds = 300; // 死亡互换：距离下一次互换
     private boolean deathSwapPvpEnabled = false; // 死亡互换：一小时后开启真实伤害
@@ -81,6 +84,17 @@ public class GameRoom {
     private double miniGameBoundaryRadius = 0.0D; // 自动竞技场边界
     private int miniGameMaxGameTimeSeconds = 480; // 自动竞技场最大时间
     private int miniGameRound = 0; // 方块派对等回合数
+
+    private static final String[] DEATH_SWAP_TEAM_NAMES = {"红队", "蓝队", "黄队", "绿队", "紫队", "青队", "金队", "白队"};
+    private static final String[] DEATH_SWAP_TEAM_COLOR_CODES = {"§c", "§9", "§e", "§a", "§d", "§b", "§6", "§f"};
+    private static final ChatColor[] DEATH_SWAP_TEAM_CHAT_COLORS = {
+            ChatColor.RED, ChatColor.BLUE, ChatColor.YELLOW, ChatColor.GREEN,
+            ChatColor.LIGHT_PURPLE, ChatColor.AQUA, ChatColor.GOLD, ChatColor.WHITE
+    };
+    private static final Color[] DEATH_SWAP_TEAM_WAYPOINT_COLORS = {
+            Color.fromRGB(0xFF5555), Color.fromRGB(0x5555FF), Color.fromRGB(0xFFFF55), Color.fromRGB(0x55FF55),
+            Color.fromRGB(0xFF55FF), Color.fromRGB(0x55FFFF), Color.fromRGB(0xFFAA00), Color.fromRGB(0xFFFFFF)
+    };
 
     private World gameWorld;
     private Location rewardChestLocation;
@@ -189,6 +203,7 @@ public class GameRoom {
         this.deathSwapIntervalVotes = new HashMap<>();
         this.deathSwapVoteCursor = new HashMap<>();
         this.deathSwapEliminatedPlayers = new HashSet<>();
+        this.deathSwapTeamIndexes = new HashMap<>();
 
         this.createTime = System.currentTimeMillis();
         this.preyVotes = new HashMap<>();
@@ -208,6 +223,9 @@ public class GameRoom {
 
         // 房主自动加入
         players.add(ownerUuid);
+        if (gameMode != null && gameMode.isDeathSwap()) {
+            ensureDeathSwapTeamIndex(ownerUuid);
+        }
     }
 
     public String getRoomId() {
@@ -337,7 +355,11 @@ public class GameRoom {
         if (player != null) {
             previousLocations.put(uuid, player.getLocation());
         }
-        return players.add(uuid);
+        boolean added = players.add(uuid);
+        if ((added || players.contains(uuid)) && gameMode != null && gameMode.isDeathSwap()) {
+            ensureDeathSwapTeamIndex(uuid);
+        }
+        return added;
     }
 
     public boolean addRejoiningHunter(UUID uuid) {
@@ -374,6 +396,7 @@ public class GameRoom {
         deathSwapIntervalVotes.remove(uuid);
         deathSwapVoteCursor.remove(uuid);
         deathSwapEliminatedPlayers.remove(uuid);
+        deathSwapTeamIndexes.remove(uuid);
         flashPreyStartChoices.remove(uuid);
         if (uuid != null && uuid.equals(lockedFirstDualPrey)) {
             lockedFirstDualPrey = null;
@@ -1484,6 +1507,29 @@ public class GameRoom {
                 : getModeName();
     }
 
+    public String getDeathSwapAdvertiseModeName() {
+        if (gameMode == null || !gameMode.isDeathSwap()) {
+            return getModeName();
+        }
+        String sizeName = switch (maxPlayers) {
+            case 2 -> "双人";
+            case 4 -> "四人";
+            case 8 -> "八人";
+            default -> maxPlayers > 0 ? maxPlayers + "人" : "自定义";
+        };
+        return gameMode.getDisplayName() + "-" + sizeName;
+    }
+
+    public String getAdvertiseModeName() {
+        if (gameMode != null && gameMode.isLuckyPillars()) {
+            return getLuckyPillarsAdvertiseModeName();
+        }
+        if (gameMode != null && gameMode.isDeathSwap()) {
+            return getDeathSwapAdvertiseModeName();
+        }
+        return getModeName();
+    }
+
     public String getLuckyPillarsThemeId() {
         return luckyPillarsThemeId;
     }
@@ -1651,6 +1697,71 @@ public class GameRoom {
         return current;
     }
 
+    public void assignDeathSwapTeams(Collection<UUID> participants) {
+        if (gameMode == null || !gameMode.isDeathSwap() || participants == null) {
+            return;
+        }
+        for (UUID uuid : participants) {
+            if (uuid != null && players.contains(uuid)) {
+                ensureDeathSwapTeamIndex(uuid);
+            }
+        }
+    }
+
+    public int ensureDeathSwapTeamIndex(UUID uuid) {
+        if (uuid == null) {
+            return 0;
+        }
+        Integer current = deathSwapTeamIndexes.get(uuid);
+        if (current != null) {
+            int normalized = normalizeDeathSwapTeamIndex(current);
+            if (normalized != current) {
+                deathSwapTeamIndexes.put(uuid, normalized);
+            }
+            return normalized;
+        }
+        Set<Integer> used = new HashSet<>(deathSwapTeamIndexes.values());
+        int selected = 0;
+        for (int i = 0; i < DEATH_SWAP_TEAM_NAMES.length; i++) {
+            if (!used.contains(i)) {
+                selected = i;
+                break;
+            }
+        }
+        deathSwapTeamIndexes.put(uuid, selected);
+        return selected;
+    }
+
+    public String getDeathSwapTeamName(UUID uuid) {
+        return DEATH_SWAP_TEAM_NAMES[ensureDeathSwapTeamIndex(uuid)];
+    }
+
+    public String getDeathSwapTeamColorCode(UUID uuid) {
+        return DEATH_SWAP_TEAM_COLOR_CODES[ensureDeathSwapTeamIndex(uuid)];
+    }
+
+    public ChatColor getDeathSwapTeamChatColor(UUID uuid) {
+        return DEATH_SWAP_TEAM_CHAT_COLORS[ensureDeathSwapTeamIndex(uuid)];
+    }
+
+    public Color getDeathSwapTeamWaypointColor(UUID uuid) {
+        return DEATH_SWAP_TEAM_WAYPOINT_COLORS[ensureDeathSwapTeamIndex(uuid)];
+    }
+
+    public String getDeathSwapTeamPrefix(UUID uuid) {
+        String color = getDeathSwapTeamColorCode(uuid);
+        return color + "[" + getDeathSwapTeamName(uuid) + "] ";
+    }
+
+    private int normalizeDeathSwapTeamIndex(int index) {
+        int length = DEATH_SWAP_TEAM_NAMES.length;
+        if (length <= 0) {
+            return 0;
+        }
+        int normalized = index % length;
+        return normalized < 0 ? normalized + length : normalized;
+    }
+
     public int cycleDeathSwapVoteCursor(UUID uuid, List<Integer> allowedMinutes) {
         if (uuid == null) {
             return normalizeDeathSwapMinute(5, allowedMinutes);
@@ -1811,6 +1922,7 @@ public class GameRoom {
         deathSwapIntervalVotes.clear();
         deathSwapVoteCursor.clear();
         deathSwapEliminatedPlayers.clear();
+        deathSwapTeamIndexes.clear();
         deathSwapIntervalSeconds = 300;
         deathSwapNextSwapSeconds = 300;
         deathSwapPvpEnabled = false;

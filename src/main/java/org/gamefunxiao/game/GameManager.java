@@ -32,6 +32,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Warden;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.CompassMeta;
@@ -43,6 +44,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.gamefunxiao.GameFunXiao;
+import org.gamefunxiao.cosmetics.DeathSwapVictoryEffect;
 import org.gamefunxiao.cosmetics.HunterKillEffect;
 import org.gamefunxiao.cosmetics.HunterVictoryEffect;
 import org.gamefunxiao.cosmetics.LuckyPillarsVictoryEffect;
@@ -79,6 +81,7 @@ public class GameManager {
     private final Set<String> thunderStormAppliedRooms = new HashSet<>();
     private final Map<UUID, PermissionAttachment> swapTimerLimitExemptions = new HashMap<>();
     private final Set<String> deathSwapWorldPreparingRooms = new HashSet<>();
+    private final Set<String> deathSwapWorldPreloadingRooms = new HashSet<>();
     private final Map<UUID, Integer> flashPreyStartChoicePages = new HashMap<>();
     private final Set<UUID> flashPreyStartElytraMonitorRunning = new HashSet<>();
     private boolean grimPermissionRefreshFailureLogged;
@@ -1227,7 +1230,10 @@ public class GameManager {
                     return;
                 }
 
-                if (room.getGameMode().isDeathSwap() && countdown <= 3 && room.getGameWorld() == null) {
+                if (room.getGameMode().isDeathSwap() && countdown <= 3
+                        && (room.getGameWorld() == null
+                        || deathSwapWorldPreparingRooms.contains(room.getRoomId())
+                        || deathSwapWorldPreloadingRooms.contains(room.getRoomId()))) {
                     for (UUID uuid : room.getAllPlayerUUIDs()) {
                         Player p = Bukkit.getPlayer(uuid);
                         if (p != null) {
@@ -1389,7 +1395,9 @@ public class GameManager {
                 }
 
                 // 显示倒计时和音效
-                if (countdown <= 10 || countdown % 60 == 0) {
+                if (countdown <= 10
+                        || countdown % 60 == 0
+                        || (room.getGameMode().isDeathSwap() && countdown == 30)) {
                     Map<String, String> placeholders = new HashMap<>();
                     placeholders.put("time", formatTime(countdown));
                     placeholders.put("mode", room.getModeName());
@@ -1422,7 +1430,30 @@ public class GameManager {
                     for (UUID uuid : room.getAllPlayerUUIDs()) {
                         Player p = Bukkit.getPlayer(uuid);
                         if (p != null && !plugin.getPlayerDataManager().isCompactMessages(uuid)) {
-                            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.0f);
+                            Sound countdownSound = room.getGameMode().isDeathSwap()
+                                    && (countdown == 60 || countdown == 30)
+                                    ? Sound.ENTITY_EXPERIENCE_ORB_PICKUP
+                                    : Sound.BLOCK_NOTE_BLOCK_PLING;
+                            p.playSound(p.getLocation(), countdownSound, 1.0f, 1.0f);
+                        }
+                    }
+                }
+
+                // 死亡互换的整分钟提示使用屏幕标题；60秒/30秒使用经验球拾取声。
+                if (room.getGameMode().isDeathSwap()
+                        && (countdown == 60 || countdown == 30)
+                        && !isTournamentSilent(room)) {
+                    String timeText = countdown == 60 ? "1分钟" : "半分钟";
+                    Component titleComp = LegacyComponentSerializer.legacySection()
+                            .deserialize("§x§F§F§6§6§0§0⟲ §e" + timeText);
+                    Component subtitleComp = LegacyComponentSerializer.legacySection()
+                            .deserialize("§7后开始死亡互换");
+                    Title title = Title.title(titleComp, subtitleComp,
+                            Title.Times.times(Duration.ZERO, Duration.ofMillis(1500), Duration.ofMillis(250)));
+                    for (UUID uuid : room.getAllPlayerUUIDs()) {
+                        Player p = Bukkit.getPlayer(uuid);
+                        if (p != null) {
+                            p.showTitle(title);
                         }
                     }
                 }
@@ -1433,7 +1464,9 @@ public class GameManager {
                     for (UUID uuid : room.getAllPlayerUUIDs()) {
                         Player p = Bukkit.getPlayer(uuid);
                         if (p != null) {
-                            if (plugin.getPlayerDataManager().isCompactMessages(uuid) && countdown != 10) {
+                            if (plugin.getPlayerDataManager().isCompactMessages(uuid)
+                                    && countdown != 10
+                                    && !room.getGameMode().isDeathSwap()) {
                                 continue;
                             }
                             Component titleComp = LegacyComponentSerializer.legacySection().deserialize("§e" + countdown + " §6秒");
@@ -1448,6 +1481,24 @@ public class GameManager {
                             if (!isTournamentSilent(room)) {
                                 p.showTitle(title);
                             }
+                        }
+                    }
+                }
+
+                // 死亡互换的3、2、1秒也显示标题，避免倒计时最后三秒没有提示。
+                if (room.getGameMode().isDeathSwap()
+                        && countdown <= 3 && countdown > 0
+                        && !isTournamentSilent(room)) {
+                    Component titleComp = LegacyComponentSerializer.legacySection()
+                            .deserialize("§e" + countdown + " §c秒");
+                    Component subtitleComp = LegacyComponentSerializer.legacySection()
+                            .deserialize("§7后开始死亡互换");
+                    Title title = Title.title(titleComp, subtitleComp,
+                            Title.Times.times(Duration.ZERO, Duration.ofMillis(850), Duration.ofMillis(150)));
+                    for (UUID uuid : room.getAllPlayerUUIDs()) {
+                        Player p = Bukkit.getPlayer(uuid);
+                        if (p != null) {
+                            p.showTitle(title);
                         }
                     }
                 }
@@ -2405,9 +2456,6 @@ public class GameManager {
                 plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
                 return;
             }
-            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_preparing"));
-            forEachDeathSwapParticipant(room, player ->
-                    player.playSound(player.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 0.55f, 1.0f));
             World world = plugin.getWorldManager().createDeathSwapGameWorld(room.getRoomId());
             if (world == null) {
                 room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_failed"));
@@ -2416,21 +2464,43 @@ public class GameManager {
             }
             room.setGameWorld(world);
             plugin.getWorldManager().createGameWorldDimensions(room.getRoomId());
-            Location spawn = plugin.getWorldManager().findDeathSwapFlatSpawn(world);
-            if (spawn == null) {
-                spawn = getSafeSpawnLocation(world.getSpawnLocation());
-            }
-            if (spawn != null && spawn.getWorld() != null) {
-                world.setSpawnLocation(spawn);
-                room.setDeathSwapSpawnCenter(spawn);
-                room.setDeathSwapSpectatorSpawn(spawn.clone().add(0.0D, 10.0D, 0.0D));
-                plugin.getWorldManager().preloadChunks(world, spawn.getBlockX() >> 4, spawn.getBlockZ() >> 4,
-                        Math.max(1, plugin.getConfigManager().getHunterGamePreloadRadius()), null);
-            }
-            broadcastDeathSwapVillageStatus(room);
+            prepareDeathSwapSpawnAfterPreload(room, world);
         } finally {
             deathSwapWorldPreparingRooms.remove(room.getRoomId());
         }
+    }
+
+    private void prepareDeathSwapSpawnAfterPreload(GameRoom room, World world) {
+        if (room == null || world == null || !deathSwapWorldPreloadingRooms.add(room.getRoomId())) {
+            return;
+        }
+
+        Location anchor = world.getSpawnLocation().clone();
+        int preloadRadius = Math.max(4,
+                Math.min(6, plugin.getConfigManager().getHunterGamePreloadRadius()));
+        plugin.getWorldManager().preloadChunks(world, anchor.getBlockX() >> 4, anchor.getBlockZ() >> 4,
+                preloadRadius, () -> {
+                    try {
+                        if (room.getGameWorld() != world || room.getState() == RoomState.ENDED) {
+                            return;
+                        }
+                        Location spawn = plugin.getWorldManager().findDeathSwapFlatSpawn(world);
+                        if (spawn == null) {
+                            spawn = plugin.getWorldManager().findDeathSwapSurfaceSpawnNear(world, anchor, preloadRadius * 16);
+                        }
+                        if (spawn == null || spawn.getWorld() == null) {
+                            plugin.getLogger().warning("死亡互换未找到已验证的地表出生点，取消本局启动: " + room.getRoomId());
+                            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_failed"));
+                            endGameWithoutReward(room);
+                            return;
+                        }
+                        world.setSpawnLocation(spawn);
+                        room.setDeathSwapSpawnCenter(spawn);
+                        room.setDeathSwapSpectatorSpawn(spawn.clone().add(0.0D, 10.0D, 0.0D));
+                    } finally {
+                        deathSwapWorldPreloadingRooms.remove(room.getRoomId());
+                    }
+                });
     }
 
     private World ensureDeathSwapGameWorld(GameRoom room) {
@@ -2474,13 +2544,22 @@ public class GameManager {
         world.setDifficulty(Difficulty.HARD);
 
         Location center = room.getDeathSwapSpawnCenter();
-        if (center == null || center.getWorld() == null || !center.getWorld().equals(world)) {
-            center = plugin.getWorldManager().findDeathSwapFlatSpawn(world);
-            if (center == null) {
-                center = getSafeSpawnLocation(world.getSpawnLocation());
-            }
-            room.setDeathSwapSpawnCenter(center);
+        Location verifiedCenter = center != null && center.getWorld() != null && center.getWorld().equals(world)
+                ? plugin.getWorldManager().findDeathSwapFlatSpawnNear(world, center, 16)
+                : plugin.getWorldManager().findDeathSwapFlatSpawn(world);
+        if (verifiedCenter == null) {
+            Location anchor = center != null && center.getWorld() != null && center.getWorld().equals(world)
+                    ? center
+                    : world.getSpawnLocation();
+            verifiedCenter = plugin.getWorldManager().findDeathSwapSurfaceSpawnNear(world, anchor, 96);
         }
+        if (verifiedCenter == null || verifiedCenter.getWorld() == null) {
+            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_failed"));
+            endGameWithoutReward(room);
+            return;
+        }
+        center = verifiedCenter;
+        room.setDeathSwapSpawnCenter(center);
         room.setDeathSwapSpectatorSpawn(center.clone().add(0.0D, 10.0D, 0.0D));
         world.setSpawnLocation(center);
 
@@ -2499,28 +2578,95 @@ public class GameManager {
                 onlinePlayers.add(player);
             }
         }
-        teleportDeathSwapPlayersToRing(room, world, center, onlinePlayers);
-        startDeathSwapRoundCountdown(room, participants);
-        plugin.getChildServerManager().syncRoom(room);
+        room.assignDeathSwapTeams(participants);
+        preloadAndTeleportDeathSwapPlayers(room, world, center, onlinePlayers, () -> {
+            if (room.getState() != RoomState.PLAYING || !room.getGameMode().isDeathSwap()) {
+                return;
+            }
+            startDeathSwapRoundCountdown(room, participants);
+            plugin.getChildServerManager().syncRoom(room);
+        });
     }
 
-    private void teleportDeathSwapPlayersToRing(GameRoom room, World world, Location center, List<Player> players) {
+    private void preloadAndTeleportDeathSwapPlayers(GameRoom room, World world, Location center, List<Player> players, Runnable afterTeleport) {
         if (room == null || world == null || center == null || players == null || players.isEmpty()) {
+            if (afterTeleport != null) {
+                afterTeleport.run();
+            }
             return;
         }
-        double radius = plugin.getConfigManager().getDeathSwapSpawnRingRadius();
-        double angleStep = 360.0D / Math.max(1, players.size());
-        for (int i = 0; i < players.size(); i++) {
-            Player player = players.get(i);
-            double angle = Math.toRadians(angleStep * i);
+
+        List<Location> rawSpawns = createDeathSwapRandomSpawnAnchors(world, center, players.size());
+        deathSwapWorldPreloadingRooms.add(room.getRoomId());
+        preloadDeathSwapSpawnChunks(world, rawSpawns, 0, () -> {
+            deathSwapWorldPreloadingRooms.remove(room.getRoomId());
+            if (room.getState() != RoomState.PLAYING || !room.getGameMode().isDeathSwap()) {
+                return;
+            }
+            teleportDeathSwapPlayersToRandomSpawns(room, world, center, players, rawSpawns);
+            if (afterTeleport != null) {
+                afterTeleport.run();
+            }
+        });
+    }
+
+    private List<Location> createDeathSwapRandomSpawnAnchors(World world, Location center, int count) {
+        List<Location> result = new ArrayList<>();
+        if (world == null || center == null || count <= 0) {
+            return result;
+        }
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        int spacing = plugin.getConfigManager().getDeathSwapRandomSpawnSpacingBlocks();
+        double baseAngle = random.nextDouble(Math.PI * 2.0D);
+        double angleStep = Math.PI * (3.0D - Math.sqrt(5.0D));
+        for (int i = 0; i < count; i++) {
+            double radius = spacing * (i + 1);
+            double angle = baseAngle + angleStep * i + random.nextDouble(-0.28D, 0.28D);
             double x = center.getX() + Math.cos(angle) * radius;
             double z = center.getZ() + Math.sin(angle) * radius;
-            Location raw = new Location(world, x, center.getY(), z);
-            Location spawn = getSafeSpawnLocation(raw);
-            double outX = spawn.getX() - center.getX();
-            double outZ = spawn.getZ() - center.getZ();
-            spawn.setYaw((float) Math.toDegrees(Math.atan2(-outX, outZ)));
+            result.add(new Location(world, x, center.getY(), z, (float) random.nextDouble(0.0D, 360.0D), 0.0F));
+        }
+        return result;
+    }
+
+    private void preloadDeathSwapSpawnChunks(World world, List<Location> rawSpawns, int index, Runnable callback) {
+        if (world == null || rawSpawns == null || index >= rawSpawns.size()) {
+            if (callback != null) {
+                callback.run();
+            }
+            return;
+        }
+        Location raw = rawSpawns.get(index);
+        if (raw == null || raw.getWorld() == null) {
+            preloadDeathSwapSpawnChunks(world, rawSpawns, index + 1, callback);
+            return;
+        }
+        plugin.getWorldManager().preloadChunks(world, raw.getBlockX() >> 4, raw.getBlockZ() >> 4, 3,
+                () -> preloadDeathSwapSpawnChunks(world, rawSpawns, index + 1, callback));
+    }
+
+    private void teleportDeathSwapPlayersToRandomSpawns(GameRoom room, World world, Location center, List<Player> players, List<Location> rawSpawns) {
+        Location firstSpawn = null;
+        for (int i = 0; i < players.size(); i++) {
+            Player player = players.get(i);
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            Location raw = i < rawSpawns.size() ? rawSpawns.get(i) : center.clone();
+            Location spawn = plugin.getWorldManager().findDeathSwapFlatSpawnNear(world, raw, 64);
+            if (spawn == null || spawn.getWorld() == null) {
+                spawn = getDeathSwapSurfaceFallback(raw);
+            }
+            if (spawn == null || spawn.getWorld() == null) {
+                // 中心点已经在开始前完成地表验证，最后只允许回退到这个已验证点，
+                // 不能再使用未经区块加载和地表检查的 world.getSpawnLocation()。
+                spawn = center.clone();
+            }
+            spawn.setYaw(raw.getYaw());
             spawn.setPitch(0.0F);
+            if (firstSpawn == null) {
+                firstSpawn = spawn.clone();
+            }
 
             plugin.getRoomManager().resetPlayerForGameStart(room, player);
             player.getInventory().clear();
@@ -2531,10 +2677,26 @@ public class GameManager {
             player.setInvulnerable(true);
             player.setNoDamageTicks(Math.max(20, plugin.getConfigManager().getDeathSwapPreStartCountdownSeconds() * 20 + 20));
             player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.0f);
-            plugin.getRoomManager().setRoleNameTag(player, room.getRoomId(), false, "互换");
-            plugin.getRoomManager().updatePlayerTabNameWithRole(player, room.getRoomId(), false, "互换");
+            plugin.getRoomManager().setRoleNameTag(player, room.getRoomId(), false);
+            plugin.getRoomManager().updatePlayerTabNameWithRole(player, room.getRoomId(), false);
             plugin.getScoreboardManager().createScoreboard(player);
         }
+        if (firstSpawn != null) {
+            room.setDeathSwapSpectatorSpawn(firstSpawn.clone().add(0.0D, 10.0D, 0.0D));
+        }
+    }
+
+    private Location getDeathSwapSurfaceFallback(Location raw) {
+        World world = raw == null ? null : raw.getWorld();
+        if (world == null) {
+            return raw;
+        }
+        Location surface = plugin.getWorldManager().findDeathSwapSurfaceSpawnNear(world, raw, 96);
+        if (surface != null) {
+            surface.setYaw(raw.getYaw());
+            surface.setPitch(0.0F);
+        }
+        return surface;
     }
 
     private void startDeathSwapRoundCountdown(GameRoom room, List<UUID> participants) {
@@ -2569,6 +2731,7 @@ public class GameManager {
                     Map<String, String> ph = new HashMap<>();
                     ph.put("time", formatChineseDuration(room.getDeathSwapNextSwapSeconds()));
                     room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.started", ph));
+                    sendDeathSwapNearbyStructureHints(room);
                     startDeathSwapBossBar(room);
                     startDeathSwapGameTask(room);
                     preGameCountdownTasks.remove(room.getRoomId());
@@ -2605,6 +2768,7 @@ public class GameManager {
             public void run() {
                 if (room.getState() != RoomState.PLAYING || !room.getGameMode().isDeathSwap()) {
                     cleanupDeathSwapBossBar(room.getRoomId());
+                    deathSwapWorldPreloadingRooms.remove(room.getRoomId());
                     cancel();
                     return;
                 }
@@ -2626,11 +2790,12 @@ public class GameManager {
                 }
 
                 int next = room.getDeathSwapNextSwapSeconds();
+                if (next == 60 || next == 30 || (next <= 10 && next > 0)) {
+                    showDeathSwapSwapCountdownTitle(room, next);
+                }
                 if (next <= 10 && next > 0) {
                     Map<String, String> ph = Map.of("time", String.valueOf(next));
                     room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.swap_warning", ph));
-                    forEachDeathSwapAlivePlayer(room, player ->
-                            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.9f, 1.0f));
                 }
                 if (next <= 1) {
                     swapDeathSwapPlayers(room);
@@ -2741,12 +2906,9 @@ public class GameManager {
             player.setFallDistance(0.0F);
             player.setNoDamageTicks(Math.max(player.getNoDamageTicks(), 20));
             player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
-            player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.86f, 1.0f);
-            player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_THUNDER, 0.42f, 1.0f);
             if (from.getWorld() != null) {
                 from.getWorld().spawnParticle(Particle.PORTAL, from.clone().add(0.0D, 1.0D, 0.0D),
                         28, 0.45D, 0.7D, 0.45D, 0.22D);
-                from.getWorld().playSound(from, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.52f, 1.0f);
             }
             if (to.getWorld() != null) {
                 to.getWorld().spawnParticle(Particle.REVERSE_PORTAL, to.clone().add(0.0D, 1.0D, 0.0D),
@@ -2870,6 +3032,7 @@ public class GameManager {
             preTask.cancel();
         }
         cleanupDeathSwapBossBar(room.getRoomId());
+        deathSwapWorldPreloadingRooms.remove(room.getRoomId());
 
         String winnerName = "无人";
         if (winnerUuid != null) {
@@ -2879,6 +3042,9 @@ public class GameManager {
         Map<String, String> ph = new HashMap<>();
         ph.put("winner", winnerName);
         room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix(draw ? "death_swap.draw" : "death_swap.winner", ph));
+        if (!draw && winnerUuid != null) {
+            safePlayDeathSwapVictoryEffect(room, winnerUuid);
+        }
 
         Set<UUID> rewardTargets = new LinkedHashSet<>(room.getAllPlayerUUIDs());
         for (UUID uuid : rewardTargets) {
@@ -2921,28 +3087,191 @@ public class GameManager {
                 Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(6500), Duration.ofMillis(800)));
         forEachDeathSwapParticipant(room, player -> {
             player.showTitle(endTitle);
+            player.playSound(player.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 0.75f, 1.0f);
             player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.8f, 1.0f);
         });
 
         scheduleEndedRoomClosure(room, 10);
     }
 
-    private void broadcastDeathSwapVillageStatus(GameRoom room) {
+    private void playDeathSwapVictoryEffect(GameRoom room, UUID winnerUuid) {
+        if (room == null || winnerUuid == null) {
+            return;
+        }
+        Player winner = Bukkit.getPlayer(winnerUuid);
+        Location center = winner != null && winner.isOnline()
+                ? winner.getLocation().clone().add(0.0D, 1.0D, 0.0D)
+                : room.getDeathSwapSpawnCenter();
+        if (center == null || center.getWorld() == null) {
+            return;
+        }
+
+        String effectId = plugin.getPlayerDataManager().getSelectedDeathSwapVictoryEffect(winnerUuid);
+        if (!plugin.getPlayerDataManager().hasDeathSwapVictoryEffect(winnerUuid, effectId)) {
+            effectId = "fireworks";
+        }
+
+        DeathSwapVictoryEffect effect = DeathSwapVictoryEffect.byId(effectId);
+        switch (effect) {
+            case RED_RIFT -> playDeathSwapRedRiftEffect(center);
+            case CLOCKWORK -> playDeathSwapClockworkEffect(center);
+            case END_PORTAL -> playDeathSwapEndPortalEffect(center);
+            case SOUL_EXCHANGE -> playSoulVortexEffect(center);
+            case BLOOD_MOON -> playDeathSwapBloodMoonEffect(center);
+            case FIREWORKS -> spawnInstantVictoryFirework(center);
+        }
+    }
+
+    private void safePlayDeathSwapVictoryEffect(GameRoom room, UUID winnerUuid) {
+        try {
+            playDeathSwapVictoryEffect(room, winnerUuid);
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("死亡互换胜利样式播放失败，已跳过样式并继续正常结束游戏: "
+                    + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
+        }
+    }
+
+    private void playDeathSwapRedRiftEffect(Location center) {
+        World world = center.getWorld();
+        if (world == null) {
+            return;
+        }
+        world.playSound(center, Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 0.72f);
+        runVictoryEffectTimer(72, 2L, 2, tick -> {
+            double radius = Math.max(0.35D, tick * 0.075D);
+            for (int i = 0; i < 32; i++) {
+                double angle = Math.toRadians(i * 11.25D - tick * 5.0D);
+                Location point = center.clone().add(
+                        Math.cos(angle) * radius,
+                        0.25D + Math.sin(tick * 0.11D + i) * 0.45D,
+                        Math.sin(angle) * radius);
+                world.spawnParticle(Particle.DUST, point, 2,
+                        0.04D, 0.04D, 0.04D,
+                        new Particle.DustOptions(Color.fromRGB(220, 38, 58), 1.65f));
+                world.spawnParticle(Particle.PORTAL, point, 1,
+                        0.03D, 0.03D, 0.03D, 0.12D);
+            }
+        }, () -> world.playSound(center, Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.8f, 0.82f));
+    }
+
+    private void playDeathSwapClockworkEffect(Location center) {
+        World world = center.getWorld();
+        if (world == null) {
+            return;
+        }
+        world.playSound(center, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.95f, 0.82f);
+        runVictoryEffectTimer(80, 2L, 2, tick -> {
+            for (int ring = 0; ring < 2; ring++) {
+                double radius = 1.0D + ring * 1.2D + Math.sin(tick * 0.1D) * 0.25D;
+                for (int i = 0; i < 24; i++) {
+                    double angle = Math.toRadians(i * 15.0D + tick * (ring == 0 ? 6.0D : -4.0D));
+                    Location point = center.clone().add(
+                            Math.cos(angle) * radius,
+                            0.45D + ring * 0.5D,
+                            Math.sin(angle) * radius);
+                    world.spawnParticle(Particle.DUST, point, 2,
+                            0.03D, 0.03D, 0.03D,
+                            new Particle.DustOptions(
+                                    ring == 0 ? Color.fromRGB(255, 88, 48) : Color.fromRGB(255, 190, 54),
+                                    1.45f));
+                }
+            }
+        }, null);
+    }
+
+    private void playDeathSwapEndPortalEffect(Location center) {
+        World world = center.getWorld();
+        if (world == null) {
+            return;
+        }
+        world.playSound(center, Sound.BLOCK_PORTAL_TRAVEL, 0.9f, 0.72f);
+        runVictoryEffectTimer(76, 2L, 2, tick -> {
+            double radius = 0.7D + tick * 0.065D;
+            for (int i = 0; i < 30; i++) {
+                double angle = Math.toRadians(i * 12.0D + tick * 4.0D);
+                Location point = center.clone().add(
+                        Math.cos(angle) * radius,
+                        0.35D + Math.sin(tick * 0.12D + i) * 0.8D,
+                        Math.sin(angle) * radius);
+                world.spawnParticle(Particle.REVERSE_PORTAL, point, 1,
+                        0.03D, 0.03D, 0.03D, 0.05D);
+                world.spawnParticle(Particle.END_ROD, point, 1,
+                        0.02D, 0.02D, 0.02D, 0.01D);
+            }
+        }, null);
+    }
+
+    private void playDeathSwapBloodMoonEffect(Location center) {
+        World world = center.getWorld();
+        if (world == null) {
+            return;
+        }
+        world.playSound(center, Sound.ENTITY_WITHER_SPAWN, 0.55f, 1.35f);
+        runVictoryEffectTimer(90, 2L, 2, tick -> {
+            double radius = 2.2D + Math.sin(tick * 0.1D) * 0.35D;
+            for (int i = 0; i < 42; i++) {
+                double angle = Math.toRadians(i * (360.0D / 42.0D) + tick * 3.5D);
+                Location point = center.clone().add(
+                        Math.cos(angle) * radius,
+                        1.5D + Math.sin(tick * 0.09D + i) * 0.18D,
+                        Math.sin(angle) * radius);
+                world.spawnParticle(Particle.DUST, point, 2,
+                        0.04D, 0.04D, 0.04D,
+                        new Particle.DustOptions(Color.fromRGB(190, 24, 42), 1.85f));
+                world.spawnParticle(Particle.CRIT, point, 1,
+                        0.02D, 0.02D, 0.02D, 0.04D);
+            }
+        }, () -> world.spawnParticle(Particle.FLAME, center, 24, 0.35D, 0.35D, 0.35D, 0.025D));
+    }
+
+    private void showDeathSwapSwapCountdownTitle(GameRoom room, int seconds) {
+        if (room == null || seconds <= 0) {
+            return;
+        }
+        String timeText = seconds == 60 ? "1分钟" : seconds == 30 ? "半分钟" : seconds + "秒";
+        Component title = LegacyComponentSerializer.legacySection()
+                .deserialize("§x§F§F§6§6§0§0⟲ §e" + timeText);
+        Component subtitle = LegacyComponentSerializer.legacySection()
+                .deserialize("§f后互换位置");
+        Title shown = Title.title(title, subtitle,
+                Title.Times.times(Duration.ZERO, Duration.ofMillis(seconds <= 10 ? 850 : 1500), Duration.ofMillis(160)));
+        Sound sound = (seconds == 60 || seconds == 30)
+                ? Sound.ENTITY_EXPERIENCE_ORB_PICKUP
+                : Sound.BLOCK_NOTE_BLOCK_PLING;
+        forEachDeathSwapAlivePlayer(room, player -> {
+            player.showTitle(shown);
+            player.playSound(player.getLocation(), sound, 0.9f, 1.0f);
+        });
+    }
+
+    private void sendDeathSwapNearbyStructureHints(GameRoom room) {
         if (room == null || !room.getGameMode().isDeathSwap()) {
             return;
         }
-        org.gamefunxiao.world.WorldManager.DeathSwapVillageSeedStatus status =
-                plugin.getWorldManager().getDeathSwapVillageSeedStatus(room.getRoomId());
-        if (status != null && status.confirmed()) {
-            Map<String, String> ph = new HashMap<>();
-            ph.put("village", status.villageLocation() == null || status.villageLocation().isBlank() ? "未知" : status.villageLocation());
-            ph.put("distance", status.distance() >= 0 ? String.valueOf(status.distance()) : "未知");
-            room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_ready_village", ph));
-            return;
+        List<UUID> targets = new ArrayList<>(room.getDeathSwapAlivePlayers());
+        for (int i = 0; i < targets.size(); i++) {
+            UUID uuid = targets.get(i);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (room.getState() != RoomState.PLAYING || !room.getGameMode().isDeathSwap()) {
+                    return;
+                }
+                Player player = Bukkit.getPlayer(uuid);
+                if (player == null || !player.isOnline() || room.isDeathSwapEliminated(uuid)) {
+                    return;
+                }
+                org.gamefunxiao.world.WorldManager.DeathSwapNearbyStructure structure =
+                        plugin.getWorldManager().findNearestDeathSwapPriorityStructure(player.getLocation());
+                if (structure == null) {
+                    player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.nearby_structure_none"));
+                    return;
+                }
+                Map<String, String> ph = new HashMap<>();
+                ph.put("type", structure.typeName());
+                ph.put("location", structure.locationText());
+                ph.put("distance", String.valueOf(structure.distance()));
+                player.sendMessage(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.nearby_structure", ph));
+            }, 10L + i * 8L);
         }
-        Map<String, String> ph = new HashMap<>();
-        ph.put("reason", status == null ? "没有村庄筛种记录" : status.reason());
-        room.broadcast(plugin.getMessageManager().getDeathSwapMessageWithPrefix("death_swap.world_no_village", ph));
     }
 
     private void forEachDeathSwapAlivePlayer(GameRoom room, java.util.function.Consumer<Player> consumer) {
@@ -6228,7 +6557,7 @@ public class GameManager {
                 for (UUID uuid : room.getPreyUUIDs()) {
                     Player prey = Bukkit.getPlayer(uuid);
                     if (prey != null) {
-                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + prey.getName() + " " + room.getGameWorld().getName());
+                        teleportToExactStartLocation(prey, spawnLoc);
                         prey.getInventory().clear();
                         prey.setLevel(0);
                         prey.setExp(0);
@@ -6254,47 +6583,31 @@ public class GameManager {
                     if (room.isHunter(uuid)) hunters.add(uuid);
                 }
 
-                int hunterCount = hunters.size();
-                if (hunterCount > 0) {
-                    double radius = 1.8 + (hunterCount - 1) * 0.5;
-                    double angleStep = 360.0 / hunterCount;
-
-                    for (int i = 0; i < hunterCount; i++) {
-                        UUID hunterUUID = hunters.get(i);
-                        Player hunter = Bukkit.getPlayer(hunterUUID);
-                        if (hunter != null) {
-                            double angle = Math.toRadians(angleStep * i);
-                            double x = spawnLoc.getX() + radius * Math.cos(angle);
-                            double z = spawnLoc.getZ() + radius * Math.sin(angle);
-                            Location hunterLoc = getSafeSpawnLocation(new Location(
-                                room.getGameWorld(), x, spawnLoc.getY(), z,
-                                (float) Math.toDegrees(Math.atan2(spawnLoc.getZ() - z, spawnLoc.getX() - x)) + 90, 0));
-                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + hunter.getName() + " " + room.getGameWorld().getName());
-                            final Location finalLoc = hunterLoc;
-                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                                double dx = spawnLoc.getX() - finalLoc.getX();
-                                double dz = spawnLoc.getZ() - finalLoc.getZ();
-                                float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-                                Location facingLoc = finalLoc.clone();
-                                facingLoc.setYaw(yaw);
-                                facingLoc.setPitch(0);
-                                hunter.teleport(facingLoc);
-                                hunter.getInventory().clear();
-                                hunter.setGameMode(org.bukkit.GameMode.SURVIVAL);
-                                hunter.setLevel(0);
-                                hunter.setExp(0);
-                                if (!room.hasModifier("YesHunterSee")) {
-                                    hunter.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0, false, false, false));
-                                }
-                                hunter.playSound(hunter.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
-                                plugin.getRoomManager().updatePlayerTabNameWithRole(hunter, room.getRoomId(), false);
-                            }, 10L);
-                        }
+                Map<UUID, Location> hunterStartLocations = buildHunterStartLocations(
+                        room.getGameWorld(), spawnLoc, hunters, new double[]{2.4D, 5.0D, 7.6D});
+                for (UUID hunterUUID : hunters) {
+                    Player hunter = Bukkit.getPlayer(hunterUUID);
+                    Location hunterLoc = hunterStartLocations.get(hunterUUID);
+                    if (hunter == null || hunterLoc == null) {
+                        continue;
                     }
+                    final Location finalLoc = hunterLoc.clone();
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        teleportToExactStartLocation(hunter, finalLoc);
+                        hunter.getInventory().clear();
+                        hunter.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                        hunter.setLevel(0);
+                        hunter.setExp(0);
+                        if (!room.hasModifier("YesHunterSee")) {
+                            hunter.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0, false, false, false));
+                        }
+                        hunter.playSound(hunter.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
+                        plugin.getRoomManager().updatePlayerTabNameWithRole(hunter, room.getRoomId(), false);
+                    }, 10L);
                 }
             }
 
-            // 给猎物开始按钮和音效（延迟40L确保mvtp传送完成后再给按钮），同时开始30秒预开始倒计时
+            // 给猎物开始按钮和音效（延迟40L确保开局传送完成后再给按钮），同时开始30秒预开始倒计时
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 for (UUID uuid : getSelectionPreys(room)) {
                     Player prey = Bukkit.getPlayer(uuid);
@@ -6389,7 +6702,7 @@ public class GameManager {
         }
         if (room.getGameMode().isFlashTournament()) {
             room.clearFlashTournamentStartLocations();
-            // mvtp后还有10tick二次定位；按“进入世界后2秒”锁移动，这里留出传送延迟余量。
+            // 开局传送安排在10tick后执行；按“进入世界后2秒”锁移动，这里留出传送延迟余量。
             room.setFlashTournamentMovementUnlockMillis(System.currentTimeMillis() + 3000L);
         }
 
@@ -6414,10 +6727,9 @@ public class GameManager {
             if (prey == null) {
                 continue;
             }
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + prey.getName() + " " + world.getName());
             final Location finalSpawn = preyCenterFinal.clone();
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                prey.teleport(finalSpawn);
+                teleportToExactStartLocation(prey, finalSpawn);
                 prey.getInventory().clear();
                 prey.setGameMode(org.bukkit.GameMode.SURVIVAL);
                 prey.setAllowFlight(false);
@@ -6441,54 +6753,122 @@ public class GameManager {
             }
         }
 
-        int[] ringCounts = new int[3];
-        for (int i = 0; i < hunters.size(); i++) {
-            ringCounts[i % 3]++;
-        }
         double[] radii = room.getGameMode().isFlashTournament()
                 ? new double[]{2.1D, 3.0D, 3.8D}
                 : new double[]{2.4D, 5.0D, 7.6D};
-        int hunterIndex = 0;
-        for (int ring = 0; ring < ringCounts.length; ring++) {
-            if (ringCounts[ring] <= 0) {
+        Map<UUID, Location> hunterStartLocations = buildHunterStartLocations(
+                world, preyCenterFinal, hunters, radii);
+        for (UUID hunterUuid : hunters) {
+            Player hunter = Bukkit.getPlayer(hunterUuid);
+            Location hunterLoc = hunterStartLocations.get(hunterUuid);
+            if (hunter == null || hunterLoc == null) {
                 continue;
             }
-            double angleStep = 360.0D / ringCounts[ring];
-            for (int indexInRing = 0; indexInRing < ringCounts[ring]; indexInRing++) {
+            final Location finalLoc = hunterLoc.clone();
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                teleportToExactStartLocation(hunter, finalLoc);
+                hunter.getInventory().clear();
+                hunter.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                hunter.setLevel(0);
+                hunter.setExp(0);
+                if (!room.getGameMode().isFlashTournament() && !room.hasModifier("YesHunterSee")) {
+                    hunter.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0, false, false, false));
+                }
+                hunter.playSound(hunter.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
+                plugin.getRoomManager().updatePlayerTabNameWithRole(hunter, room.getRoomId(), false);
+            }, 10L);
+        }
+    }
+
+    private Map<UUID, Location> buildHunterStartLocations(World world, Location center,
+                                                           List<UUID> hunters, double[] radii) {
+        Map<UUID, Location> result = new LinkedHashMap<>();
+        if (world == null || center == null || center.getWorld() == null
+                || hunters == null || hunters.isEmpty() || radii == null || radii.length == 0) {
+            return result;
+        }
+
+        int[] ringCounts = new int[radii.length];
+        for (int i = 0; i < hunters.size(); i++) {
+            ringCounts[i % radii.length]++;
+        }
+
+        List<Location> occupied = new ArrayList<>();
+        int hunterIndex = 0;
+        for (int ring = 0; ring < ringCounts.length; ring++) {
+            int count = ringCounts[ring];
+            if (count <= 0) {
+                continue;
+            }
+            double angleStep = 360.0D / count;
+            for (int indexInRing = 0; indexInRing < count && hunterIndex < hunters.size(); indexInRing++) {
                 UUID hunterUuid = hunters.get(hunterIndex++);
-                Player hunter = Bukkit.getPlayer(hunterUuid);
-                if (hunter == null) {
-                    continue;
-                }
-                double angle = Math.toRadians(angleStep * indexInRing + ring * 17.0D);
-                double x = preyCenterFinal.getX() + radii[ring] * Math.cos(angle);
-                double z = preyCenterFinal.getZ() + radii[ring] * Math.sin(angle);
-                Location hunterLoc = getSafeSpawnLocation(new Location(world, x, preyCenterFinal.getY(), z));
-                if (hunterLoc == null) {
-                    hunterLoc = new Location(world, x, preyCenterFinal.getY(), z);
-                }
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + hunter.getName() + " " + world.getName());
-                final Location finalLoc = hunterLoc;
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    double dx = preyCenterFinal.getX() - finalLoc.getX();
-                    double dz = preyCenterFinal.getZ() - finalLoc.getZ();
-                    float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-                    Location facingLoc = finalLoc.clone();
-                    facingLoc.setYaw(yaw);
-                    facingLoc.setPitch(0);
-                    hunter.teleport(facingLoc);
-                    hunter.getInventory().clear();
-                    hunter.setGameMode(org.bukkit.GameMode.SURVIVAL);
-                    hunter.setLevel(0);
-                    hunter.setExp(0);
-                    if (!room.getGameMode().isFlashTournament() && !room.hasModifier("YesHunterSee")) {
-                        hunter.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0, false, false, false));
+                Location selected = null;
+                for (int attempt = 0; attempt < 24; attempt++) {
+                    double radius = radii[ring] + (attempt / 12) * 1.2D;
+                    double angle = Math.toRadians(angleStep * indexInRing + ring * 17.0D + attempt * 7.5D);
+                    double x = center.getX() + radius * Math.cos(angle);
+                    double z = center.getZ() + radius * Math.sin(angle);
+                    Location candidate = getSafeSpawnLocation(new Location(world, x, center.getY(), z));
+                    if (candidate == null) {
+                        candidate = new Location(world, x, center.getY(), z);
                     }
-                    hunter.playSound(hunter.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
-                    plugin.getRoomManager().updatePlayerTabNameWithRole(hunter, room.getRoomId(), false);
-                }, 10L);
+                    if (!hasSameStartBlock(candidate, occupied)) {
+                        selected = candidate;
+                        break;
+                    }
+                }
+                if (selected == null) {
+                    double angle = Math.toRadians(angleStep * indexInRing + ring * 17.0D);
+                    selected = new Location(world,
+                            center.getX() + (radii[ring] + 2.4D) * Math.cos(angle),
+                            center.getY(),
+                            center.getZ() + (radii[ring] + 2.4D) * Math.sin(angle));
+                }
+                double dx = center.getX() - selected.getX();
+                double dz = center.getZ() - selected.getZ();
+                selected.setYaw((float) Math.toDegrees(Math.atan2(-dx, dz)));
+                selected.setPitch(0.0F);
+                occupied.add(selected.clone());
+                result.put(hunterUuid, selected);
             }
         }
+        return result;
+    }
+
+    private boolean hasSameStartBlock(Location candidate, Collection<Location> occupied) {
+        if (candidate == null || candidate.getWorld() == null || occupied == null) {
+            return false;
+        }
+        for (Location other : occupied) {
+            if (other != null && other.getWorld() != null && other.getWorld().equals(candidate.getWorld())
+                    && other.getBlockX() == candidate.getBlockX()
+                    && other.getBlockY() == candidate.getBlockY()
+                    && other.getBlockZ() == candidate.getBlockZ()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean teleportToExactStartLocation(Player player, Location target) {
+        if (player == null || !player.isOnline() || target == null || target.getWorld() == null) {
+            return false;
+        }
+        target.getWorld().getChunkAt(target).load();
+        player.setVelocity(new org.bukkit.util.Vector(0.0D, 0.0D, 0.0D));
+        player.setFallDistance(0.0F);
+        boolean teleported = player.teleport(target, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        if (!teleported) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (!player.isOnline() || target.getWorld() == null) {
+                    return;
+                }
+                target.getWorld().getChunkAt(target).load();
+                player.teleport(target, PlayerTeleportEvent.TeleportCause.PLUGIN);
+            }, 2L);
+        }
+        return teleported;
     }
 
     private void teleportEndFlashPlayers(GameRoom room) {
@@ -6519,10 +6899,9 @@ public class GameManager {
             if (prey == null) {
                 continue;
             }
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + prey.getName() + " " + world.getName());
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 ensureEndEntryObsidianFooting(preyCenterFinal);
-                prey.teleport(preyCenterFinal);
+                teleportToExactStartLocation(prey, preyCenterFinal);
                 prey.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
                 prey.setFallDistance(0.0F);
                 prey.setGameMode(org.bukkit.GameMode.SURVIVAL);
@@ -6566,73 +6945,50 @@ public class GameManager {
             }
         }
 
-        int[] ringCounts = new int[3];
-        for (int i = 0; i < hunters.size(); i++) {
-            ringCounts[i % 3]++;
-        }
         double[] radii = {3.0D, 5.8D, 8.6D};
-        int hunterIndex = 0;
-        for (int ring = 0; ring < ringCounts.length; ring++) {
-            if (ringCounts[ring] <= 0) {
+        Map<UUID, Location> hunterStartLocations = buildHunterStartLocations(
+                world, preyCenterFinal, hunters, radii);
+        for (UUID hunterUuid : hunters) {
+            Player hunter = Bukkit.getPlayer(hunterUuid);
+            Location hunterLoc = hunterStartLocations.get(hunterUuid);
+            if (hunter == null || hunterLoc == null) {
                 continue;
             }
-            double angleStep = 360.0D / ringCounts[ring];
-            for (int indexInRing = 0; indexInRing < ringCounts[ring]; indexInRing++) {
-                UUID hunterUuid = hunters.get(hunterIndex++);
-                Player hunter = Bukkit.getPlayer(hunterUuid);
-                if (hunter == null) {
-                    continue;
+            final Location finalLoc = hunterLoc.clone();
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                ensureEndEntryObsidianFooting(finalLoc);
+                teleportToExactStartLocation(hunter, finalLoc);
+                hunter.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
+                hunter.setFallDistance(0.0F);
+                hunter.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                hunter.setLevel(0);
+                hunter.setExp(0);
+                if (!room.hasModifier("YesHunterSee")) {
+                    hunter.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0, false, false, false));
                 }
-                double angle = Math.toRadians(angleStep * indexInRing + ring * 18.0D);
-                double x = preyCenterFinal.getX() + radii[ring] * Math.cos(angle);
-                double z = preyCenterFinal.getZ() + radii[ring] * Math.sin(angle);
-                Location hunterLoc = getSafeSpawnLocation(new Location(world, x, preyCenterFinal.getY(), z));
-                if (hunterLoc == null) {
-                    hunterLoc = new Location(world, x, preyCenterFinal.getY(), z);
+                EndFlashKitManager.Kit kit = plugin.getEndFlashKitManager().applyKit(hunter, EndFlashKitManager.Role.HUNTER);
+                String kitLabel = kit == null ? null : kit.displayName();
+                room.assignEndFlashKitName(hunter.getUniqueId(), kitLabel);
+                room.assignEndFlashKitStartExpLevel(hunter.getUniqueId(), kit == null ? 0 : kit.startExpLevel());
+                giveHunterItems(hunter, room);
+                hunter.setRespawnLocation(finalLoc.clone(), true);
+                syncEndDimensionBrightness(hunter, room);
+                hunter.playSound(hunter.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
+                hunter.playSound(hunter.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.42f, 1.65f);
+                plugin.getRoomManager().updatePlayerTabNameWithRole(hunter, room.getRoomId(), false, kitLabel);
+                plugin.getRoomManager().setRoleNameTag(hunter, room.getRoomId(), false, kitLabel);
+                if (kit != null) {
+                    hunter.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
+                            + "§x§F§F§D§D§8§8✦ §e终章 Kit：§f" + kit.displayName());
+                    hunter.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
+                            + "§x§D§D§A§A§F§F» §dKit创建者: §f" + kit.creatorName()
+                            + " §8/ §7" + kit.createdAtText());
+                    hunter.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
+                            + "§x§8§8§D§D§F§F» §bKit最后编辑: §f" + kit.lastEditorName()
+                            + " §8/ §e" + kit.lastEditedAtText());
+                    plugin.getEndFlashKitManager().sendKitGuide(hunter, kit);
                 }
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + hunter.getName() + " " + world.getName());
-                final Location finalLoc = hunterLoc;
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    ensureEndEntryObsidianFooting(finalLoc);
-                    double dx = preyCenterFinal.getX() - finalLoc.getX();
-                    double dz = preyCenterFinal.getZ() - finalLoc.getZ();
-                    float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-                    Location facingLoc = finalLoc.clone();
-                    facingLoc.setYaw(yaw);
-                    facingLoc.setPitch(0);
-                    hunter.teleport(facingLoc);
-                    hunter.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
-                    hunter.setFallDistance(0.0F);
-                    hunter.setGameMode(org.bukkit.GameMode.SURVIVAL);
-                    hunter.setLevel(0);
-                    hunter.setExp(0);
-                    if (!room.hasModifier("YesHunterSee")) {
-                        hunter.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 0, false, false, false));
-                    }
-                    EndFlashKitManager.Kit kit = plugin.getEndFlashKitManager().applyKit(hunter, EndFlashKitManager.Role.HUNTER);
-                    String kitLabel = kit == null ? null : kit.displayName();
-                    room.assignEndFlashKitName(hunter.getUniqueId(), kitLabel);
-                    room.assignEndFlashKitStartExpLevel(hunter.getUniqueId(), kit == null ? 0 : kit.startExpLevel());
-                    giveHunterItems(hunter, room);
-                    hunter.setRespawnLocation(finalLoc.clone(), true);
-                    syncEndDimensionBrightness(hunter, room);
-                    hunter.playSound(hunter.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
-                    hunter.playSound(hunter.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.42f, 1.65f);
-                    plugin.getRoomManager().updatePlayerTabNameWithRole(hunter, room.getRoomId(), false, kitLabel);
-                    plugin.getRoomManager().setRoleNameTag(hunter, room.getRoomId(), false, kitLabel);
-                    if (kit != null) {
-                        hunter.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
-                                + "§x§F§F§D§D§8§8✦ §e终章 Kit：§f" + kit.displayName());
-                        hunter.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
-                                + "§x§D§D§A§A§F§F» §dKit创建者: §f" + kit.creatorName()
-                                + " §8/ §7" + kit.createdAtText());
-                        hunter.sendMessage(plugin.getConfigManager().getHunterGamePrefix()
-                                + "§x§8§8§D§D§F§F» §bKit最后编辑: §f" + kit.lastEditorName()
-                                + " §8/ §e" + kit.lastEditedAtText());
-                        plugin.getEndFlashKitManager().sendKitGuide(hunter, kit);
-                    }
-                }, 10L);
-            }
+            }, 10L);
         }
     }
 
@@ -6751,9 +7107,8 @@ public class GameManager {
             }
 
             final Location finalPreySpawn = assignedPreySpawn.clone();
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + prey.getName() + " " + world.getName());
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                prey.teleport(finalPreySpawn);
+                teleportToExactStartLocation(prey, finalPreySpawn);
                 prey.getInventory().clear();
                 prey.setGameMode(org.bukkit.GameMode.SURVIVAL);
                 prey.setAllowFlight(false);
@@ -6801,13 +7156,10 @@ public class GameManager {
                 continue;
             }
             occupiedHunterSpawns.add(hunterSpawn.clone());
-            String targetWorldName = hunterSpawn.getWorld() == null ? world.getName() : hunterSpawn.getWorld().getName();
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + hunter.getName() + " " + targetWorldName);
-
             final Location finalHunterSpawn = hunterSpawn;
             final NetherHunterScenario finalScenario = selectedScenario;
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                hunter.teleport(finalHunterSpawn);
+                teleportToExactStartLocation(hunter, finalHunterSpawn);
                 hunter.getInventory().clear();
                 hunter.setGameMode(org.bukkit.GameMode.SURVIVAL);
                 hunter.setLevel(0);
@@ -6894,12 +7246,9 @@ public class GameManager {
             EndChapterKit kit = getEndChapterSelectedPreyKit(room, uuid);
             EndPreyPosition position = getEndChapterSelectedPreyPosition(room, uuid);
             Location preySpawn = preySpawns.getOrDefault(uuid, primaryPreySpawn).clone();
-            World preyTargetWorld = preySpawn.getWorld() == null ? (endWorld != null ? endWorld : baseWorld) : preySpawn.getWorld();
-
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + prey.getName() + " " + preyTargetWorld.getName());
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 ensureEndEntryObsidianFooting(preySpawn);
-                prey.teleport(preySpawn);
+                teleportToExactStartLocation(prey, preySpawn);
                 prey.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
                 prey.setFallDistance(0.0F);
                 prey.getInventory().clear();
@@ -6934,12 +7283,9 @@ public class GameManager {
             World hunterWorld = resolveEndChapterHunterWorld(room, position);
             Location hunterSpawn = findEndChapterHunterSpawn(hunterWorld, position, occupiedHunterSpawns);
             occupiedHunterSpawns.add(hunterSpawn);
-            World hunterTargetWorld = hunterSpawn.getWorld() == null ? (endWorld != null ? endWorld : baseWorld) : hunterSpawn.getWorld();
-
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mvtp " + hunter.getName() + " " + hunterTargetWorld.getName());
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 ensureEndEntryObsidianFooting(hunterSpawn);
-                hunter.teleport(hunterSpawn);
+                teleportToExactStartLocation(hunter, hunterSpawn);
                 hunter.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
                 hunter.setFallDistance(0.0F);
                 hunter.getInventory().clear();
@@ -13750,6 +14096,8 @@ public class GameManager {
             bossBar.setVisible(false);
         }
         deathSwapBossBars.clear();
+        deathSwapWorldPreparingRooms.clear();
+        deathSwapWorldPreloadingRooms.clear();
     }
 
     // 获取安全的出生位置（避免卡在方块里）

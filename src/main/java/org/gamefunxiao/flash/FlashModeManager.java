@@ -13741,6 +13741,13 @@ public class FlashModeManager {
 
     }
 
+    /** Compatibility overload for the existing command dispatcher. */
+    public ItemStack createChargedRailgun(String ignoredType) {
+
+        return createChargedRailgun();
+
+    }
+
 
 
     private ItemStack applyRailgunLevel(ItemStack base, int level) {
@@ -54250,27 +54257,30 @@ public class FlashModeManager {
 
         org.bukkit.boss.DragonBattle battle = world.getEnderDragonBattle();
 
-        boolean respawning = false;
+        boolean respawnCrystal = false;
 
         if (battle != null) {
 
             try {
 
-                respawning = battle.getRespawnPhase() != null
-
-                        || battle.getRespawnCrystals().stream().anyMatch(existing -> existing != null
+                // RespawnPhase describes the battle globally and can remain active while
+                // a player places another, ordinary crystal. Only the concrete entities
+                // returned by getRespawnCrystals() are protected from damage.
+                respawnCrystal = battle.getRespawnCrystals().stream().anyMatch(existing -> existing != null
 
                         && existing.getUniqueId().equals(crystal.getUniqueId()));
 
             } catch (RuntimeException ignored) {
 
-                respawning = battle.getRespawnPhase() != null;
+                // If the battle cannot expose its respawn-crystal list, do not block
+                // normal player-placed crystals.
+                respawnCrystal = false;
 
             }
 
         }
 
-        if (!respawning) {
+        if (!respawnCrystal) {
 
             return false;
 

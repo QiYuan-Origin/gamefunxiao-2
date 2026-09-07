@@ -14,6 +14,8 @@ import org.gamefunxiao.cosmetics.HunterVictoryEffect;
 
 import org.gamefunxiao.cosmetics.LuckyPillarsVictoryEffect;
 
+import org.gamefunxiao.cosmetics.DeathSwapVictoryEffect;
+
 import org.gamefunxiao.data.PlayerData;
 
 import org.gamefunxiao.game.HunterPerformanceRank;
@@ -152,6 +154,14 @@ public class GameFunPlaceholderExpansion extends PlaceholderExpansion {
 
                 yield LuckyPillarsVictoryEffect.byId(effectId).getDisplayName(plugin);
 
+            }
+
+            case "death_swap_victory_effect" ->
+                    plugin.getPlayerDataManager().getSelectedDeathSwapVictoryEffect(player.getUniqueId());
+
+            case "death_swap_victory_effect_name" -> {
+                String effectId = plugin.getPlayerDataManager().getSelectedDeathSwapVictoryEffect(player.getUniqueId());
+                yield DeathSwapVictoryEffect.byId(effectId).getDisplayName(plugin);
             }
 
             case "hunter_kill_effect" ->

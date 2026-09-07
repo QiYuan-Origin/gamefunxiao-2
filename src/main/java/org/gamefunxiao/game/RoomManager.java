@@ -212,7 +212,12 @@ public class RoomManager {
 
         // 创建记分板
         plugin.getScoreboardManager().createScoreboard(player);
-        clearRoleNameTag(player);
+        if (mode.isDeathSwap()) {
+            setRoleNameTag(player, roomId, false);
+            updatePlayerTabName(player, roomId);
+        } else {
+            clearRoleNameTag(player);
+        }
 
         Map<String, String> placeholders = new HashMap<>();
         placeholders.put("room_id", roomId);
@@ -497,7 +502,12 @@ public class RoomManager {
 
         // 创建记分板
         plugin.getScoreboardManager().createScoreboard(player);
-        clearRoleNameTag(player);
+        if (room.getGameMode().isDeathSwap()) {
+            setRoleNameTag(player, room.getRoomId(), false);
+            updatePlayerTabName(player, room.getRoomId());
+        } else {
+            clearRoleNameTag(player);
+        }
 
         // 刷新大厅物品（人数可能达到双猎物投票条件）
         plugin.getGameManager().refreshLobbyItems(room);
@@ -1955,6 +1965,10 @@ public class RoomManager {
             player.setPlayerListName("§f" + player.getName());
             return;
         }
+        if (room != null && room.getGameMode().isDeathSwap()) {
+            updateDeathSwapTabName(player, room);
+            return;
+        }
         if (room != null && room.getGameMode() == GameMode.LUCKY_PILLARS) {
             player.setPlayerListName(null);
             return;
@@ -1975,6 +1989,10 @@ public class RoomManager {
         if (room != null && room.getGameMode().isFlashTournament()) {
             setTournamentLocatorColor(player, room, isPrey);
             player.setPlayerListName("§f" + player.getName());
+            return;
+        }
+        if (room != null && room.getGameMode().isDeathSwap()) {
+            updateDeathSwapTabName(player, room);
             return;
         }
         if (room != null && room.getGameMode() == GameMode.LUCKY_PILLARS) {
@@ -2017,6 +2035,27 @@ public class RoomManager {
             }
             return;
         }
+        if (room != null && room.getGameMode().isDeathSwap()) {
+            room.assignDeathSwapTeams(room.getAllPlayerUUIDs());
+            for (UUID uuid : room.getAllPlayerUUIDs()) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p == null || !p.isOnline()) {
+                    continue;
+                }
+                if (room.isSpectator(uuid) || room.isDeathSwapEliminated(uuid)) {
+                    setDeathSwapSpectatorNameTag(p, room);
+                } else {
+                    setDeathSwapRoleNameTag(p, room);
+                }
+            }
+            for (UUID uuid : room.getSpectators()) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null && p.isOnline()) {
+                    setDeathSwapSpectatorNameTag(p, room);
+                }
+            }
+            return;
+        }
         for (UUID uuid : room.getAllPlayerUUIDs()) {
             Player p = Bukkit.getPlayer(uuid);
             if (p == null) continue;
@@ -2038,6 +2077,27 @@ public class RoomManager {
 
     public void refreshRoleNameTags(GameRoom room) {
         if (room == null) {
+            return;
+        }
+        if (room.getGameMode().isDeathSwap()) {
+            room.assignDeathSwapTeams(room.getAllPlayerUUIDs());
+            for (UUID uuid : room.getAllPlayerUUIDs()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player == null || !player.isOnline()) {
+                    continue;
+                }
+                if (room.isSpectator(uuid) || room.isDeathSwapEliminated(uuid)) {
+                    setDeathSwapSpectatorNameTag(player, room);
+                } else {
+                    setDeathSwapRoleNameTag(player, room);
+                }
+            }
+            for (UUID uuid : room.getSpectators()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null && player.isOnline()) {
+                    setDeathSwapSpectatorNameTag(player, room);
+                }
+            }
             return;
         }
         if (room.getState() == RoomState.WAITING || room.getState() == RoomState.STARTING) {
@@ -2160,6 +2220,14 @@ public class RoomManager {
             player.setPlayerListName("§f" + player.getName());
             return;
         }
+        if (room != null && room.getGameMode().isDeathSwap()) {
+            if (room.isSpectator(player.getUniqueId()) || room.isDeathSwapEliminated(player.getUniqueId())) {
+                setDeathSwapSpectatorNameTag(player, room);
+            } else {
+                setDeathSwapRoleNameTag(player, room);
+            }
+            return;
+        }
         if (room != null && room.getGameMode() == GameMode.LUCKY_PILLARS) {
             String teamName = "gf_lp_" + player.getName();
             if (teamName.length() > 16) teamName = teamName.substring(0, 16);
@@ -2274,6 +2342,84 @@ public class RoomManager {
         }
     }
 
+    private void updateDeathSwapTabName(Player player, GameRoom room) {
+        if (player == null || room == null) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        if (room.isSpectator(uuid) || room.isDeathSwapEliminated(uuid)) {
+            player.setPlayerListName("§7[旁观] §7" + player.getName());
+            return;
+        }
+        room.ensureDeathSwapTeamIndex(uuid);
+        String color = room.getDeathSwapTeamColorCode(uuid);
+        player.setPlayerListName(color + "[" + room.getDeathSwapTeamName(uuid) + "] " + color + player.getName());
+    }
+
+    private void setDeathSwapRoleNameTag(Player player, GameRoom room) {
+        if (player == null || room == null) {
+            return;
+        }
+        UUID playerUuid = player.getUniqueId();
+        if (room.isSpectator(playerUuid) || room.isDeathSwapEliminated(playerUuid)) {
+            setDeathSwapSpectatorNameTag(player, room);
+            return;
+        }
+        int teamIndex = room.ensureDeathSwapTeamIndex(playerUuid);
+        String teamName = buildRoleTeamName("gf_ds" + teamIndex + "_", player);
+        String color = room.getDeathSwapTeamColorCode(playerUuid);
+        String prefix = color + "[" + room.getDeathSwapTeamName(playerUuid) + "] §r";
+
+        clearRoleNameTeams(player);
+        player.setWaypointColor(room.getDeathSwapTeamWaypointColor(playerUuid));
+        applyRoleTeamToRoomViewers(room, player, teamName, prefix, room.getDeathSwapTeamChatColor(playerUuid));
+        updateDeathSwapTabName(player, room);
+    }
+
+    private void setDeathSwapSpectatorNameTag(Player player, GameRoom room) {
+        if (player == null || room == null) {
+            return;
+        }
+        String teamName = buildRoleTeamName("gf_dss_", player);
+        clearRoleNameTeams(player);
+        player.setWaypointColor(SPECTATOR_WAYPOINT_COLOR);
+        applyRoleTeamToRoomViewers(room, player, teamName, "§7[旁观] §r", ChatColor.GRAY);
+        player.setPlayerListName("§7[旁观] §7" + player.getName());
+    }
+
+    private String buildRoleTeamName(String prefix, Player player) {
+        String hash = Integer.toHexString(player.getUniqueId().hashCode());
+        String teamName = prefix + hash;
+        return teamName.length() > 16 ? teamName.substring(0, 16) : teamName;
+    }
+
+    private void applyRoleTeamToRoomViewers(GameRoom room, Player target, String teamName, String prefix, ChatColor color) {
+        java.util.Set<java.util.UUID> allPlayers = new java.util.HashSet<>();
+        allPlayers.addAll(room.getAllPlayerUUIDs());
+        allPlayers.addAll(room.getSpectators());
+
+        for (java.util.UUID uuid : allPlayers) {
+            org.bukkit.entity.Player viewer = org.bukkit.Bukkit.getPlayer(uuid);
+            if (viewer == null || !viewer.isOnline()) continue;
+
+            org.bukkit.scoreboard.Scoreboard scoreboard = viewer.getScoreboard();
+            if (scoreboard == null || scoreboard == org.bukkit.Bukkit.getScoreboardManager().getMainScoreboard()) {
+                scoreboard = org.bukkit.Bukkit.getScoreboardManager().getMainScoreboard();
+            }
+
+            org.bukkit.scoreboard.Team team = scoreboard.getTeam(teamName);
+            if (team == null) {
+                team = scoreboard.registerNewTeam(teamName);
+            }
+            team.setPrefix(prefix);
+            team.setSuffix("");
+            team.setColor(color);
+            if (!team.hasEntry(target.getName())) {
+                team.addEntry(target.getName());
+            }
+        }
+    }
+
     private String normalizeRoleLabel(String roleLabel, String fallback, int maxLength) {
         String label = roleLabel == null || roleLabel.isBlank() ? fallback : roleLabel;
         label = ChatColor.stripColor(label);
@@ -2297,6 +2443,10 @@ public class RoomManager {
             clearRoleNameTeams(player);
             player.setWaypointColor(SPECTATOR_WAYPOINT_COLOR);
             player.setPlayerListName("§f" + player.getName());
+            return;
+        }
+        if (tournamentRoom != null && tournamentRoom.getGameMode().isDeathSwap()) {
+            setDeathSwapSpectatorNameTag(player, tournamentRoom);
             return;
         }
         String teamName = "gf_spec_" + player.getName();
@@ -2405,6 +2555,22 @@ public class RoomManager {
     }
 
     private void clearWaitingRoomRoleNameTags(GameRoom room) {
+        if (room != null && room.getGameMode().isDeathSwap()) {
+            room.assignDeathSwapTeams(room.getAllPlayerUUIDs());
+            for (UUID uuid : room.getAllPlayerUUIDs()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null && player.isOnline()) {
+                    setDeathSwapRoleNameTag(player, room);
+                }
+            }
+            for (UUID uuid : room.getSpectators()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null && player.isOnline()) {
+                    setDeathSwapSpectatorNameTag(player, room);
+                }
+            }
+            return;
+        }
         for (UUID uuid : room.getAllPlayerUUIDs()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null && player.isOnline()) {
@@ -2453,10 +2619,17 @@ public class RoomManager {
                 || markerText.contains("[猎物]")
                 || markerText.contains("[柱上]")
                 || markerText.contains("[旁观]")
-                || markerText.contains("")
                 || markerText.contains("猎人")
                 || markerText.contains("猎物")
-                || markerText.contains("旁观");
+                || markerText.contains("旁观")
+                || markerText.contains("红队")
+                || markerText.contains("蓝队")
+                || markerText.contains("黄队")
+                || markerText.contains("绿队")
+                || markerText.contains("紫队")
+                || markerText.contains("青队")
+                || markerText.contains("金队")
+                || markerText.contains("白队");
     }
 
     private String stripScoreboardColor(String text) {

@@ -30,12 +30,40 @@ public class ScoreboardManager {
 
     private final GameFunXiao plugin;
     private final Map<UUID, Scoreboard> playerScoreboards = new HashMap<>();
+    private final Map<UUID, RenderedScoreboardState> renderedScoreboards = new HashMap<>();
     private final Map<String, BukkitTask> endedScoreboardTasks = new HashMap<>(); // 房间ID -> 清除任务
     private final LegacyComponentSerializer legacySerializer = LegacyComponentSerializer.legacySection();
     private BukkitTask updateTask;
 
     public ScoreboardManager(GameFunXiao plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * 一次记分板更新周期内的房间级缓存。
+     *
+     * 记分板显示通常对同一房间的所有玩家相同。把排行和渲染文本放在
+     * 周期缓存中，避免双猎物房间按玩家重复计算同一份数据。
+     */
+    private static final class ScoreboardUpdateContext {
+        private final Map<String, List<HunterRankData>> hunterRankCache = new HashMap<>();
+        private final Map<String, List<String>> configuredLineCache = new HashMap<>();
+        private final Map<String, List<String>> defaultLineCache = new HashMap<>();
+    }
+
+    private static final class RenderedScoreboardState {
+        private final Scoreboard scoreboard;
+        private final String title;
+        private final List<String> lines;
+        private final boolean showNumbers;
+
+        private RenderedScoreboardState(Scoreboard scoreboard, String title,
+                                        List<String> lines, boolean showNumbers) {
+            this.scoreboard = scoreboard;
+            this.title = title;
+            this.lines = List.copyOf(lines);
+            this.showNumbers = showNumbers;
+        }
     }
 
     /**
@@ -49,20 +77,24 @@ public class ScoreboardManager {
         updateTask = new BukkitRunnable() {
             @Override
             public void run() {
+                ScoreboardUpdateContext context = new ScoreboardUpdateContext();
                 for (GameRoom room : plugin.getRoomManager().getAllRooms()) {
-                    // 更新玩家记分板
-                    for (UUID uuid : room.getAllPlayerUUIDs()) {
+                    // 玩家和旁观者通常互斥，但合并后可以避免异常状态下同一玩家被更新两次。
+                    Set<UUID> viewers = new LinkedHashSet<>();
+                    viewers.addAll(room.getAllPlayerUUIDs());
+                    viewers.addAll(room.getSpectators());
+
+                    boolean shouldRefreshRoleNameTags = false;
+                    for (UUID uuid : viewers) {
                         Player player = Bukkit.getPlayer(uuid);
                         if (player != null && player.isOnline()) {
-                            updateScoreboard(player, room);
+                            shouldRefreshRoleNameTags |= updateScoreboard(player, room, context);
                         }
                     }
-                    // 更新旁观者记分板
-                    for (UUID uuid : room.getSpectators()) {
-                        Player player = Bukkit.getPlayer(uuid);
-                        if (player != null && player.isOnline()) {
-                            updateScoreboard(player, room);
-                        }
+
+                    // 身份名牌刷新本身会遍历整间房间；每轮每个房间刷新一次即可。
+                    if (shouldRefreshRoleNameTags) {
+                        plugin.getRoomManager().refreshRoleNameTags(room);
                     }
                 }
             }
@@ -85,6 +117,7 @@ public class ScoreboardManager {
     public void createScoreboard(Player player) {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
         playerScoreboards.put(player.getUniqueId(), scoreboard);
+        renderedScoreboards.remove(player.getUniqueId());
         player.setScoreboard(scoreboard);
     }
 
@@ -92,31 +125,35 @@ public class ScoreboardManager {
      * 清除玩家记分板
      */
     public void removeScoreboard(Player player) {
-        playerScoreboards.remove(player.getUniqueId());
-        player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+        UUID uuid = player.getUniqueId();
+        playerScoreboards.remove(uuid);
+        renderedScoreboards.remove(uuid);
+        Scoreboard mainScoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        if (player.getScoreboard() != mainScoreboard) {
+            player.setScoreboard(mainScoreboard);
+        }
     }
 
     /**
      * 更新玩家记分板
      */
-    private void updateScoreboard(Player player, GameRoom room) {
+    private boolean updateScoreboard(Player player, GameRoom room, ScoreboardUpdateContext context) {
         if (!plugin.getConfigManager().isScoreboardEnabled()) {
             removeScoreboard(player);
-            return;
+            return false;
         }
         if (room != null && room.getGameMode().isFlashTournament() && room.getState() == RoomState.PLAYING) {
             removeScoreboard(player);
-            plugin.getRoomManager().refreshRoleNameTags(room);
-            return;
+            return true;
         }
 
         Scoreboard current = player.getScoreboard();
         Objective currentSidebar = current == null ? null : current.getObjective(DisplaySlot.SIDEBAR);
         if (plugin.getConfigManager().shouldScoreboardRespectForeignSidebar()
                 && currentSidebar != null
-                && !SCOREBOARD_OBJECTIVE.equals(currentSidebar.getName())) {
+            && !SCOREBOARD_OBJECTIVE.equals(currentSidebar.getName())) {
             // 其他插件正在显示侧边栏时不硬抢，避免 TAB / AnimatedScoreboard 来回抢导致一闪一闪。
-            return;
+            return false;
         }
 
         Scoreboard scoreboard = getOrCreateScoreboard(player);
@@ -129,43 +166,45 @@ public class ScoreboardManager {
             cancelEndedScoreboardClear(room.getRoomId());
         }
 
-        List<String> lines = new ArrayList<>();
         String configSection = "waiting";
         switch (state) {
-            case WAITING, STARTING -> lines = getWaitingLines(room);
+            case WAITING, STARTING -> {
+                // 使用默认 waiting 记分板。
+            }
             case SELECTING -> {
                 configSection = "selecting";
-                lines = getSelectingLines(room);
             }
             case PLAYING -> {
                 configSection = room.getGameMode() == GameMode.SWAP && room.isSwapCountdownPrey(player.getUniqueId())
                         ? "swap_countdown"
                         : "playing";
-                lines = getPlayingLines(room, player);
             }
             case ENDED -> {
                 configSection = "ended";
-                lines = getEndedLines(room, player);
                 scheduleEndedScoreboardClear(room);
             }
             default -> {
                 removeScoreboard(player);
-                return;
+                return false;
             }
         }
 
         List<String> configuredLines = room.getGameMode().isLuckyPillars() || room.getGameMode().isDeathSwap()
                 ? Collections.emptyList()
-                : getConfiguredLines(configSection, room, player);
-        if (!configuredLines.isEmpty()) {
-            lines = configuredLines;
-        }
+                : getCachedConfiguredLines(configSection, room, player, context);
+        List<String> lines = configuredLines.isEmpty()
+                ? new ArrayList<>(getCachedDefaultLines(configSection, room, player, context))
+                : new ArrayList<>(configuredLines);
 
         if (lines.size() > MAX_SCOREBOARD_LINES) {
             lines = new ArrayList<>(lines.subList(0, MAX_SCOREBOARD_LINES));
         }
+        if (room.getGameMode().isDeathSwap() && !lines.isEmpty()) {
+            lines.set(lines.size() - 1, getScoreboardFooter());
+        }
 
         Objective objective = scoreboard.getObjective(SCOREBOARD_OBJECTIVE);
+        boolean objectiveWasMissing = objective == null;
         String title = getScoreboardTitle(room);
         if (objective == null) {
             objective = scoreboard.registerNewObjective(SCOREBOARD_OBJECTIVE, "dummy", title);
@@ -177,29 +216,68 @@ public class ScoreboardManager {
         }
         updateBelowNameHealth(scoreboard, room);
 
+        boolean showNumbers = plugin.getConfigManager().shouldShowScoreboardNumbers();
+        RenderedScoreboardState previousState = renderedScoreboards.get(player.getUniqueId());
+        boolean sameScoreboard = previousState != null && previousState.scoreboard == scoreboard;
+        boolean forceFullRender = objectiveWasMissing || !sameScoreboard;
+        boolean lineCountChanged = forceFullRender
+                || previousState.lines.size() != lines.size();
+        boolean numberFormatChanged = forceFullRender
+                || previousState.showNumbers != showNumbers;
+
+        if (!forceFullRender
+                && !lineCountChanged
+                && !numberFormatChanged
+                && Objects.equals(previousState.title, title)
+                && Objects.equals(previousState.lines, lines)
+                && objective.getDisplaySlot() == DisplaySlot.SIDEBAR) {
+            return true;
+        }
+
         int score = lines.size();
         for (int i = 0; i < lines.size(); i++) {
             String line = Objects.requireNonNullElse(lines.get(i), "");
             String entryName = getHiddenColorCode(i);
             Team team = getOrCreateLineTeam(scoreboard, i);
 
-            syncTeamEntry(team, entryName);
-            team.prefix(legacySerializer.deserialize(line));
-            team.suffix(Component.empty());
+            boolean lineChanged = forceFullRender
+                    || i >= previousState.lines.size()
+                    || !Objects.equals(previousState.lines.get(i), line);
+            if (lineChanged || lineCountChanged || numberFormatChanged) {
+                syncTeamEntry(team, entryName);
+            }
+            if (lineChanged) {
+                team.prefix(legacySerializer.deserialize(line));
+                team.suffix(Component.empty());
+            }
 
             org.bukkit.scoreboard.Score scoreObj = objective.getScore(entryName);
-            scoreObj.setScore(score--);
-            if (plugin.getConfigManager().shouldShowScoreboardNumbers()) {
-                scoreObj.numberFormat(null);
-            } else {
-                scoreObj.numberFormat(NumberFormat.blank());
+            if (lineChanged || lineCountChanged) {
+                scoreObj.setScore(score);
+            }
+            if (numberFormatChanged || lineChanged || i >= previousState.lines.size()) {
+                if (showNumbers) {
+                    scoreObj.numberFormat(null);
+                } else {
+                    scoreObj.numberFormat(NumberFormat.blank());
+                }
+            }
+            score--;
+        }
+
+        if (forceFullRender) {
+            for (int i = lines.size(); i < MAX_SCOREBOARD_LINES; i++) {
+                clearLine(scoreboard, i);
+            }
+        } else if (previousState.lines.size() > lines.size()) {
+            for (int i = lines.size(); i < previousState.lines.size(); i++) {
+                clearLine(scoreboard, i);
             }
         }
 
-        for (int i = lines.size(); i < MAX_SCOREBOARD_LINES; i++) {
-            clearLine(scoreboard, i);
-        }
-        plugin.getRoomManager().refreshRoleNameTags(room);
+        renderedScoreboards.put(player.getUniqueId(),
+                new RenderedScoreboardState(scoreboard, title, lines, showNumbers));
+        return true;
     }
 
     private String getScoreboardTitle(GameRoom room) {
@@ -208,7 +286,7 @@ public class ScoreboardManager {
         }
         return switch (room.getGameMode()) {
             case LUCKY_PILLARS -> "§x§F§F§D§D§5§5🍀 §x§F§F§C§C§6§6幸§x§F§F§B§B§7§7运§x§F§F§A§A§8§8之§x§F§F§9§9§9§9柱";
-            case DEATH_SWAP -> "§x§F§F§6§6§0§0⟲ §x§F§F§9§9§3§3死§x§F§F§B§B§6§6亡§x§F§F§D§D§5§5互§x§F§F§F§F§9§9换";
+            case DEATH_SWAP -> "§x§F§F§9§9§3§3死亡互换";
             case FLASH -> "§x§F§F§6§6§0§0⚡ §x§F§F§9§9§3§3闪§x§F§F§B§B§5§5光§x§F§F§D§D§8§8公§x§F§F§F§F§A§A式";
             case FLASH_TOURNAMENT -> "§x§F§F§6§6§0§0⚡ §x§F§F§B§B§5§5闪§x§F§F§D§D§8§8光§x§F§F§4§4§4§4赛§x§F§F§7§7§7§7事";
             case END_FLASH -> "§x§8§8§5§5§F§F✦ §x§B§B§8§8§F§F终§x§D§D§A§A§F§F章§x§F§F§D§D§F§F闪§x§F§F§F§F§F§F光";
@@ -338,7 +416,46 @@ public class ScoreboardManager {
         return lines;
     }
 
-    private List<String> getConfiguredLines(String section, GameRoom room, Player viewer) {
+    private List<String> getCachedConfiguredLines(String section, GameRoom room, Player viewer,
+                                                  ScoreboardUpdateContext context) {
+        String cacheKey = room.getRoomId() + "\u0000" + section;
+        List<String> cached = context.configuredLineCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        List<String> lines = getConfiguredLines(section, room, viewer, context);
+        context.configuredLineCache.put(cacheKey, lines);
+        return lines;
+    }
+
+    private List<String> getCachedDefaultLines(String section, GameRoom room, Player viewer,
+                                               ScoreboardUpdateContext context) {
+        String cacheKey = room.getRoomId() + "\u0000" + section;
+        if ("swap_countdown".equals(section)) {
+            // 只有死亡互换的接管倒计时页面与观察者有关，避免误用其他玩家的页面。
+            cacheKey += "\u0000" + viewer.getUniqueId();
+        }
+
+        List<String> cached = context.defaultLineCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        List<String> lines = switch (section) {
+            case "waiting" -> getWaitingLines(room);
+            case "selecting" -> getSelectingLines(room);
+            case "playing", "swap_countdown" -> getPlayingLines(room, viewer, context);
+            case "ended" -> getEndedLines(room, viewer, context);
+            default -> Collections.emptyList();
+        };
+        List<String> immutableLines = List.copyOf(lines);
+        context.defaultLineCache.put(cacheKey, immutableLines);
+        return immutableLines;
+    }
+
+    private List<String> getConfiguredLines(String section, GameRoom room, Player viewer,
+                                            ScoreboardUpdateContext context) {
         FileConfiguration scoreboardConfig = plugin.getConfigManager().getConfig("scoreboard");
         if (scoreboardConfig == null) {
             return Collections.emptyList();
@@ -349,7 +466,12 @@ public class ScoreboardManager {
             return Collections.emptyList();
         }
 
-        List<HunterRankData> ranks = getTopHuntersWithData(room, 3);
+        boolean requiresHunterRanks = rawLines.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(line -> line.contains("{rank_"));
+        List<HunterRankData> ranks = requiresHunterRanks
+                ? getCachedHunterRanks(room, context)
+                : Collections.emptyList();
         Map<String, String> placeholders = new HashMap<>();
         placeholders.put("room_id", room.getRoomId());
         placeholders.put("mode", getColoredGameMode(room.getGameMode()));
@@ -461,6 +583,14 @@ public class ScoreboardManager {
         return text == null ? "" : ChatColor.translateAlternateColorCodes('&', text);
     }
 
+    private String getScoreboardFooter() {
+        FileConfiguration scoreboardConfig = plugin.getConfigManager().getConfig("scoreboard");
+        if (scoreboardConfig == null) {
+            return "§8HunterGame.server";
+        }
+        return color(scoreboardConfig.getString("footer", "§8HunterGame.server"));
+    }
+
     /**
      * 世界选择阶段的记分板
      */
@@ -535,7 +665,7 @@ public class ScoreboardManager {
     /**
      * 游戏进行中的记分板
      */
-    private List<String> getPlayingLines(GameRoom room, Player viewer) {
+    private List<String> getPlayingLines(GameRoom room, Player viewer, ScoreboardUpdateContext context) {
         if (room.getGameMode().isLuckyPillars()) {
             return getLuckyPillarsPlayingLines(room);
         }
@@ -610,7 +740,7 @@ public class ScoreboardManager {
             lines.add("§e§l追踪排行");
 
             // 获取前3名猎人排行（带详细数据）
-            List<HunterRankData> topHunters = getTopHuntersWithData(room, 3);
+            List<HunterRankData> topHunters = getCachedHunterRanks(room, context);
 
             if (topHunters.isEmpty()) {
                 lines.add("§f- §7暂无数据");
@@ -689,22 +819,24 @@ public class ScoreboardManager {
     private List<String> getDeathSwapWaitingLines(GameRoom room) {
         List<String> lines = new ArrayList<>();
         lines.add("§7");
-        lines.add("§f🕹 模式: " + getColoredGameMode(room.getGameMode()));
-        lines.add("§f👥 当前人数: §a" + room.getPlayerCount() + "§7/§e" +
+        lines.add("§f房间: §e" + room.getDeathSwapAdvertiseModeName());
+        lines.add("§f人数: §a" + room.getPlayerCount() + "§7/§e" +
                 (room.getMaxPlayers() == -1 ? "∞" : room.getMaxPlayers()));
-        lines.add("§f🏷 房间号: §6" + room.getRoomId());
+        lines.add("§f编号: §6" + room.getRoomId());
         lines.add("§7");
         if (room.getState() == RoomState.STARTING) {
-            lines.add("§f距开始: §e" + formatCountdown(room.getCountdown()));
+            lines.add("§f状态: §e倒计时");
+            lines.add("§f开始: §e" + formatCountdown(room.getCountdown()));
         } else {
-            lines.add("§f状态: §6等待死亡互换选手");
+            lines.add("§f状态: §6等待中");
         }
         lines.add("§7");
-        lines.add("§x§F§F§9§9§3§3§l互换投票");
+        lines.add("§x§F§F§9§9§3§3互换投票");
         for (int minute : plugin.getConfigManager().getDeathSwapVoteIntervalMinutes()) {
             lines.add("§f- §e" + minute + "分钟 §7" + room.getDeathSwapVoteCount(minute) + "票");
         }
         lines.add("§7");
+        lines.add(getScoreboardFooter());
         return lines;
     }
 
@@ -731,20 +863,17 @@ public class ScoreboardManager {
     private List<String> getDeathSwapPlayingLines(GameRoom room) {
         List<String> lines = new ArrayList<>();
         lines.add("§7");
-        lines.add("§f🕹 游戏模式: " + getColoredGameMode(room.getGameMode()));
-        lines.add("§f存活: §a" + room.getDeathSwapAlivePlayers().size() + " §7/ 淘汰: §c" + room.getDeathSwapEliminatedPlayers().size());
+        lines.add("§f模式: §e" + room.getDeathSwapAdvertiseModeName());
+        lines.add("§f存活: §a" + room.getDeathSwapAlivePlayers().size() + "§7/§f" + room.getPlayerCount());
+        lines.add("§f淘汰: §c" + room.getDeathSwapEliminatedPlayers().size());
         lines.add("§f已进行: §e" + (room.getGameStartTime() <= 0L
                 ? "准备中"
                 : formatElapsedTime(Math.max(0L, System.currentTimeMillis() - room.getGameStartTime()))));
         lines.add("§f下次互换: §e" + formatCountdown(room.getDeathSwapNextSwapSeconds()));
         lines.add("§f互换间隔: §6" + formatCountdown(room.getDeathSwapIntervalSeconds()));
-        lines.add("§f真实PVP: " + (room.isDeathSwapPvpEnabled() ? "§c已开启" : "§a未开启"));
+        lines.add("§f真实PVP: " + (room.isDeathSwapPvpEnabled() ? "§a启用" : "§c关闭"));
         lines.add("§7");
-        lines.add("§x§F§F§9§9§3§3§l规则");
-        lines.add("§f- §e只有一次生命");
-        lines.add("§f- §e周期互换位置");
-        lines.add("§f- §c两小时未结束平局");
-        lines.add("§7");
+        lines.add(getScoreboardFooter());
         return lines;
     }
 
@@ -797,6 +926,18 @@ public class ScoreboardManager {
     /**
      * 获取前N名猎人（带详细数据：距离和伤害点数）
      */
+    private List<HunterRankData> getCachedHunterRanks(GameRoom room, ScoreboardUpdateContext context) {
+        String cacheKey = room.getRoomId();
+        List<HunterRankData> cached = context.hunterRankCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        List<HunterRankData> immutableRanks = List.copyOf(getTopHuntersWithData(room, 3));
+        context.hunterRankCache.put(cacheKey, immutableRanks);
+        return immutableRanks;
+    }
+
     private List<HunterRankData> getTopHuntersWithData(GameRoom room, int limit) {
         List<HunterRankData> hunterDataList = new ArrayList<>();
 
@@ -859,10 +1000,10 @@ public class ScoreboardManager {
      * 猎人排行数据类
      */
     private static class HunterRankData {
-        UUID uuid;
-        int distance;      // 距离（米）
-        int damagePoints;  // 伤害点数（2点血=1点）
-        double totalScore; // 综合分数（用于排序）
+        final UUID uuid;
+        final int distance;      // 距离（米）
+        final int damagePoints;  // 伤害点数（2点血=1点）
+        final double totalScore; // 综合分数（用于排序）
 
         HunterRankData(UUID uuid, int distance, int damagePoints, double totalScore) {
             this.uuid = uuid;
@@ -931,7 +1072,7 @@ public class ScoreboardManager {
     /**
      * 游戏结束阶段的记分板
      */
-    private List<String> getEndedLines(GameRoom room, Player viewer) {
+    private List<String> getEndedLines(GameRoom room, Player viewer, ScoreboardUpdateContext context) {
         List<String> lines = new ArrayList<>();
 
         lines.add("§7");
@@ -967,7 +1108,7 @@ public class ScoreboardManager {
         }
 
         if (room.getGameMode().isDeathSwap()) {
-            lines.add("§x§F§F§9§9§3§3⟲ §e§l死亡互换已结束");
+            lines.add("§x§F§F§9§9§3§3死亡互换已结束");
             lines.add("§7");
             String winnerName = "无人";
             List<UUID> alivePlayers = room.getDeathSwapAlivePlayers();
@@ -979,6 +1120,7 @@ public class ScoreboardManager {
             lines.add("§f淘汰玩家: §c" + room.getDeathSwapEliminatedPlayers().size());
             lines.add("§f游戏时长: §e" + formatElapsedTime(Math.max(0L, System.currentTimeMillis() - room.getGameStartTime())));
             lines.add("§7");
+            lines.add(getScoreboardFooter());
             return lines;
         }
 
@@ -1025,7 +1167,7 @@ public class ScoreboardManager {
             lines.add("§7");
 
             if (room.getGameMode() != GameMode.NO_ITEM) {
-                List<HunterRankData> topHunters = getTopHuntersWithData(room, 3);
+                List<HunterRankData> topHunters = getCachedHunterRanks(room, context);
                 if (!topHunters.isEmpty()) {
                     lines.add("§e§l🏆 MVP排行");
                     for (int i = 0; i < topHunters.size(); i++) {
@@ -1092,6 +1234,7 @@ public class ScoreboardManager {
             }
         }
         playerScoreboards.clear();
+        renderedScoreboards.clear();
 
         // 取消所有延迟清除任务
         for (BukkitTask task : endedScoreboardTasks.values()) {

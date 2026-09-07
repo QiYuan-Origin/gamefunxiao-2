@@ -34,13 +34,13 @@ public class DeathSwapNavigationMenu extends BaseMenu {
 
         inventory.setItem(0, createLeaderboardButton());
         inventory.setItem(8, createRoomListButton());
-        inventory.setItem(21, createRoomButton("双人局", 2, Material.ENDER_EYE,
+        inventory.setItem(20, createRoomButton("双人局", 2, Material.ENDER_EYE,
                 "§f- §e适合快速体验互换陷阱",
                 "§f- §e出生点附近会筛村庄"));
         inventory.setItem(22, createRoomButton("四人局", 4, Material.CHORUS_FRUIT,
                 "§f- §e互换路线更乱，陷阱更好骗",
                 "§f- §e默认投票 5 / 10 分钟互换"));
-        inventory.setItem(23, createRoomButton("八人局", 8, Material.RECOVERY_COMPASS,
+        inventory.setItem(24, createRoomButton("八人局", 8, Material.RECOVERY_COMPASS,
                 "§f- §e按出生点围成一圈开局",
                 "§f- §e完整死亡互换标准人数"));
         inventory.setItem(36, createBackButton());
@@ -111,9 +111,9 @@ public class DeathSwapNavigationMenu extends BaseMenu {
                 player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.72f, 1.0f);
                 plugin.getMenuManager().openDeathSwapRoomListMenu(player);
             }
-            case 21 -> createDedicatedRoom(2);
+            case 20 -> createDedicatedRoom(2);
             case 22 -> createDedicatedRoom(4);
-            case 23 -> createDedicatedRoom(8);
+            case 24 -> createDedicatedRoom(8);
             case 36 -> {
                 playClickSound();
                 plugin.getMenuManager().openMainMenu(player);

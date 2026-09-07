@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -16,8 +17,10 @@ public class PlayerData {
     private int coins;
     private final Set<String> ownedVictoryEffects = new HashSet<>();
     private final Set<String> ownedLuckyPillarsVictoryEffects = new HashSet<>();
+    private final Set<String> ownedDeathSwapVictoryEffects = new HashSet<>();
     private String selectedHunterVictoryEffect = "fireworks";
     private String selectedLuckyPillarsVictoryEffect = "fireworks";
+    private String selectedDeathSwapVictoryEffect = "fireworks";
     private final Set<String> ownedKillEffects = new HashSet<>();
     private String selectedHunterKillEffect = "none";
     private String messageFrequency = "chatty";
@@ -185,6 +188,38 @@ public class PlayerData {
         ownedLuckyPillarsVictoryEffects.add(effectId.toLowerCase());
     }
 
+    public Set<String> getOwnedDeathSwapVictoryEffects() {
+        ownedDeathSwapVictoryEffects.add("fireworks");
+        return new HashSet<>(ownedDeathSwapVictoryEffects);
+    }
+
+    public void setOwnedDeathSwapVictoryEffects(Set<String> effects) {
+        ownedDeathSwapVictoryEffects.clear();
+        if (effects != null) {
+            for (String effect : effects) {
+                if (effect != null && !effect.isBlank()) {
+                    ownedDeathSwapVictoryEffects.add(effect.toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        ownedDeathSwapVictoryEffects.add("fireworks");
+    }
+
+    public boolean hasDeathSwapVictoryEffect(String effectId) {
+        if (effectId == null || effectId.isBlank()) {
+            return false;
+        }
+        return "fireworks".equalsIgnoreCase(effectId)
+                || ownedDeathSwapVictoryEffects.contains(effectId.toLowerCase(Locale.ROOT));
+    }
+
+    public void unlockDeathSwapVictoryEffect(String effectId) {
+        if (effectId == null || effectId.isBlank()) {
+            return;
+        }
+        ownedDeathSwapVictoryEffects.add(effectId.toLowerCase(Locale.ROOT));
+    }
+
     public String getSelectedHunterVictoryEffect() {
         if (selectedHunterVictoryEffect == null || selectedHunterVictoryEffect.isBlank()) {
             return "fireworks";
@@ -209,6 +244,20 @@ public class PlayerData {
         this.selectedLuckyPillarsVictoryEffect = selectedLuckyPillarsVictoryEffect == null || selectedLuckyPillarsVictoryEffect.isBlank()
                 ? "fireworks"
                 : selectedLuckyPillarsVictoryEffect.toLowerCase();
+    }
+
+    public String getSelectedDeathSwapVictoryEffect() {
+        if (selectedDeathSwapVictoryEffect == null || selectedDeathSwapVictoryEffect.isBlank()) {
+            return "fireworks";
+        }
+        return selectedDeathSwapVictoryEffect;
+    }
+
+    public void setSelectedDeathSwapVictoryEffect(String selectedDeathSwapVictoryEffect) {
+        this.selectedDeathSwapVictoryEffect = selectedDeathSwapVictoryEffect == null
+                || selectedDeathSwapVictoryEffect.isBlank()
+                ? "fireworks"
+                : selectedDeathSwapVictoryEffect.toLowerCase(Locale.ROOT);
     }
 
     public Set<String> getOwnedKillEffects() {

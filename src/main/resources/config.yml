@@ -1,6 +1,6 @@
 # GameFunXiao 主配置文件
 # 配置版本（请勿手动修改）
-config_version: 14
+config_version: 15
 
 # GameFun消息前缀
 prefix: "§x§5§5§F§F§A§A⚔ §x§6§6§F§F§B§BGameFun §x§7§7§F§F§C§C>> §f"
@@ -26,7 +26,7 @@ header-footer:
     - ''
     - '<gradient:#913DFF:#913DFF>§x§f§6§e§1§3§b§lの §r§x§f§6§e§1§3§b当前服务器 §r§8: §r%qichengmorebungeeapi_server%§r §x§f§6§e§1§3§b§lの'
     - '§r<gradient:#D2A6F4:#D2A6F4><b>></b> 服务器QQ群 : 1076620337 <b><<b/></gradient>'
-    - '§r<gradient:#ADBBC5:#B988F9>mcqi.top</gradient>'
+    - '§r<gradient:#ADBBC5:#B988F9>pvpqi.top</gradient>'
     - ''
 
 # 菜单设置
@@ -53,6 +53,8 @@ hunter_game:
     game_server_name: "gameing"
     # 游戏结束或退出后返回的大厅服 server 名
     lobby_server_name: "lobby"
+    # lobby 维护/崩掉时的备用等待大厅，按顺序尝试
+    lobby_fallback_server_names: ["waithub"]
     # 跨服创建房间的临时请求目录（大厅服和游戏服都要能访问到）
     request_path: "D:/plus/GameFunShared/cross-create-requests"
     # gamefun 与 gameing 共用的玩家数据根目录（留空时会自动取 request_path 的上级目录）
@@ -205,10 +207,12 @@ death_swap:
   countdown_seconds: 180
   force_start_seconds: 30
   pre_start_countdown_seconds: 10
-  vote_intervals_minutes: [5, 10]
+  vote_intervals_minutes: [1, 2, 3, 5, 8, 10, 20, 30]
   no_pvp_seconds: 3600
   draw_seconds: 7200
   spawn_ring_radius: 8.0
+  random_spawn_spacing_blocks: 800
+  nearby_structure_radius_chunks: 128
   village_seed:
     radius_blocks: 256
     max_attempts: 1000000
@@ -267,6 +271,43 @@ shop:
       lore:
         - "§f- §d紫晶光点向四周绽放"
         - "§f- §f干净、亮眼、不遮视野"
+  death_swap_victory_effects:
+    fireworks:
+      name: "默认烟花"
+      price: 0
+      lore:
+        - "§f- §a经典烟花庆祝，默认拥有"
+        - "§f- §b适合死亡互换的最后胜利"
+    red_rift:
+      name: "猩红裂隙"
+      price: 900
+      lore:
+        - "§f- §c红色裂隙从胜者脚下扩散"
+        - "§f- §7像空间被互换撕开了一道口子"
+    clockwork:
+      name: "逆时钟"
+      price: 1050
+      lore:
+        - "§f- §6金红环流围绕胜者旋转"
+        - "§f- §7时间停在最后一次互换之后"
+    end_portal:
+      name: "错位终点"
+      price: 980
+      lore:
+        - "§f- §5终界粒子向四周散开"
+        - "§f- §7留下短暂的传送残影"
+    soul_exchange:
+      name: "灵魂交接"
+      price: 1100
+      lore:
+        - "§f- §3灵魂火焰盘旋升起"
+        - "§f- §7像最后一次状态交接"
+    blood_moon:
+      name: "猩红月环"
+      price: 1250
+      lore:
+        - "§f- §c猩红月环在场地中央展开"
+        - "§f- §7胜利者成为最后的坐标"
 
 # 自定义金币设置
 custom_currency:
@@ -293,6 +334,8 @@ child_server:
   role: "standalone"
   # 子服结束后返回的大厅服名（代理服里的 server 名）
   lobby_server_name: "lobby"
+  # lobby 维护/崩掉时的备用等待大厅，按顺序尝试
+  lobby_fallback_server_names: ["waithub"]
 
   shared_storage:
     # 房间注册信息目录（大厅服和子服都要能访问到）

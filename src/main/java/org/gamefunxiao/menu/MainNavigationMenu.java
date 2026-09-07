@@ -109,7 +109,7 @@ public class MainNavigationMenu extends BaseMenu {
             List<String> lore = new ArrayList<>();
             lore.add("§8· · · · · · · · · · · · · ·");
             lore.add("§f- §a使用 §e" + plugin.getConfigManager().getMiniGameCurrencyName() + " §a购买外观");
-            lore.add("§f- §d当前开放: 猎人胜利特效");
+            lore.add("§f- §d当前开放: 猎人、幸运之柱、死亡互换外观");
             lore.add("§f- §7只放已经完整接入游戏的商品");
             lore.add("§f- §b当前余额: §e" + plugin.getPlayerDataManager().getCoins(player.getUniqueId()));
             lore.add("§8· · · · · · · · · · · · · ·");

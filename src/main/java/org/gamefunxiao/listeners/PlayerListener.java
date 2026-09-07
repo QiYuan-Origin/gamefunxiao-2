@@ -2843,11 +2843,7 @@ public class PlayerListener implements Listener {
 
         String playerName = player.getName();
 
-        String mode = room.getGameMode() != null && room.getGameMode().isLuckyPillars()
-
-                ? room.getLuckyPillarsAdvertiseModeName()
-
-                : room.getModeName();
+        String mode = room.getAdvertiseModeName();
 
         String current = String.valueOf(room.getPlayerCount());
 
@@ -4961,25 +4957,25 @@ public class PlayerListener implements Listener {
 
                 if (room.getGameMode().isDeathSwap()) {
 
-                    String stagePrefix;
+                    if (room.isSpectator(player.getUniqueId()) || room.isDeathSwapEliminated(player.getUniqueId())) {
 
-                    if (room.getState() == RoomState.WAITING || room.getState() == RoomState.STARTING) {
+                        message = plugin.getConfigManager().getDeathSwapPrefix()
 
-                        stagePrefix = "§6[大厅] ";
-
-                    } else if (room.isSpectator(player.getUniqueId()) || room.isDeathSwapEliminated(player.getUniqueId())) {
-
-                        stagePrefix = "§7[旁观] ";
+                                + "§7[旁观] §7" + player.getName() + "§7: §f" + plainContent;
 
                     } else {
 
-                        stagePrefix = "§e[求生] ";
+                        room.ensureDeathSwapTeamIndex(player.getUniqueId());
+
+                        String teamColor = room.getDeathSwapTeamColorCode(player.getUniqueId());
+
+                        message = plugin.getConfigManager().getDeathSwapPrefix()
+
+                                + room.getDeathSwapTeamPrefix(player.getUniqueId())
+
+                                + teamColor + player.getName() + "§7: §f" + plainContent;
 
                     }
-
-                    message = plugin.getConfigManager().getDeathSwapPrefix()
-
-                            + stagePrefix + "§f" + player.getName() + "§7: §f" + plainContent;
 
                 } else if (room.getGameMode().isLuckyPillars()) {
 

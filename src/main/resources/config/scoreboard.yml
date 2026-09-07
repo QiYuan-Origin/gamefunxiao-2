@@ -1,10 +1,13 @@
 # GameFunXiao 记分板配置
-config_version: 1
+config_version: 2
 
 enabled: true
 
 # 记分板标题
 title: "§x§F§F§6§6§0§0⚔ §x§F§F§A§A§5§5猎人游戏"
+
+# 记分板最后一行
+footer: "§8HunterGame.server"
 
 # 是否显示右侧数字，默认开启
 show_right_numbers: true

@@ -1057,70 +1057,21 @@ public class WorldManager {
     public World createDeathSwapGameWorld(String roomId) {
         deathSwapVillageSeedStatuses.remove(roomId);
         String worldName = GAME_PREFIX + roomId.toLowerCase();
-        int radiusBlocks = plugin.getConfigManager().getDeathSwapVillageRadiusBlocks();
-        int maxAttempts = plugin.getConfigManager().getDeathSwapVillageMaxAttempts();
-        int villageSalt = readSpigotStructureSeed(worldName, "seed-village", FLASH_VILLAGE_DEFAULT_SALT);
-        plugin.getLogger().info("开始为死亡互换外部算法筛选村庄种子: " + worldName
-                + "，要求出生点附近 " + radiusBlocks + " 格内有村庄候选，筛中前不会创建世界，超过 4 秒就随机世界"
-                + "，villageSalt=" + villageSalt);
-
-        long searchStartedAt = System.nanoTime();
-        Set<Long> attemptedSeeds = new LinkedHashSet<>();
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            if (isDeathSwapVillageSearchTimedOut(searchStartedAt)) {
-                return createDeathSwapRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
-                        "死亡互换外部筛村庄超过 4 秒，随机创建世界", attempt - 1);
-            }
-            long seed = nextUniqueGameSeed(attemptedSeeds);
-            DeathSwapVillageSeedCandidate candidate = findDeathSwapVillageSeedCandidate(seed, attempt, villageSalt, radiusBlocks);
-            if (candidate == null) {
-                if (attempt == 1 || attempt % 128 == 0) {
-                    plugin.getLogger().info("死亡互换外部筛种进度 " + attempt + "/" + maxAttempts
-                            + "：还没有命中可用村庄候选，不创建世界，已去重种子数=" + attemptedSeeds.size());
-                }
-                continue;
-            }
-
-            plugin.getLogger().info("死亡互换外部筛种命中候选: " + worldName
-                    + " seed=" + seed
-                    + " attempt=" + attempt
-                    + " chunk=" + candidate.villageChunkX() + "," + candidate.villageChunkZ()
-                    + " predictedVillage=" + candidate.villageBlockX() + ",0," + candidate.villageBlockZ()
-                    + " originDistance=" + Math.round(candidate.distanceFromOrigin())
-                    + "，开始创建最终游戏世界；本次筛种只创建这一个世界");
-
-            markGameSeedIssued(seed);
-            prepareFreshWorldFolder(worldName);
-            World world = createNormalGameWorldWithSeed(worldName, seed, true);
-            if (world == null) {
-                recordDeathSwapVillageStatus(roomId, false, true, null, null,
-                        "死亡互换命中候选后世界创建失败");
-                plugin.getLogger().warning("死亡互换候选世界创建失败: seed=" + seed + " attempt=" + attempt);
-                return null;
-            }
-            world.setKeepSpawnInMemory(false);
-            setupGameWorld(world);
-            Location villageLocation = candidate.toLocation(world);
-            Location flatSpawn = findDeathSwapFlatSpawn(world);
-            if (flatSpawn != null) {
-                world.setSpawnLocation(flatSpawn);
-            }
-            Location spawn = world.getSpawnLocation();
-            gameWorlds.put(roomId, world);
-            recordDeathSwapVillageStatus(roomId, true, false, spawn, villageLocation,
-                    "外部算法筛中村庄候选");
-            plugin.getLogger().info("死亡互换外部筛种最终世界已创建: " + worldName
-                    + " seed=" + seed
-                    + " attempt=" + attempt
-                    + " spawn=" + formatBlockLocation(spawn)
-                    + " predictedVillage=" + formatBlockLocation(villageLocation)
-                    + " distance=" + Math.round(Math.sqrt(horizontalDistanceSquared(spawn, villageLocation)))
-                    + "；按要求不再反复创建/定位验证世界");
-            return world;
+        long seed = nextUniqueGameSeed(null);
+        markGameSeedIssued(seed);
+        prepareFreshWorldFolder(worldName);
+        plugin.getLogger().info("死亡互换随机创建世界: " + worldName + " seed=" + seed + "，不筛种");
+        World world = createNormalGameWorldWithSeed(worldName, seed, true);
+        if (world == null) {
+            recordDeathSwapVillageStatus(roomId, false, true, null, null, "随机世界创建失败");
+            plugin.getLogger().severe("死亡互换随机世界创建失败: " + worldName + " seed=" + seed);
+            return null;
         }
-
-        return createDeathSwapRandomFallbackGameWorld(roomId, worldName, attemptedSeeds,
-                "达到最大外部筛种次数后随机创建世界", maxAttempts);
+        world.setKeepSpawnInMemory(false);
+        setupGameWorld(world);
+        gameWorlds.put(roomId, world);
+        recordDeathSwapVillageStatus(roomId, false, true, world.getSpawnLocation(), null, "随机世界");
+        return world;
     }
 
     private boolean isDeathSwapVillageSearchTimedOut(long searchStartedAt) {
@@ -1136,10 +1087,6 @@ public class WorldManager {
         if (fallback != null) {
             fallback.setKeepSpawnInMemory(false);
             setupGameWorld(fallback);
-            Location flatSpawn = findDeathSwapFlatSpawn(fallback);
-            if (flatSpawn != null) {
-                fallback.setSpawnLocation(flatSpawn);
-            }
             gameWorlds.put(roomId, fallback);
             recordDeathSwapVillageStatus(roomId, false, true, fallback.getSpawnLocation(), null, reason);
             plugin.getLogger().warning("死亡互换村庄筛种降级随机世界: " + worldName
@@ -1205,6 +1152,13 @@ public class WorldManager {
         return findDeathSwapFlatSpawn(world, world.getSpawnLocation(), 16);
     }
 
+    public Location findDeathSwapFlatSpawnNear(World world, Location preferred, int maxRadiusBlocks) {
+        if (world == null) {
+            return null;
+        }
+        return findDeathSwapFlatSpawn(world, preferred, Math.max(0, maxRadiusBlocks));
+    }
+
     private Location findDeathSwapFlatSpawn(World world, Location preferred, int maxRadiusBlocks) {
         if (world == null) {
             return null;
@@ -1214,13 +1168,15 @@ public class WorldManager {
                 : preferred;
         int centerX = anchor.getBlockX();
         int centerZ = anchor.getBlockZ();
-        int safeMaxRadius = Math.max(0, Math.min(16, maxRadiusBlocks));
+        int safeMaxRadius = Math.max(0, Math.min(96, maxRadiusBlocks));
         int centerChunkX = centerX >> 4;
         int centerChunkZ = centerZ >> 4;
         if (!world.isChunkLoaded(centerChunkX, centerChunkZ)) {
-            return anchor.clone();
+            // 世界刚创建时出生区块通常还没有完成异步预加载。绝不能把此时的
+            // world.getSpawnLocation() 当成有效出生点，否则它可能仍然指向地下。
+            return null;
         }
-        int[] radii = {0, 4, 8, 12, 16};
+        int[] radii = {0, 4, 8, 12, 16, 24, 32, 48, 64, 80, 96};
         int[][] directions = {
                 {0, 0},
                 {1, 0}, {-1, 0}, {0, 1}, {0, -1},
@@ -1242,11 +1198,62 @@ public class WorldManager {
                 double length = Math.sqrt((double) direction[0] * direction[0] + (double) direction[1] * direction[1]);
                 int x = centerX + (radius == 0 ? 0 : (int) Math.round(radius * direction[0] / length));
                 int z = centerZ + (radius == 0 ? 0 : (int) Math.round(radius * direction[1] / length));
-                if ((x >> 4) != centerChunkX || (z >> 4) != centerChunkZ || !world.isChunkLoaded(x >> 4, z >> 4)) {
+                if (!world.isChunkLoaded(x >> 4, z >> 4)) {
                     continue;
                 }
-                Location candidate = getSurfaceSpawnAt(world, x, z);
+                Location candidate = getDeathSwapSurfaceSpawnAt(world, x, z);
                 if (isDeathSwapFlatSpawnCandidate(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 在已加载的区块中寻找一个真实地表上的安全站立点。
+     *
+     * 这是平坦出生点筛选失败时的安全回退；它仍然要求脚下是安全实体方块，
+     * 脚部和头部可通行，因此不会把玩家传到地下、液体或树叶上。
+     */
+    public Location findDeathSwapSurfaceSpawnNear(World world, Location preferred, int maxRadiusBlocks) {
+        if (world == null) {
+            return null;
+        }
+        Location anchor = preferred == null || preferred.getWorld() == null
+                ? world.getSpawnLocation()
+                : preferred;
+        int centerX = anchor.getBlockX();
+        int centerZ = anchor.getBlockZ();
+        int safeMaxRadius = Math.max(0, Math.min(128, maxRadiusBlocks));
+        int[] radii = {0, 2, 4, 8, 12, 16, 24, 32, 48, 64, 80, 96, 112, 128};
+        int[][] directions = {
+                {0, 0},
+                {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+                {1, 1}, {-1, 1}, {1, -1}, {-1, -1},
+                {2, 1}, {-2, 1}, {2, -1}, {-2, -1},
+                {1, 2}, {-1, 2}, {1, -2}, {-1, -2}
+        };
+        for (int radius : radii) {
+            if (radius > safeMaxRadius) {
+                break;
+            }
+            for (int[] direction : directions) {
+                if (radius == 0 && (direction[0] != 0 || direction[1] != 0)) {
+                    continue;
+                }
+                if (radius > 0 && direction[0] == 0 && direction[1] == 0) {
+                    continue;
+                }
+                double length = Math.sqrt((double) direction[0] * direction[0]
+                        + (double) direction[1] * direction[1]);
+                int x = centerX + (radius == 0 ? 0 : (int) Math.round(radius * direction[0] / length));
+                int z = centerZ + (radius == 0 ? 0 : (int) Math.round(radius * direction[1] / length));
+                if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                    continue;
+                }
+                Location candidate = getDeathSwapSurfaceSpawnAt(world, x, z);
+                if (isDeathSwapSurfaceSpawnCandidate(candidate)) {
                     return candidate;
                 }
             }
@@ -1271,7 +1278,9 @@ public class WorldManager {
                     return false;
                 }
                 int standY = Math.min(world.getMaxHeight() - 2,
-                        Math.max(world.getMinHeight() + 2, world.getHighestBlockYAt(x, z) + 1));
+                        Math.max(world.getMinHeight() + 2,
+                                world.getHighestBlockYAt(x, z,
+                                        org.bukkit.HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1));
                 Block floor = world.getBlockAt(x, standY - 1, z);
                 Block feet = world.getBlockAt(x, standY, z);
                 Block head = world.getBlockAt(x, standY + 1, z);
@@ -1287,10 +1296,30 @@ public class WorldManager {
         if (maxY - minY > 1) {
             return false;
         }
-        location.setY(world.getHighestBlockYAt(centerX, centerZ) + 1.0D);
+        location.setY(world.getHighestBlockYAt(centerX, centerZ,
+                org.bukkit.HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1.0D);
         location.setX(centerX + 0.5D);
         location.setZ(centerZ + 0.5D);
         return true;
+    }
+
+    private boolean isDeathSwapSurfaceSpawnCandidate(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return false;
+        }
+        World world = location.getWorld();
+        int x = location.getBlockX();
+        int y = location.getBlockY();
+        int z = location.getBlockZ();
+        if (y <= world.getMinHeight() + 1 || y >= world.getMaxHeight() - 2) {
+            return false;
+        }
+        Block floor = world.getBlockAt(x, y - 1, z);
+        Block feet = world.getBlockAt(x, y, z);
+        Block head = world.getBlockAt(x, y + 1, z);
+        return isDeathSwapSafeFloor(floor)
+                && isDeathSwapPassableForSpawn(feet)
+                && isDeathSwapPassableForSpawn(head);
     }
 
     private boolean isDeathSwapSafeFloor(Block block) {
@@ -1383,6 +1412,71 @@ public class WorldManager {
 
     public record DeathSwapVillageSeedStatus(boolean confirmed, boolean fallback, int distance,
                                              String villageLocation, String reason) {
+    }
+
+    public DeathSwapNearbyStructure findNearestDeathSwapPriorityStructure(Location origin) {
+        if (origin == null || origin.getWorld() == null) {
+            return null;
+        }
+        int radiusChunks = plugin.getConfigManager().getDeathSwapNearbyStructureRadiusChunks();
+        DeathSwapNearbyStructure shipwreck = findNearestDeathSwapStructureInGroup(origin, "沉船", radiusChunks,
+                Structure.SHIPWRECK, Structure.SHIPWRECK_BEACHED);
+        if (shipwreck != null) {
+            return shipwreck;
+        }
+        DeathSwapNearbyStructure ruinedPortal = findNearestDeathSwapStructureInGroup(origin, "废门", radiusChunks,
+                Structure.RUINED_PORTAL,
+                Structure.RUINED_PORTAL_DESERT,
+                Structure.RUINED_PORTAL_JUNGLE,
+                Structure.RUINED_PORTAL_MOUNTAIN,
+                Structure.RUINED_PORTAL_OCEAN,
+                Structure.RUINED_PORTAL_SWAMP);
+        if (ruinedPortal != null) {
+            return ruinedPortal;
+        }
+        return findNearestDeathSwapStructureInGroup(origin, "村庄", radiusChunks,
+                Structure.VILLAGE_DESERT,
+                Structure.VILLAGE_PLAINS,
+                Structure.VILLAGE_SAVANNA,
+                Structure.VILLAGE_SNOWY,
+                Structure.VILLAGE_TAIGA);
+    }
+
+    private DeathSwapNearbyStructure findNearestDeathSwapStructureInGroup(Location origin, String displayName,
+                                                                         int radiusChunks, Structure... structures) {
+        if (origin == null || origin.getWorld() == null || structures == null || structures.length == 0) {
+            return null;
+        }
+        World world = origin.getWorld();
+        StructureSearchResult best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (Structure structure : structures) {
+            if (structure == null) {
+                continue;
+            }
+            try {
+                StructureSearchResult result = world.locateNearestStructure(origin, structure, Math.max(1, radiusChunks), true);
+                if (result == null || result.getLocation() == null || result.getLocation().getWorld() == null) {
+                    continue;
+                }
+                double distance = horizontalDistanceSquared(origin, result.getLocation());
+                if (distance < bestDistance) {
+                    best = result;
+                    bestDistance = distance;
+                }
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("死亡互换定位附近结构失败: " + world.getName()
+                        + " structure=" + structure.getKey() + " - " + throwable.getMessage());
+            }
+        }
+        if (best == null || best.getLocation() == null) {
+            return null;
+        }
+        int distance = (int) Math.round(Math.sqrt(bestDistance));
+        return new DeathSwapNearbyStructure(displayName, formatBlockLocation(best.getLocation()), distance);
+    }
+
+    public record DeathSwapNearbyStructure(String typeName, String locationText, int distance) {
     }
 
     private World createNormalGameWorldWithSeed(String worldName, long seed, boolean verbose) {
@@ -1920,6 +2014,17 @@ public class WorldManager {
             return null;
         }
         int y = Math.min(world.getMaxHeight() - 2, Math.max(world.getMinHeight() + 2, world.getHighestBlockYAt(x, z) + 1));
+        return new Location(world, x + 0.5D, y, z + 0.5D, 0.0F, 0.0F);
+    }
+
+    private Location getDeathSwapSurfaceSpawnAt(World world, int x, int z) {
+        if (world == null) {
+            return null;
+        }
+        int y = Math.min(world.getMaxHeight() - 2,
+                Math.max(world.getMinHeight() + 2,
+                        world.getHighestBlockYAt(x, z,
+                                org.bukkit.HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1));
         return new Location(world, x + 0.5D, y, z + 0.5D, 0.0F, 0.0F);
     }
 

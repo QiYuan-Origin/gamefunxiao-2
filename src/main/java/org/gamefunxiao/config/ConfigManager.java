@@ -230,6 +230,14 @@ public class ConfigManager {
         return Math.max(2.5D, config.getDouble("death_swap.spawn_ring_radius", 8.0D));
     }
 
+    public int getDeathSwapRandomSpawnSpacingBlocks() {
+        return Math.max(128, config.getInt("death_swap.random_spawn_spacing_blocks", 800));
+    }
+
+    public int getDeathSwapNearbyStructureRadiusChunks() {
+        return Math.max(16, config.getInt("death_swap.nearby_structure_radius_chunks", 128));
+    }
+
     public int getDeathSwapVillageRadiusBlocks() {
         return Math.max(64, config.getInt("death_swap.village_seed.radius_blocks", 256));
     }
@@ -250,8 +258,14 @@ public class ConfigManager {
             }
         }
         if (result.isEmpty()) {
+            result.add(1);
+            result.add(2);
+            result.add(3);
             result.add(5);
+            result.add(8);
             result.add(10);
+            result.add(20);
+            result.add(30);
         }
         result.sort(Integer::compareTo);
         return result;
@@ -283,6 +297,35 @@ public class ConfigManager {
     public String getCrossServerLobbyServerName() {
         return config.getString("hunter_game.cross_server.lobby_server_name",
                 config.getString("child_server.lobby_server_name", "gamefun"));
+    }
+
+    public List<String> getCrossServerLobbyFallbackServerNames() {
+        return getServerNameList("hunter_game.cross_server.lobby_fallback_server_names", "waithub");
+    }
+
+    public List<String> getChildServerLobbyFallbackServerNames() {
+        return getServerNameList("child_server.lobby_fallback_server_names", "waithub");
+    }
+
+    private List<String> getServerNameList(String path, String defaultValue) {
+        List<String> result = new ArrayList<>();
+        List<String> configured = config.getStringList(path);
+        if (configured.isEmpty()) {
+            String raw = config.getString(path, defaultValue);
+            if (raw != null) {
+                configured = List.of(raw.split(","));
+            }
+        }
+        for (String value : configured) {
+            if (value == null) {
+                continue;
+            }
+            String trimmed = value.trim();
+            if (!trimmed.isBlank() && !result.contains(trimmed)) {
+                result.add(trimmed);
+            }
+        }
+        return result;
     }
 
     public String getCrossServerRequestPath() {

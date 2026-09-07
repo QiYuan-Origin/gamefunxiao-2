@@ -36,7 +36,8 @@ public class MenuManager {
             "create", "createroom", "luckycreate", "lpcreate", "deathswapcreate", "dscreate",
             "leaderboard", "lb", "luckyleaderboard", "lplb", "deathswapleaderboard", "dslb",
             "rank", "ranks", "points", "performance", "performancevalue",
-            "shop", "settings", "victoryshop", "victorysettings",
+            "shop", "settings", "victoryshop", "victorysettings", "deathswapshop", "dsshop",
+            "deathswapvictoryshop", "dsvictoryshop",
             "endflashkit", "endflashkitadmin", "personalkit", "endflashpersonalkit",
             "pass_count", "fastest_time", "play_count", "hunter_points", "prey_points", "minigame_points"
     );
@@ -119,6 +120,10 @@ public class MenuManager {
             case "victorysettings", "effectsettings", "特效设置" -> new HunterVictoryEffectSettingsMenu(plugin, player);
             case "luckyvictoryshop", "lpvictoryshop", "幸运特效商城", "幸运之柱特效商城" -> new LuckyPillarsVictoryEffectShopMenu(plugin, player);
             case "luckyvictorysettings", "lpvictorysettings", "幸运特效设置", "幸运之柱特效设置" -> new LuckyPillarsVictoryEffectSettingsMenu(plugin, player);
+            case "deathswapshop", "dsshop", "死亡互换商店", "死亡互换商城" ->
+                    new DeathSwapShopCategoryMenu(plugin, player);
+            case "deathswapvictoryshop", "dsvictoryshop", "死亡互换胜利样式", "死亡互换特效商城" ->
+                    new DeathSwapVictoryEffectShopMenu(plugin, player);
             case "killshop", "killeffectshop", "击杀特效商城" -> new HunterKillEffectShopMenu(plugin, player);
             case "killsettings", "killeffectsettings", "击杀特效设置" -> new HunterKillEffectSettingsMenu(plugin, player);
             case "endflashkit", "endflashkitadmin", "flashkit", "终章kit", "闪光kit" -> {
@@ -246,6 +251,31 @@ public class MenuManager {
             return;
         }
         openMenu(player, new DeathSwapNavigationMenu(plugin, player));
+    }
+
+    public void openDeathSwapVictoryEffectShopMenu(Player player) {
+        if (!canOpenGameFunMenu(player)) {
+            return;
+        }
+        openMenu(player, new DeathSwapVictoryEffectShopMenu(plugin, player));
+    }
+
+    public void openDeathSwapVictoryEffectShopMenu(Player player, boolean returnToNavigation) {
+        if (!canOpenGameFunMenu(player)) {
+            return;
+        }
+        openMenu(player, new DeathSwapVictoryEffectShopMenu(plugin, player, returnToNavigation));
+    }
+
+    public void openDeathSwapShopCategoryMenu(Player player) {
+        openDeathSwapShopCategoryMenu(player, false);
+    }
+
+    public void openDeathSwapShopCategoryMenu(Player player, boolean returnToNavigation) {
+        if (!canOpenGameFunMenu(player)) {
+            return;
+        }
+        openMenu(player, new DeathSwapShopCategoryMenu(plugin, player, returnToNavigation));
     }
 
     public void openDeathSwapRoomListMenu(Player player) {

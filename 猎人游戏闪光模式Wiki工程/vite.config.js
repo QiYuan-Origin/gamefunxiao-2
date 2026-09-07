@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-const tunnelHosts = ['frp-ice.com', '.frp-ice.com'];
+const tunnelHosts = true;
 
 export default defineConfig({
   build: {

@@ -105,8 +105,10 @@ public class PlayerDataManager {
         data.setCoins(config.getInt("coins", 0));
         data.setOwnedVictoryEffects(new HashSet<>(config.getStringList("cosmetics.victory_effects.owned")));
         data.setOwnedLuckyPillarsVictoryEffects(new HashSet<>(config.getStringList("cosmetics.lucky_pillars_victory_effects.owned")));
+        data.setOwnedDeathSwapVictoryEffects(new HashSet<>(config.getStringList("cosmetics.death_swap_victory_effects.owned")));
         data.setSelectedHunterVictoryEffect(config.getString("cosmetics.victory_effects.selected.hunter_game", "fireworks"));
         data.setSelectedLuckyPillarsVictoryEffect(config.getString("cosmetics.victory_effects.selected.lucky_pillars", "fireworks"));
+        data.setSelectedDeathSwapVictoryEffect(config.getString("cosmetics.death_swap_victory_effects.selected", "fireworks"));
         data.setOwnedKillEffects(new HashSet<>(config.getStringList("cosmetics.kill_effects.owned")));
         data.setSelectedHunterKillEffect(config.getString("cosmetics.kill_effects.selected.hunter_game", "none"));
         data.setMessageFrequency(config.getString("settings.message_frequency", "chatty"));
@@ -204,8 +206,10 @@ public class PlayerDataManager {
         config.set("coins", data.getCoins());
         config.set("cosmetics.victory_effects.owned", new ArrayList<>(data.getOwnedVictoryEffects()));
         config.set("cosmetics.lucky_pillars_victory_effects.owned", new ArrayList<>(data.getOwnedLuckyPillarsVictoryEffects()));
+        config.set("cosmetics.death_swap_victory_effects.owned", new ArrayList<>(data.getOwnedDeathSwapVictoryEffects()));
         config.set("cosmetics.victory_effects.selected.hunter_game", data.getSelectedHunterVictoryEffect());
         config.set("cosmetics.victory_effects.selected.lucky_pillars", data.getSelectedLuckyPillarsVictoryEffect());
+        config.set("cosmetics.death_swap_victory_effects.selected", data.getSelectedDeathSwapVictoryEffect());
         config.set("cosmetics.kill_effects.owned", new ArrayList<>(data.getOwnedKillEffects()));
         config.set("cosmetics.kill_effects.selected.hunter_game", data.getSelectedHunterKillEffect());
         config.set("settings.message_frequency", data.getMessageFrequency());
@@ -639,6 +643,43 @@ public class PlayerDataManager {
         }
         PlayerData data = reloadPlayerData(uuid);
         data.unlockLuckyPillarsVictoryEffect(effectId);
+        savePlayerData(uuid);
+    }
+
+    public String getSelectedDeathSwapVictoryEffect(UUID uuid) {
+        if (uuid == null) {
+            return "fireworks";
+        }
+        PlayerData data = reloadPlayerData(uuid);
+        String selected = data.getSelectedDeathSwapVictoryEffect();
+        return data.hasDeathSwapVictoryEffect(selected) ? selected : "fireworks";
+    }
+
+    public void setSelectedDeathSwapVictoryEffect(UUID uuid, String effectId) {
+        if (uuid == null || effectId == null || effectId.isBlank()) {
+            return;
+        }
+        PlayerData data = reloadPlayerData(uuid);
+        if (!data.hasDeathSwapVictoryEffect(effectId)) {
+            return;
+        }
+        data.setSelectedDeathSwapVictoryEffect(effectId);
+        savePlayerData(uuid);
+    }
+
+    public boolean hasDeathSwapVictoryEffect(UUID uuid, String effectId) {
+        if (uuid == null) {
+            return false;
+        }
+        return reloadPlayerData(uuid).hasDeathSwapVictoryEffect(effectId);
+    }
+
+    public void unlockDeathSwapVictoryEffect(UUID uuid, String effectId) {
+        if (uuid == null || effectId == null || effectId.isBlank()) {
+            return;
+        }
+        PlayerData data = reloadPlayerData(uuid);
+        data.unlockDeathSwapVictoryEffect(effectId);
         savePlayerData(uuid);
     }
 

@@ -559,7 +559,7 @@ public class ChildServerManager implements PluginMessageListener {
 
         String max = room.getMaxPlayers() == -1 ? "∞" : String.valueOf(room.getMaxPlayers());
         String hoverText = "§a§l点击加入房间\n\n§7房间ID: §e" + room.getRoomId()
-                + "\n§7模式: §b" + room.getModeName()
+                + "\n§7模式: §b" + room.getAdvertiseModeName()
                 + "\n§7人数: §a" + room.getPlayerCount() + "§7/§a" + max;
         String advertiseId = room.getRoomId() + ":" + carrier.getUniqueId() + ":" + System.currentTimeMillis();
 
@@ -1057,7 +1057,7 @@ public class ChildServerManager implements PluginMessageListener {
         player.getInventory().clear();
         plugin.getRoomManager().resetPlayerForServerReturn(null, player);
         player.sendMessage(plugin.getMessageManager().getMessage("room.cross_server_returning_lobby"));
-        connectPlayer(player, currentCrossLobbyServerName());
+        connectPlayerToCrossLobby(player);
     }
 
     public void returnCrossServerRoomPlayersToLobby(GameRoom room) {
@@ -1186,7 +1186,7 @@ public class ChildServerManager implements PluginMessageListener {
         if (activeManagedRoomId == null) {
             if (!player.getUniqueId().equals(pendingBootstrap.getOwnerUuid())) {
                 player.sendMessage(plugin.getMessageManager().getModeMessageWithPrefix(pendingBootstrap.getMode(), "room.child_server_wait_owner"));
-                connectPlayer(player, currentChildLobbyServerName());
+                connectPlayerToChildLobby(player);
                 return;
             }
 
@@ -1201,7 +1201,7 @@ public class ChildServerManager implements PluginMessageListener {
 
         GameRoom room = plugin.getRoomManager().getRoom(activeManagedRoomId);
         if (room == null) {
-            connectPlayer(player, currentChildLobbyServerName());
+            connectPlayerToChildLobby(player);
             return;
         }
 
@@ -1252,7 +1252,100 @@ public class ChildServerManager implements PluginMessageListener {
         player.getInventory().clear();
         plugin.getRoomManager().resetPlayerForServerReturn(null, player);
         player.sendMessage(plugin.getMessageManager().getMessage("room.child_server_returning_lobby"));
-        connectPlayer(player, currentChildLobbyServerName());
+        connectPlayerToChildLobby(player);
+    }
+
+    private void connectPlayerToCrossLobby(Player player) {
+        connectPlayerWithFallback(player, currentCrossLobbyServerName(),
+                plugin.getConfigManager().getCrossServerLobbyFallbackServerNames(), "跨服大厅");
+    }
+
+    private void connectPlayerToChildLobby(Player player) {
+        connectPlayerWithFallback(player, currentChildLobbyServerName(),
+                plugin.getConfigManager().getChildServerLobbyFallbackServerNames(), "子服大厅");
+    }
+
+    private void connectPlayerWithFallback(Player player, String primaryServer, List<String> fallbackServers, String reason) {
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        List<String> candidates = buildLobbyReturnCandidates(primaryServer, fallbackServers);
+        if (candidates.isEmpty()) {
+            return;
+        }
+
+        for (String candidate : candidates) {
+            requestServerEndpoint(player, candidate);
+        }
+
+        int targetIndex = chooseFirstReachableServerIndex(candidates);
+        String target = candidates.get(targetIndex);
+        connectPlayer(player, target);
+
+        if (targetIndex + 1 >= candidates.size()) {
+            return;
+        }
+
+        UUID playerId = player.getUniqueId();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Player online = Bukkit.getPlayer(playerId);
+            if (online == null || !online.isOnline() || !transferringPlayers.contains(playerId)) {
+                return;
+            }
+            List<String> remaining = candidates.subList(targetIndex + 1, candidates.size());
+            int fallbackIndex = chooseFirstReachableServerIndex(remaining);
+            String fallback = remaining.get(fallbackIndex);
+            plugin.getLogger().warning(reason + "返回目标 " + target + " 连接后玩家仍在当前服，改送备用大厅 " + fallback);
+            connectPlayer(online, fallback);
+        }, 35L);
+    }
+
+    private List<String> buildLobbyReturnCandidates(String primaryServer, List<String> fallbackServers) {
+        List<String> result = new ArrayList<>();
+        addServerCandidate(result, primaryServer);
+        if (fallbackServers != null) {
+            for (String fallback : fallbackServers) {
+                addServerCandidate(result, fallback);
+            }
+        }
+        return result;
+    }
+
+    private void addServerCandidate(List<String> candidates, String serverName) {
+        if (serverName == null) {
+            return;
+        }
+        String trimmed = serverName.trim();
+        if (trimmed.isBlank()) {
+            return;
+        }
+        for (String existing : candidates) {
+            if (sameServerName(existing, trimmed)) {
+                return;
+            }
+        }
+        candidates.add(trimmed);
+    }
+
+    private int chooseFirstReachableServerIndex(List<String> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return 0;
+        }
+        for (int i = 0; i < candidates.size(); i++) {
+            if (!isCachedServerEndpointClosed(candidates.get(i))) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private boolean isCachedServerEndpointClosed(String serverName) {
+        InetSocketAddress endpoint = crossServerEndpoints.get(normalizeServerKey(serverName));
+        return endpoint != null
+                && endpoint.getHostString() != null
+                && !endpoint.getHostString().isBlank()
+                && endpoint.getPort() > 0
+                && !isPortOpen(endpoint.getHostString(), endpoint.getPort(), 250);
     }
 
     private String currentCrossLobbyServerName() {
